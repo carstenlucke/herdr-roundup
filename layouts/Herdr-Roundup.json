@@ -158,7 +158,7 @@
                       "id": "files",
                       "type": "block",
                       "content": {
-                        "mod": "files"
+                        "mod": "roundup-files"
                       }
                     },
                     {
