@@ -14,7 +14,7 @@ A Herdr App layout, cloned from Herdr's `main` (0.1.13). See README.md for the l
 - Layout block ids must stay unique: a duplicate crashes Herdr App.
 - Colors in the layout and in mods are theme names (`chrome`, `canvas`, `border`, `accent`, ...), not hex, so the layout works light and dark.
 - Keys go in the `layout:Herdr-Roundup` section of `keys.json`, never in `global`.
-- Shared state keys carry the mod's name as prefix (`roundup-tabs.<key>`).
+- Shared state keys: a mod's own state goes under its name (`roundup-<name>.<key>`); keys that mods share with Herdr's shipped mods (`sidebar.width`, `space.colors`, `workspace.panels`, ...) keep Herdr's names.
 - After a change: `herdr-app check ~/.config/herdr-app/mods/<mod>` for each changed mod, then `herdr-app status` must show no errors.
 
 ## Before a release
