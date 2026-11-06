@@ -19,6 +19,8 @@ A Herdr App layout, cloned from Herdr's `main` (0.1.13). See README.md for the l
 
 ## Before a release
 
+- Raise `"version"` on the root of `layouts/Herdr-Roundup.json`. It is the layout's only version: `roundup-workspace-chrome` reads it from the file (`layout()` leaves out fields Herdr doesn't know) and shows it on hover over the icon and name at the top left.
+
 - Decide whether the layout needs a new preview picture: does it look different from what Settings shows (a plain frame, or the last `layouts/Herdr-Roundup.svg`)? If so, draw `layouts/Herdr-Roundup.svg` and set `"preview": "layouts/Herdr-Roundup.svg"` on the layout root. `scripts/sync.sh` already copies it.
 
 ## Limits found so far (in herdr-t3)
