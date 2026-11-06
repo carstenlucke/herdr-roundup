@@ -67,6 +67,7 @@ export default class Spaces extends View {
     this.busy = {}; // pane -> an agent working or a program in front of its shell
     this.ready = {}; // machine -> its layout was readable at the last look
     this.at = {}; // space -> its where() at the last look
+    this.front = null; // the window was in front at the last look (null: not looked yet)
     this.watching = new Set(); // local repos' git folders
     // Spaces made while this runs wait (at most a moment) for their git, so a
     // worktree appears under its repo instead of jumping there.
@@ -119,10 +120,15 @@ export default class Spaces extends View {
       if (ready && this.ready[m.name] === false) for (const k of keys) if (JSON.parse(k)[0] === m.name) due.add(k);
       this.ready[m.name] = ready;
     }
-    if (window().active) {
+    // Back in front: files saved outside Herdr (an editor) change no .git, so
+    // look at every place again instead of waiting for the fallback.
+    const front = Boolean(window()?.active);
+    const back = front && this.front === false;
+    this.front = front;
+    if (front) {
       for (const k of keys) {
         const asks = this.git[k] || this.unsure.has(k);
-        if (asks && !this.folded.has(JSON.parse(k)[0]) && now - (this.checked[k] ?? 0) > FALLBACK) due.add(k);
+        if (asks && !this.folded.has(JSON.parse(k)[0]) && (back || now - (this.checked[k] ?? 0) > FALLBACK)) due.add(k);
       }
     }
     return due;
@@ -377,11 +383,12 @@ export default class Spaces extends View {
 
   // Under the name: "repo · branch ↑2 ↓1 ±3". The repo goes when the name already
   // says it (and in a worktree, whose card names it); the branch when the space is
-  // named after it (a worktree is). Null: nothing to show.
+  // named after it (a worktree is), and master/main: nearly every space is on one.
+  // A worktree row has the branch icon on its left already. Null: nothing to show.
   gitLine(g, tree, name, t, id) {
     const raw = g.branch ?? "detached";
     const same = (a) => a.toLowerCase() === name.toLowerCase();
-    const branch = same(raw) ? "" : raw;
+    const branch = same(raw) || raw === "main" || raw === "master" ? "" : raw;
     const repo = tree || same(g.name) ? "" : g.name;
     const where = [repo, branch].filter(Boolean).join(" \u00b7 ");
     if (!where && !g.ahead && !g.behind && !g.dirty) return null;
@@ -392,7 +399,7 @@ export default class Spaces extends View {
       .text_size(11.5)
       .text_color(t.dim)
       .when(Boolean(where), (el) => el
-        .child(svg("mods/workspace-chrome/branch.svg").size(11).flex_none())
+        .when(!tree, (el) => el.child(svg("mods/workspace-chrome/branch.svg").size(11).flex_none()))
         .child(div().min_w(0).truncate().child(where)))
       .when(g.ahead > 0, (el) => el.child(div().flex_none().text_color(t.muted).child(`\u2191${g.ahead}`)))
       .when(g.behind > 0, (el) => el.child(div().flex_none().text_color(t.muted).child(`\u2193${g.behind}`)))
