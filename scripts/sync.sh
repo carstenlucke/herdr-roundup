@@ -9,7 +9,7 @@ gen="--exclude gpui-kit.d.ts --exclude jsconfig.json --exclude .gitkeep"
 mkdir -p "$app/layouts" "$app/mods" "$app/themes"
 
 # The layout file. Clicks (sizes, hidden columns, stack choices, theme picks) live in layouts/.state/ and survive this.
-cp "$src"/layouts/roundup.* "$app/layouts/"
+cp "$src"/layouts/Herdr-Roundup.* "$app/layouts/"
 
 # One mod at a time: other folders in the app (Herdr's, other layouts') are left alone.
 for d in "$src"/mods/roundup-*/; do
@@ -17,7 +17,7 @@ for d in "$src"/mods/roundup-*/; do
   rsync -a --delete $gen "$d" "$app/mods/$(basename "$d")/"
 done
 
-# Themes named roundup* belong to this repo.
+# The repo's themes. One named Herdr-Roundup.json is the layout's own.
 for f in "$src"/themes/*.json; do
   [ -f "$f" ] || continue
   cp "$f" "$app/themes/"
@@ -26,7 +26,7 @@ done
 # keys.json: only the layout's own section is replaced; global and every other section stay as they are.
 keys="$app/keys.json"
 [ -f "$keys" ] || echo '{}' > "$keys"
-jq --slurpfile ours "$src/keys.json" '. + {"layout:roundup": $ours[0]["layout:roundup"]}' "$keys" > "$keys.tmp"
+jq --slurpfile ours "$src/keys.json" '. + {"layout:Herdr-Roundup": $ours[0]["layout:Herdr-Roundup"]}' "$keys" > "$keys.tmp"
 mv "$keys.tmp" "$keys"
 
 # Herdr reloads on save; check each mod and report errors from files and mods.
