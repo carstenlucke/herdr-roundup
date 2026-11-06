@@ -19,6 +19,14 @@ The layout is called `Herdr-Roundup`: Herdr's Settings show a layout by its file
 
 ## Install
 
+Tell your agent:
+
+```text
+Read ~/.config/herdr-app/AGENTS.md, then add this layout: https://github.com/carstenlucke/herdr-roundup/tree/main
+```
+
+Or, from a clone of this repo:
+
 ```sh
 scripts/sync.sh
 herdr-app do layout.switch '{"name":"Herdr-Roundup"}'
