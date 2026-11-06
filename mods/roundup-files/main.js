@@ -505,7 +505,7 @@ export default class Files extends View {
   summary(t) {
     const g = this.git, b = g.branch;
     const box = v_flex().h(46).flex_none().px(12).gap(7).justify_center().border_b(1).border_color(t.border).text_size(12);
-    const empty = div().h(4).w_full().rounded(2).bg(t.raised), none = div().h(4);
+    const none = div().h(4);
     if (!g.known) return box.child(div().text_color(t.dim).child(this.root ? "Reading git…" : "")).child(none);
     if (!g.repo) return box.child(h_flex().gap(6).items_center().text_color(t.dim).child(svg(ICON("branch")).size(12).flex_none()).child("Not a git repository")).child(none);
     const c = g.counts.get("") ?? [0, 0, 0], total = c[0] + c[1] + c[2], lines = g.diff.get("") ?? [0, 0], colors = changeColors(t);
@@ -527,7 +527,7 @@ export default class Files extends View {
           .children(parts.map((i) => div().h(4).w(Math.max(3, (room * c[i]) / total)).rounded(2).bg(colors[i])))
           .child(div().flex_1())
           .children(parts.map((i) => div().flex_none().w(24).text_right().text_size(10.5).text_color(colors[i]).child(String(c[i]))))
-        : empty);
+        : none);
   }
 
   header(t) {

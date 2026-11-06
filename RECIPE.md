@@ -100,8 +100,8 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
     deleted, "clean" or the lines changed against `HEAD` (`+N` in `ansi2`,
     `−N` in `ansi1`); under it a 4px bar of modified (`ansi3`), new (`ansi2`)
     and deleted (`ansi1`) paths, sized by their counts, with the counts at
-    its right. Outside a repo: "Not a git repository"; before git answers:
-    "Reading git…".
+    its right; when clean, no bar, only its space. Outside a repo: "Not a git
+    repository"; before git answers: "Reading git…".
   - **Search field** (28px, `canvas`, `border`, `accent` while typing):
     "Search files".
   - **Tree** (26px rows, 14px indent per level): a chevron for folders, a
