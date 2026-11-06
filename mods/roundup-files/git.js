@@ -115,15 +115,20 @@ export async function readGit(root, on) {
 // a repo or without git: the caller reads the disk then.
 export async function listFiles(root, on, limit) {
   let r;
-  try { r = await exec("git", [...READ, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "."], { cwd: root, on }); }
+  // -s: tracked entries come as "<mode> <object> <stage>\t<path>" (a submodule's mode is
+  // 160000, a folder), new ones as their bare path.
+  try { r = await exec("git", [...READ, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "-s", "--abbrev=4", "--", "."], { cwd: root, on }); }
   catch { return null; }
   if (r.code !== 0) return null;
   const dirs = new Set(), files = new Set();
   let full = true;
   const addDirs = (rel) => { for (const a of ancestors(rel)) { if (dirs.has(a)) break; dirs.add(a); } };
-  for (const entry of r.stdout.split("\0")) {
+  const addDir = (d) => { if (d && !dirs.has(d)) { dirs.add(d); addDirs(d); } };
+  for (const rec of r.stdout.split("\0")) {
+    const staged = /^(\d{6}) [0-9a-f]+ \d\t(.*)$/s.exec(rec), entry = staged ? staged[2] : rec;
+    if (staged?.[1] === "160000") { addDir(entry); continue; }
     // An untracked repo inside this one comes as a whole folder ("nested/").
-    if (entry.endsWith("/")) { const d = entry.replace(/\/+$/, ""); if (d && !dirs.has(d)) { dirs.add(d); addDirs(d); } continue; }
+    if (entry.endsWith("/")) { addDir(entry.replace(/\/+$/, "")); continue; }
     if (!entry || files.has(entry)) continue; // a conflicted file is listed once per stage
     if (files.size >= limit) { full = false; break; }
     files.add(entry);

@@ -25,9 +25,10 @@ export async function openExternal(abs) {
 // This computer only.
 export async function revealExternal(abs) {
   const platform = window()?.platform;
-  if (platform === "macos") await exec("open", ["-R", "--", abs]);
-  else if (platform === "windows") await exec("explorer.exe", [`/select,${abs.replace(/\//g, "\\")}`]);
-  else await exec("xdg-open", [abs.replace(/\/[^/]*$/, "") || "/"]);
+  // Explorer ends with 1 even when it showed the file: only the others' code says anything.
+  if (platform === "windows") { await exec("explorer.exe", [`/select,${abs.replace(/\//g, "\\")}`]); return; }
+  const r = platform === "macos" ? await exec("open", ["-R", "--", abs]) : await exec("xdg-open", [abs.replace(/\/[^/]*$/, "") || "/"]);
+  if (r.code !== 0) throw new Error(r.stderr.trim() || "Cannot show this file");
 }
 
 export function copy(cx, text) {

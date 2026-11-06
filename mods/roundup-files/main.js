@@ -232,18 +232,27 @@ export default class Files extends View {
   // knows may have been deleted: the index is read again once it is DIRTY_AGE old, not on
   // every save. Paths the index never holds don't count: .git and, from the disk, the pruned
   // folders, from git, what it ignores. From git, a changed .gitignore counts.
+  // A change during an index build may be missing from it: that index comes out dirty.
   changed(paths, cx) {
-    const index = this.index, fromGit = index?.from === "git";
+    const index = this.index, job = this.indexing, fromGit = index?.from === "git";
     for (const abs of paths) {
       const rel = relTo(this.root, abs);
-      if (rel === null || !index) continue;
+      if (rel === null) continue;
+      if (job && (baseOf(rel) === ".gitignore" || !this.unindexed(rel, job.source === "git"))) job.changed = true;
+      if (!index) continue;
       if (fromGit && baseOf(rel) === ".gitignore") { index.stale = true; continue; }
-      if (rel && (fromGit ? rel.split("/").includes(".git") || this.isIgnored(rel) : pruned(this.root, rel))) continue;
+      if (this.unindexed(rel, fromGit)) continue;
       if (rel === "" || index.dirs.has(rel) || !index.known.has(rel)) index.stale = true;
       else index.dirty = true;
     }
     if (index && this.outdated(index)) this.searchAgain(cx);
     this.refresh(cx);
+  }
+
+  // Whether an index never holds rel: .git and, from git, what it ignores; from the disk, the
+  // pruned folders.
+  unindexed(rel, fromGit) {
+    return Boolean(rel) && (fromGit ? rel.split("/").includes(".git") || this.isIgnored(rel) : pruned(this.root, rel));
   }
 
   // Whether the next search reads the index again.
@@ -252,32 +261,39 @@ export default class Files extends View {
     return i.stale || age >= INDEX_AGE || (i.dirty && age >= DIRTY_AGE);
   }
 
-  searchAgain(cx) { if (this.query.trim() && this.view === "all") this.search(this.query, cx); }
+  // A search rerun in the background: the list keeps its scroll unless the cursor's row went.
+  searchAgain(cx) { if (this.query.trim() && this.view === "all") this.search(this.query, cx, true); }
 
   toggle(r, cx) {
     if (!r?.dir) return;
     if (this.hits) { this.reveal(r.rel, true, cx); return; }
     // Changed: a folder git lists file by file folds; an untracked one opens from disk.
+    // A search there opens every folder: nothing to fold until it is cleared.
     if (this.view === "changed" && !this.underUntracked(r.rel)) {
+      if (this.query.trim()) return;
       if (this.shut.has(r.rel)) this.shut.delete(r.rel); else this.shut.add(r.rel);
     } else if (this.folders.has(r.rel)) {
       for (const f of [...this.folders]) if (f === r.rel || f.startsWith(r.rel + "/")) { this.folders.delete(f); this.entries.delete(f); }
-    } else this.open([r.rel], cx);
+    } else this.open([r.rel], cx, null, false); // a row shown: its folders are open already (in Changed, git's)
     cx.notify();
   }
 
-  // Opens folders (and their parents) and loads what they hold.
-  open(paths, cx, then) {
+  // Opens folders (and, with parents, their folders) and loads what they hold.
+  open(paths, cx, then, parents = true) {
     const ctx = this.ctx, todo = [];
-    for (const p of paths) for (const d of [...ancestors(p).reverse(), p]) if (d && !this.folders.has(d)) { this.folders.add(d); todo.push(d); }
+    for (const p of paths) for (const d of parents ? [...ancestors(p).reverse(), p] : [p]) if (d && !this.folders.has(d)) { this.folders.add(d); todo.push(d); }
     cx.spawn(async (cx) => {
       for (const d of todo) {
         if (!this.current(ctx)) return;
         if (this.entries.has(d) || this.pending.has(d)) continue;
         this.pending.add(d);
         try { if (await this.loadFolder(d, ctx)) this.limited = true; }
-        catch { this.folders.delete(d); }
-        finally { this.pending.delete(d); }
+        catch (e) {
+          if (!this.current(ctx)) return;
+          this.folders.delete(d);
+          notify({ title: "Cannot open this folder", body: `${d}: ${message(e)}`, level: "warning", timeout: 3000 });
+        }
+        finally { if (this.current(ctx)) this.pending.delete(d); }
       }
       if (this.current(ctx)) then?.();
       cx.notify();
@@ -293,7 +309,7 @@ export default class Files extends View {
 
   // ── search ───────────────────────────────────────────────────────────────────────────
   // All: every path below the folder, from an index (git ls-files or find). Changed: git's paths.
-  search(query, cx) {
+  search(query, cx, quiet = false) {
     this.query = query;
     const q = query.trim().toLowerCase(), seq = ++this.searchSeq;
     if (!q || this.view !== "all") { this.hits = null; this.searching = false; this.scrollTo = this.cursor || null; cx.notify(); return; }
@@ -307,8 +323,9 @@ export default class Files extends View {
         const matches = index.all.filter((rel) => rel.toLowerCase().includes(q));
         const named = matches.filter((rel) => baseOf(rel).toLowerCase().includes(q));
         this.hits = [...new Set([...named, ...matches])].slice(0, FIND_LIMIT);
+        const before = this.cursor;
         if (!this.hits.includes(this.cursor)) this.cursor = this.hits[0] ?? "";
-        this.scrollTo = this.cursor;
+        if (!quiet || this.cursor !== before) this.scrollTo = this.cursor;
       } catch (e) { if (seq === this.searchSeq && this.current(ctx)) { this.hits = []; this.searchError = message(e); } }
       finally { if (seq === this.searchSeq) this.searching = false; cx.notify(); }
     });
@@ -324,7 +341,7 @@ export default class Files extends View {
       job.promise = (async () => {
         const fromGit = source === "git" ? await listFiles(ctx.root, ctx.on, INDEX_PATHS) : null;
         const built = fromGit ?? await buildIndex(ctx.root, ctx.on);
-        const index = { ...built, source, from: fromGit ? "git" : "disk", known: new Set(built.all), at: Date.now(), stale: false };
+        const index = { ...built, source, from: fromGit ? "git" : "disk", known: new Set(built.all), at: Date.now(), stale: false, dirty: Boolean(job.changed) };
         if (this.current(ctx) && this.source === source) this.index = index;
         return index;
       })().finally(() => { if (this.current(ctx) && this.indexing === job) this.indexing = null; });
