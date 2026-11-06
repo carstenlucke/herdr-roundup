@@ -23,7 +23,7 @@ A Herdr App layout, cloned from Herdr's `main` (0.1.13). See README.md for the l
 
 - Decide whether the layout needs a new preview picture: does it look different from what Settings shows (a plain frame, or the last `layouts/Herdr-Roundup.svg`)? If so, draw `layouts/Herdr-Roundup.svg` and set `"preview": "layouts/Herdr-Roundup.svg"` on the layout root. `scripts/sync.sh` already copies it.
 
-## Limits found so far (in herdr-t3)
+## Limits found so far
 
 - `<mod>.<command>` reaches only shown copies of a mod; a mod runs only where a layout places it.
 - Mods can't add entries to Settings (cmd-,) or to the command palette (cmd-shift-p).
