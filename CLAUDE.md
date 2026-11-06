@@ -17,6 +17,10 @@ A Herdr App layout, cloned from Herdr's `main` (0.1.13). See README.md for the l
 - Shared state keys carry the mod's name as prefix (`roundup-tabs.<key>`).
 - After a change: `herdr-app check ~/.config/herdr-app/mods/<mod>` for each changed mod, then `herdr-app status` must show no errors.
 
+## Before a release
+
+- Decide whether the layout needs a new preview picture: does it look different from what Settings shows (a plain frame, or the last `layouts/Herdr-Roundup.svg`)? If so, draw `layouts/Herdr-Roundup.svg` and set `"preview": "layouts/Herdr-Roundup.svg"` on the layout root. `scripts/sync.sh` already copies it.
+
 ## Limits found so far (in herdr-t3)
 
 - `<mod>.<command>` reaches only shown copies of a mod; a mod runs only where a layout places it.
