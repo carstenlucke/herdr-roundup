@@ -4,7 +4,7 @@
     "name": "main",
     "version": "0.1.13"
   },
-  "version": "0.3.0",
+  "version": "0.4.0",
   "preview": "layouts/Herdr-Roundup.svg",
   "type": "row",
   "titlebar": "none",
@@ -129,7 +129,7 @@
                   },
                   "header": {
                     "content": {
-                      "mod": "pane"
+                      "mod": "roundup-pane"
                     },
                     "height": 30,
                     "position": "top",
