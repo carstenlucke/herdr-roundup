@@ -159,8 +159,10 @@ space's machine):
 - `git --no-optional-locks -c core.fsmonitor=false status --porcelain=v2
   --branch`: branch (`# branch.head`), ahead/behind (`# branch.ab`),
   uncommitted changes (lines starting with `1`, `2`, `u` or `?`)
-- `git rev-parse --show-toplevel` and `git rev-parse --path-format=absolute
-  --git-common-dir`: the repo's name, and whether this is a linked worktree
+- `git rev-parse --show-toplevel --path-format=absolute --git-common-dir`
+  (one process): the repo's name, and whether this is a linked worktree. A
+  git before 2.31 echoes the unknown `--path-format` and answers a relative
+  `.git`; then the checkout counts as its own repo, never as a worktree
 
 It watches each local repo's git folder with `watchFolder` and polls every
 250ms for what is due. Through `hc` it runs `machine ls --json`, and for

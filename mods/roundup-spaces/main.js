@@ -227,12 +227,15 @@ export default class Spaces extends View {
         this.git[key] = null;
         return;
       }
-      // The repo's own .git folder names it; a worktree's top differs from it.
-      const top = await exec("git", ["rev-parse", "--show-toplevel"], { cwd, on });
-      const common = await exec("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], { cwd, on });
-      const repo = common.stdout.trim();
+      // The repo's own .git folder names it; a worktree's top differs from it. One
+      // process for both. A git before 2.31 knows no --path-format: it echoes the flag
+      // and gives a relative ".git", the same for every repo. Then each checkout is
+      // its own repo, so unrelated repos don't share one card.
+      const rp = await exec("git", ["rev-parse", "--show-toplevel", "--path-format=absolute", "--git-common-dir"], { cwd, on });
+      const [top = "", common, extra] = rp.stdout.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+      const repo = rp.code === 0 && common && !extra ? common : `${top}/.git`;
       const name = repo.endsWith("/.git") ? base(repo.slice(0, -5)) : base(repo).replace(/\.git$/, "");
-      const info = { name, branch: null, ahead: 0, behind: 0, dirty: 0, repo: JSON.stringify([on, repo]), linked: repo !== `${top.stdout.trim()}/.git` };
+      const info = { name, branch: null, ahead: 0, behind: 0, dirty: 0, repo: JSON.stringify([on, repo]), linked: repo !== `${top}/.git` };
       for (const line of r.stdout.split("\n")) {
         // Changed, renamed, conflicted and untracked files: one line each.
         if (/^[12u?] /.test(line)) info.dirty++;
@@ -291,19 +294,19 @@ export default class Spaces extends View {
     const nested = (r) => r.g?.linked && (mains.has(r.g.repo) || trees[r.g.repo] > 1);
     const out = [];
     const placed = new Set(); // repos whose worktrees are listed
-    const kids = (repo) => list.filter((k) => nested(k) && k.g.repo === repo);
-    const tree = (k, n, all) => ({ ...k, tree: n === all.length - 1 ? "└─" : "├─" });
+    // `tree`: a worktree row, drawn on its repo's card.
+    const kids = (repo) => list.filter((k) => nested(k) && k.g.repo === repo).map((k) => ({ ...k, tree: true }));
     for (const r of list) {
       if (nested(r)) {
         if (mains.has(r.g.repo) || placed.has(r.g.repo)) continue;
         placed.add(r.g.repo);
-        out.push(...kids(r.g.repo).map(tree));
+        out.push(...kids(r.g.repo));
         continue;
       }
-      out.push({ ...r, tree: null });
+      out.push({ ...r, tree: false });
       if (!r.g || r.g.linked || placed.has(r.g.repo)) continue;
       placed.add(r.g.repo);
-      out.push(...kids(r.g.repo).map(tree));
+      out.push(...kids(r.g.repo));
     }
     // Simulate the batch so later indexes include earlier moves. An attempted
     // write can lose a sync conflict: allow the echo to settle before retrying.
