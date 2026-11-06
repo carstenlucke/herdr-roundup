@@ -4,8 +4,7 @@
 // Adapted from cybertron288/herdr-mods `filetree` (MIT, (c) 2026 cybertron288).
 // See THIRD_PARTY_NOTICES.md.
 import { agents, exec, focused, notify, panes, run, window } from "herdr";
-
-const psQuote = (s) => "'" + s.replace(/['‘’‚‛]/g, "$&$&") + "'";
+import { psQuote } from "./disk.js";
 
 export function relTo(root, abs) {
   if (!root || !abs) return null;

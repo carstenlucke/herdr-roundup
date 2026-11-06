@@ -97,12 +97,12 @@ export async function readGit(root, on) {
   if (top?.code !== 0) return git;
   const [dir, prefix = ""] = top.stdout.split("\n");
   git.repo = true; git.top = dir.trim(); git.prefix = prefix.trim();
-  const status = await g(["status", "--porcelain=v2", "-z", "--branch", "--no-renames", "--untracked-files=normal", "--ignored=traditional", "--", "."]).catch(() => null);
+  // Both at once; without a commit yet, diff HEAD fails and there are no lines to count.
+  const [status, numstat] = await Promise.all([
+    g(["status", "--porcelain=v2", "-z", "--branch", "--no-renames", "--untracked-files=normal", "--ignored=traditional", "--", "."]).catch(() => null),
+    g(["diff", "HEAD", "--numstat", "-z", "--no-renames", "--", "."]).catch(() => null),
+  ]);
   if (status?.code === 0) parseStatus(status.stdout, git);
-  const head = await g(["rev-parse", "--verify", "-q", "HEAD"]).catch(() => null);
-  if (head?.code === 0) {
-    const numstat = await g(["diff", "HEAD", "--numstat", "-z", "--no-renames", "--", "."]).catch(() => null);
-    if (numstat?.code === 0) parseNumstat(numstat.stdout, git);
-  }
+  if (numstat?.code === 0) parseNumstat(numstat.stdout, git);
   return git;
 }

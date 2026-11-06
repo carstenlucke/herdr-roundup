@@ -353,8 +353,9 @@ and `on_item_secondary_click`) with a `Scrollbar` and a
   --untracked-files=normal --ignored=traditional -- .`: each path's `XY`,
   the branch (`# branch.head`, `# branch.upstream`, `# branch.ab`), at most
   5,000 ignored paths
-- `rev-parse --verify -q HEAD`, then `diff HEAD --numstat -z --no-renames --
-  .` for the `+N −N` of files, summed up for folders
+- alongside status, `diff HEAD --numstat -z --no-renames -- .` for the
+  `+N −N` of files, summed up for folders (it fails before the first commit:
+  no lines then)
 
 Previews use `readTextFile` and a read-only `EditorState` + `Editor`. The
 menu is `openOverlay({mod: "roundup-files", kind: "popup", width: 228,

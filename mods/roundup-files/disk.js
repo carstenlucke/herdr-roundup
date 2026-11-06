@@ -13,7 +13,15 @@ const HOME_PRUNE = ["Library", "AppData", ".Trash"];
 export const INDEX_DIRS = 20000, INDEX_PATHS = 40000;
 
 const windows = (on) => !on && window()?.platform === "windows";
-const psQuote = (s) => "'" + s.replace(/['‘’‚‛]/g, "$&$&") + "'";
+export const psQuote = (s) => "'" + s.replace(/['‘’‚‛]/g, "$&$&") + "'";
+// A machine without sh (Windows over `on`): exec says so when it tries.
+const noSh = (e, on) => on && String(e).includes("cannot start sh: program not found");
+const atHomeOf = (root) => root === home() || root === "/";
+// Whether search never indexes rel below root (a pruned folder or a path inside one).
+export function pruned(root, rel) {
+  const atHome = atHomeOf(root);
+  return rel.split("/").some((n) => PRUNE.includes(n) || (atHome && HOME_PRUNE.includes(n)));
+}
 
 // Natural order, case-insensitive ("file2" before "file10"); this runtime has no Intl.
 export function compare(a, b) {
@@ -47,7 +55,7 @@ export async function listDir(path, on) {
     let r;
     try { r = await exec("sh", ["-c", script, "roundup-files", path], { on }); }
     catch (e) {
-      if (on && String(e).includes("cannot start sh: program not found")) list = await windowsDirectory();
+      if (noSh(e, on)) list = await windowsDirectory();
       else throw e;
     }
     if (!list) {
@@ -64,18 +72,23 @@ export async function listDir(path, on) {
 // is false when a limit cut it short. Skips PRUNE (and HOME_PRUNE at home), 12 levels deep
 // (5 at home or /).
 export async function buildIndex(root, on) {
-  const atHome = root === home() || root === "/";
+  const atHome = atHomeOf(root);
   const depth = atHome ? 5 : 12;
   const dirs = new Set(), all = [];
-  if (windows(on)) {
-    const names = PRUNE.map((n) => n.replace(/\./g, "\\.")).join("|");
-    const r = await exec("powershell", ["-NoProfile", "-Command", `[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); & { param($p) $b = (Resolve-Path -LiteralPath $p).Path.TrimEnd('\\'); Get-ChildItem -LiteralPath $b -Recurse -Force -Depth ${depth} -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '[\\\\/](${names})([\\\\/]|$)' } | Select-Object -First ${INDEX_PATHS + 1} | ForEach-Object { $(if ($_.PSIsContainer) {'d'} else {'f'}) + ($_.FullName.Substring($b.Length + 1) -replace '\\\\', '/') } } ${psQuote(root)}`]);
+  const prune = [...PRUNE, ...(atHome ? HOME_PRUNE : [])];
+  // Matched against the part below root, so a root inside a pruned name still indexes.
+  const windowsIndex = async () => {
+    const names = prune.map((n) => n.replace(/\./g, "\\.")).join("|");
+    const r = await exec("powershell", ["-NoProfile", "-Command", `[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); & { param($p) $b = (Resolve-Path -LiteralPath $p).ProviderPath.TrimEnd('\\'); Get-ChildItem -LiteralPath $b -Recurse -Force -Depth ${depth} -ErrorAction SilentlyContinue | Where-Object { $_.FullName.Substring($b.Length) -notmatch '[\\\\/](${names})([\\\\/]|$)' } | Select-Object -First ${INDEX_PATHS + 1} | ForEach-Object { $(if ($_.PSIsContainer) {'d'} else {'f'}) + ($_.FullName.Substring($b.Length + 1) -replace '\\\\', '/') } } ${psQuote(root)}`], { on });
     for (const line of r.stdout.split(/\r?\n/)) if (line.length > 1) { const rel = line.slice(1); all.push(rel); if (line[0] === "d") dirs.add(rel); }
     return { dirs, all: all.slice(0, INDEX_PATHS), full: all.length <= INDEX_PATHS };
-  }
-  const names = [...PRUNE, ...(atHome ? HOME_PRUNE : [])].map((n) => `-name '${n}'`).join(" -o ");
+  };
+  if (windows(on)) return windowsIndex();
+  const names = prune.map((n) => `-name '${n}'`).join(" -o ");
   const script = `cd "$1" || exit 3; find . -maxdepth ${depth} \\( ${names} \\) -prune -o -type d -print 2>/dev/null | head -n ${INDEX_DIRS + 1}; echo //; find . -maxdepth ${depth} \\( ${names} \\) -prune -o ! -type d -print 2>/dev/null | head -n ${INDEX_PATHS + 1}`;
-  const r = await exec("sh", ["-c", script, "roundup-files", root], { on });
+  let r;
+  try { r = await exec("sh", ["-c", script, "roundup-files", root], { on }); }
+  catch (e) { if (noSh(e, on)) return windowsIndex(); throw e; }
   if (r.code === 3) throw new Error("Cannot open this folder");
   let inDirs = true, nd = 0, nf = 0;
   for (const line of r.stdout.split("\n")) {

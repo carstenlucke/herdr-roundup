@@ -11,7 +11,7 @@ import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, InputState, Input, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { spaces, panes, focused, readTextFile, watchFolder, theme, settings, window, props, notify, openOverlay, closeOverlay, shared, setShared, nextCommand } from "herdr";
 import { iconFor, rootIcon } from "./icon.js";
-import { listDir, buildIndex, compare, PER_FOLDER, INDEX_PATHS } from "./disk.js";
+import { listDir, buildIndex, compare, pruned, PER_FOLDER, INDEX_PATHS } from "./disk.js";
 import { readGit, emptyGit, ancestors, dirOf, NEW, MODIFIED, DELETED } from "./git.js";
 import { openExternal, revealExternal, copy, sendToAgent, relTo } from "./actions.js";
 
@@ -29,6 +29,12 @@ const REQUEST = `${NAME}.request`;
 const baseOf = (rel) => rel.slice(rel.lastIndexOf("/") + 1);
 const join = (root, rel) => (rel ? (/[\\/]$/.test(root) ? root + rel : `${root}/${rel}`) : root);
 const message = (e) => String(e?.message ?? e);
+// Whether rel or one of its folders is in set.
+const selfOrAbove = (set, rel) => {
+  if (!set.size) return false;
+  for (let r = rel; r; r = dirOf(r)) if (set.has(r)) return true;
+  return false;
+};
 // A theme color with some transparency, for a highlighted row. Null unless the color is hex.
 const alpha = (c, a) => {
   const m = /^#([0-9a-f]{3}|[0-9a-f]{6})([0-9a-f]{2})?$/i.exec(c ?? "");
@@ -78,7 +84,12 @@ export default class Files extends View {
     this.seenRequest = shared(REQUEST)?.n ?? 0;
     this.input = InputState.new({ placeholder: "Search files" });
     this.input.on("change", (_e, cx) => this.search(this.input.value(), cx));
-    this.input.on("submit", (_e, cx) => this.activate(this.shown.find((r) => r.rel === this.cursor) ?? this.shown[0], cx));
+    this.input.on("submit", (_e, cx) => {
+      const r = this.shown.find((x) => x.rel === this.cursor) ?? this.shown[0];
+      // A preview hides the input: the keys (Esc, Left) go to the panel then.
+      if (r && !r.dir) this.handle.focus();
+      this.activate(r, cx);
+    });
     this.input.on("focus", (_e, cx) => { this.typing = true; cx.notify(); });
     this.input.on("blur", (_e, cx) => { this.typing = false; cx.notify(); });
     this.reset(null, null);
@@ -139,14 +150,17 @@ export default class Files extends View {
     this.loading = true;
     cx.spawn(async (cx) => {
       try {
-        let limited = false;
-        for (const path of ["", ...this.folders]) {
-          if (!this.current(ctx)) return;
-          try { limited = (await this.loadFolder(path, ctx)) || limited; }
-          catch (e) { if (!path) throw e; this.folders.delete(path); this.entries.delete(path); }
-        }
-        const git = await readGit(ctx.root, ctx.on);
+        // The open folders and git at once; a folder that fails closes, the root fails all.
+        const [more, git] = await Promise.all([
+          Promise.all(["", ...this.folders].map((path) => this.loadFolder(path, ctx).catch((e) => {
+            if (!path) throw e;
+            if (this.current(ctx)) { this.folders.delete(path); this.entries.delete(path); }
+            return false;
+          }))),
+          readGit(ctx.root, ctx.on),
+        ]);
         if (!this.current(ctx)) return;
+        const limited = more.some(Boolean);
         this.git = git; this.limited = limited; this.error = null;
         this.watch(cx);
       } catch (e) { if (this.current(ctx)) { this.error = message(e); this.git = emptyGit(true); } }
@@ -185,12 +199,13 @@ export default class Files extends View {
   }
 
   // A path the index doesn't know, a folder it knows, or the root (too many changes to
-  // list) means the folder structure may have changed: the index is read again.
+  // list) means the folder structure may have changed: the index is read again. Paths the
+  // index never holds (.git, node_modules, build output) don't count.
   changed(paths, cx) {
     const index = this.index;
     for (const abs of paths) {
       const rel = relTo(this.root, abs);
-      if (rel === null || rel === ".git" || rel.startsWith(".git/")) continue;
+      if (rel === null || (rel && pruned(this.root, rel))) continue;
       if (index && (rel === "" || index.dirs.has(rel) || !index.known.has(rel))) index.stale = true;
     }
     if (index?.stale && this.query.trim() && this.view === "all") this.search(this.query, cx);
@@ -254,7 +269,7 @@ export default class Files extends View {
         this.hits = [...new Set([...named, ...matches])].slice(0, FIND_LIMIT);
         if (!this.hits.includes(this.cursor)) this.cursor = this.hits[0] ?? "";
         this.scrollTo = this.cursor;
-      } catch (e) { if (seq === this.searchSeq) { this.hits = []; this.error = message(e); } }
+      } catch (e) { if (seq === this.searchSeq && this.current(ctx)) { this.hits = []; this.error = message(e); } }
       finally { if (seq === this.searchSeq) this.searching = false; cx.notify(); }
     });
   }
@@ -341,17 +356,9 @@ export default class Files extends View {
     return out;
   }
 
-  isIgnored(rel) {
-    if (!this.git.ignored.size) return false;
-    for (let r = rel; r; r = dirOf(r)) if (this.git.ignored.has(r)) return true;
-    return false;
-  }
+  isIgnored(rel) { return selfOrAbove(this.git.ignored, rel); }
 
-  underUntracked(rel) {
-    if (!this.git.untracked.size) return false;
-    for (let r = rel; r; r = dirOf(r)) if (this.git.untracked.has(r)) return true;
-    return false;
-  }
+  underUntracked(rel) { return selfOrAbove(this.git.untracked, rel); }
 
   highlightOf(rel, t) {
     const h = this.highlights.get(rel);
@@ -376,7 +383,7 @@ export default class Files extends View {
         if (this.file !== rel || !this.current(ctx)) return;
         if (text === null) { this.fileError = "This file is no longer available"; return; }
         if (text.includes("\0")) { this.fileError = "Binary file · no text preview"; return; }
-        const t = theme(), ext = rel.includes(".") ? rel.split(".").pop().toLowerCase() : "txt";
+        const t = theme(), name = baseOf(rel), ext = name.includes(".") ? name.split(".").pop().toLowerCase() : "txt";
         this.code = EditorState.new({ language: LANG[ext] ?? ext, readonly: true,
           value: text.length > 400000 ? text.slice(0, 400000) + "\n… (file truncated)" : text,
           font_family: settings().font_family, font_size: 12,
