@@ -1,7 +1,8 @@
 import { View, div, svg, image } from "gpui-kit";
-import { h_flex, v_flex } from "gpui-base";
-import { spaces, run, openOverlay, closeOverlay, theme, window, shared, layout, settings, keys, focused, props, nextCommand } from "herdr";
-import { MODES, confirmMode, setConfirmMode, closeTab, tabName, tabProgram } from "./close.js";
+import { h_flex } from "gpui-base";
+import { spaces, run, openOverlay, theme, window, shared, layout, settings, focused, props, nextCommand } from "herdr";
+import { closeTab, tabName, tabProgram } from "./close.js";
+import { menuView, shortcut } from "./menu.js";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -10,17 +11,6 @@ function find(node, id) {
     if (found) return found;
   }
   return null;
-}
-
-// The key for the first of these actions bound here: this layout's own section first, then global.
-function shortcut(actions) {
-  const own = `layout:${shared("layout")}`, all = keys();
-  for (const action of actions)
-    for (const section of [own, "global"]) {
-      const k = all.find(b => b.section === section && b.action === action);
-      if (k) return k.keys;
-    }
-  return "";
 }
 
 export default class Tabs extends View {
@@ -45,43 +35,15 @@ export default class Tabs extends View {
     });
   }
 
-  // Herdr's own tab menu (Rename, New tab, Close), with Close going through closeTab, and below it
-  // when closing asks: Herdr's Settings have no place for that, and a mod can't add one.
-  menuItems() {
+  // Herdr's own tab menu (Rename, New tab, Close), with Close going through closeTab, then when
+  // closing asks: Herdr's Settings have no place for that, and a mod can't add one.
+  renderMenu() {
     const { id, space } = props().menu;
-    return [
+    return menuView(this, [
       { label: "Rename", icon: "square-pen", act: () => run("tab.rename", { id }), keys: shortcut(["tab.rename"]) },
       { label: "New tab", icon: "plus", act: () => run("tab.new", { space }), keys: shortcut(["tab.new"]) },
-      { label: "Close", icon: "x", act: () => closeTab(id), keys: shortcut(["roundup-tabs.close", "tab.close"]) },
-      ...MODES.map(([mode, label], i) => ({ label, mode, head: i === 0 && "Ask before closing", act: () => setConfirmMode(mode) })),
-    ];
-  }
-
-  renderMenu() {
-    const t = theme(), list = this.menuItems(), mode = confirmMode();
-    const choose = (i) => { closeOverlay(props().overlay); list[i].act(); };
-    return v_flex().id("tab-menu").track_focus(this.handle).w_full().min_h(0).p(5).bg(t.popover).text_size(12.8)
-      .on_key_down((e, cx) => {
-        if (e.key === "down") this.at = (this.at + 1) % list.length;
-        else if (e.key === "up") this.at = (this.at + list.length - 1) % list.length;
-        else if (e.key === "enter") return choose(this.at);
-        else if (e.key === "escape") return closeOverlay(props().overlay);
-        else return;
-        cx.notify();
-      })
-      .children(list.map((it, i) => v_flex()
-        .when(it.label === "Close", el => el.child(div().mx(7).my(4).h(1).bg(t.border)))
-        .when(Boolean(it.head), el => el.child(div().mx(7).my(4).h(1).bg(t.border))
-          .child(div().px(8).pt(3).pb(2).text_size(11).text_color(t.dim).child(it.head)))
-        .child(h_flex().id(`mi-${i}`).h(31).px(8).gap(9).rounded(7).items_center().text_color(t.foreground)
-          .when(i === this.at, el => el.bg(t.selected)).hover(s => s.bg(t.hover))
-          .on_click(() => choose(i))
-          // A choice of mode carries a check where the commands carry their icon.
-          .child(it.mode
-            ? div().size(14).flex_none().when(it.mode === mode, el => el.child(svg("mods/workspace-chrome/check.svg").size(14).text_color(t.accent)))
-            : svg(`mods/workspace-chrome/${it.icon}.svg`).size(14).flex_none().text_color(t.muted))
-          .child(div().flex_1().child(it.label))
-          .child(div().text_size(11).text_color(t.dim).child(it.keys ?? "")))));
+      { label: "Close", icon: "x", sep: true, act: () => closeTab(id), keys: shortcut(["roundup-tabs.close", "tab.close"]) },
+    ], "tab");
   }
 
   // The side panel is remembered per space: switching shows that space's choice

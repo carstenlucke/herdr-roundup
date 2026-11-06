@@ -70,7 +70,7 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
 
 - **Tabs** (42px, drags the window): Herdr's tab bar, as `roundup-tabs`.
   Right-clicking a tab shows Rename, New tab and Close, then "Ask before
-  closing" with three choices, a check in `accent` on the chosen one:
+  closing a tab" with three choices, a check in `accent` on the chosen one:
   Never, While an agent works, Always.
 - **Body** with 8px padding and an 8px gap: the active tab's panes, each one
   rounded 10px on `background` with a 1px `border` (1px `accent` when
@@ -80,6 +80,9 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   `hover`: the terminal's address such as `t5j`, or a mod pane's id shortened
   to `p` and 6 hex digits), the folder in `dim`, the agent's status, and on
   hover the buttons rename, split right, split down, zoom and close. Terminal padding 14 × 12px.
+  Right-clicking a terminal shows Herdr's pane menu (Split right, Split
+  down, Zoom, where right-clicks go, Close pane), then "Ask before closing
+  a pane" with the same three choices, for panes only.
 - **Side panel** on the right, hidden at first (368px, 280–900px): a stack
   of Herdr's `files` and `changes`.
 - **Status bar** (28px): Herdr's shipped `workspace-status`.
@@ -128,23 +131,30 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   (Enter saves, Esc cancels). An empty name goes back to the program's name.
   A click anywhere else on the header focuses the pane. Tooltips: the id
   chip shows the whole id, the name shows the given and the program's name.
-- **Closing a tab** (its ×, its menu's Close, `cmd-w`) asks first as "Ask
-  before closing" says. Never: it closes at once, and the last tab takes
-  its space with it unasked. While an agent works (the default): it asks
-  while an agent in the tab is working or blocked ("Claude Code is still
-  running in it. Closing ends it."), otherwise Herdr's own close runs, which
-  asks "Close space?" before a space's last tab goes. Always: it asks every
-  time. When the tab is its space's last, the question says the space
-  closes too. The choice stays after a restart.
+- **Closing a tab** (its ×, its menu's Close, `cmd-w`) **or a pane** (its
+  header's ×, Close pane in the terminal's menu, `cmd-shift-w`) asks first
+  as that kind's choice says: tabs as the tab menu's, panes as the
+  terminal menu's. A tab's only pane closes the tab, so it follows the
+  choice for tabs: a pane's × never ends a tab more quietly than `cmd-w`
+  would. Never: it closes
+  at once, and the last tab takes its space with it unasked. While an agent
+  works (the default): it asks while an agent in the tab (or pane, with its
+  sub-agents) is working or blocked ("Claude Code is still running in it.
+  Closing ends it."), otherwise Herdr's own close runs, which asks "Close
+  space?" before a space's last tab goes. Always: it asks every time. A
+  tab's only pane closes the tab, and the question says so ("It's the tab's
+  only pane, so the tab closes too."), as it says when the space closes too.
+  The choice stays after a restart.
 - **Version tooltip:** follows the layout file. After a new release is
   installed, it shows the new version without a restart.
 
 ## Built from
 
 **Layout** `layouts/Herdr-Roundup.json`, cloned from Herdr's `main` 0.1.13
-(`cloned_from`) with a root `"version"` (`0.4.0`). Root `row` (`titlebar:
+(`cloned_from`) with a root `"version"` (`0.5.0`). Root `row` (`titlebar:
 "none"`, `traffic_lights: [12, 16]`, `background: "canvas"`,
-`terminal_padding: [14, 12]`, divider 1px `border`):
+`terminal_padding: [14, 12]`, `terminal_menu: "roundup-pane"`, divider 1px
+`border`):
 
 - `sidebar` column (px 268, min 44, max 480, `chrome`, `resizable: false`):
   - `brand` block (px 46, `window_drag`): `roundup-workspace-chrome`
@@ -189,8 +199,15 @@ name). See `docs/adr/0002-pane-names-in-core-labels.md`. The id chip copies
 with `cx.write_to_clipboard` on `click_count === 2`. The rename dialog is the
 same mod, opened with `openOverlay({ mod: "roundup-pane", kind: "dialog",
 width: 380, height: 196, props: { rename: { pane, terminal, value, fallback }
-} })`; it is shaped like Herdr's `prompt`. Commands: `pane.focus`,
-`pane.split`, `pane.zoom`, `pane.close`. Its own art: `rename.svg` (a
+} })`; it is shaped like Herdr's `prompt`. It is also the layout's
+`terminal_menu`: a popup (`mod.json` `overlay` 240×296) with `props()`
+`{tab: "pane", target: {pane, terminal}, overlay}`, Herdr's pane menu item
+for item, drawn by `menu.js`. Closing goes through `closePane(pane, name)`
+from `close.js` (see `roundup-tabs`): a tab's only pane runs `tab.close`,
+another `pane.close`. Its key command `close` reaches every shown header;
+only the copy whose pane is `focused().pane` acts. Commands: `pane.focus`,
+`pane.split`, `pane.zoom`, `pane.close`, `tab.close`,
+`terminal.right_click`, `terminal.park`. Its own art: `rename.svg` (a
 pencil) and the shipped header's `split-right`, `split-down`, `zoom`,
 `unzoom`, `close`; the working spinner is Herdr's
 `mods/workspace-chrome/spinner.svg`.
@@ -223,23 +240,26 @@ robot head in `currentColor`). It also draws icons from Herdr's shipped
 `chevron-down`, `chevron-right`, `folder`.
 
 **`roundup-tabs`** (clone of `tabs` 0.1.13, `place: "none"`, title "Tabs").
-Herdr's tab bar, except how a tab closes (`close.js`). The choice is shared
-`roundup-tabs.confirm-close`: `never`, `agents` (also when unset) or
-`always`. A tab's busy agents are `agents()` with its `tab` and status
+Herdr's tab bar, except how a tab closes (`close.js`). The choice for tabs is
+shared `roundup-tabs.confirm-close`, for panes `roundup-pane.confirm-close`:
+`never`, `agents` (also when unset) or `always`; a tab's only pane goes by
+the one for tabs. A tab's busy agents are `agents()` with its `tab` and status
 `working` or `blocked`. Asking opens Herdr's `confirm` as a dialog (400×170)
 with `command: { name: "tab.close", args: { id, confirmed: true } }`; not
 asking runs `tab.close {id, confirmed: true}` (never) or `tab.close {id}`
 (agents). A tab's right-click menu is the mod itself as a popup (220×237,
 `props: { menu: { id, space } }`), not Herdr's `menu`, whose Close would run
-`tab.close` past the choice. Its key commands: `close` (the shown tab) and
-`close:<id>`.
+`tab.close` past the choice; `menu.js` draws it like Herdr's. Its key
+commands: `close` (the shown tab) and `close:<id>`. `close.js` and `menu.js`
+are copied as-is into `roundup-pane`.
 
 **Shipped mods used:** `agents`, `files`, `changes`,
 `workspace-status`, plus `picker`, `menu`, `confirm` and `machine-add` as
 overlays.
 
 **Keys:** the `layout:Herdr-Roundup` section binds `cmd-w` to
-`roundup-tabs.close`, in place of global `tab.close`.
+`roundup-tabs.close` and `cmd-shift-w` to `roundup-pane.close`, in place of
+global `tab.close` and `pane.close`.
 
 ## Watch out
 
@@ -277,11 +297,13 @@ overlays.
 - **Herdr's `tab.close` asks only before a space's last tab goes**, and
   Herdr's Settings have no switch for it nor room for a mod's. So the choice
   sits in the tab's own menu, and every way this layout closes a tab goes
-  through `roundup-tabs`. Not covered: the command palette's `tab.close`,
-  and a pane's × or `cmd-shift-w` on a tab's only pane, which close the tab
-  as Herdr does.
+  through `roundup-tabs` or `roundup-pane`. Not covered: the command
+  palette's `tab.close` and `pane.close`.
+- **`pane.close` has no `confirmed`**, and on a space's last pane Herdr asks
+  anyway. So a tab's only pane closes with `tab.close`, which takes it.
 - **Mods can't import from each other:** `find()` and `narrow()` are copied
-  into both mods.
+  into both chrome mods, and `close.js` and `menu.js` into `roundup-tabs`
+  and `roundup-pane`. `scripts/sync.sh` stops when the two copies differ.
 - **Install by copying, not symlinking:** Herdr App doesn't load a mod's own
   SVGs through a symlink.
 
@@ -314,5 +336,12 @@ overlays.
   "Close tab …?" and Cancel keeps it; on a tab with only a shell it closes
   at once. With "Always" the shell's tab asks too; with "Never" neither
   asks.
+- With "While an agent works" for panes, in a tab split into an agent and a
+  shell, `cmd-shift-w` on the working agent's pane asks "Close pane …?", on
+  the shell's closes it at once. With "Never" for panes and "Always" for
+  tabs, a tab's only pane still asks. On a
+  space's last pane the question adds that the space closes too. Right-
+  clicking a terminal shows Close pane and "Ask before closing a pane";
+  choosing there leaves the tab menu's choice as it was.
 - In a light and a dark theme, every avatar's letter and every badge count
   can be read.

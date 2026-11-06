@@ -6,6 +6,7 @@
   },
   "version": "0.5.0",
   "preview": "layouts/Herdr-Roundup.svg",
+  "terminal_menu": "roundup-pane",
   "type": "row",
   "titlebar": "none",
   "traffic_lights": [

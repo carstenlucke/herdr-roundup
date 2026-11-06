@@ -7,6 +7,12 @@ app=${HERDR_APP_HOME:-$HOME/.config/herdr-app}
 gen="--exclude gpui-kit.d.ts --exclude jsconfig.json --exclude .gitkeep"
 name=Herdr-Roundup # the layout's file name, as Settings shows it
 
+# Mods can't import from each other: files they share are copies, and the copies must match.
+for f in close.js menu.js; do
+  cmp -s "$src/mods/roundup-tabs/$f" "$src/mods/roundup-pane/$f" ||
+    { echo "mods/roundup-tabs/$f and mods/roundup-pane/$f differ: copy one over the other" >&2; exit 1; }
+done
+
 mkdir -p "$app/layouts" "$app/mods" "$app/themes"
 
 # The layout file. Clicks (sizes, hidden columns, stack choices, theme picks) live in layouts/.state/ and survive this.
