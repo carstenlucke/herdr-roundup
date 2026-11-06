@@ -14,7 +14,7 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
-import { panes, terminals, props, run, theme, home, hc, shared, setShared, openOverlay, closeOverlay, notify } from "herdr";
+import { panes, terminals, props, run, theme, settings, home, hc, shared, setShared, openOverlay, closeOverlay, notify } from "herdr";
 
 const LABEL = "roundup-pane.name";
 const NAMES = "roundup-pane.names";
@@ -48,9 +48,10 @@ function paneId(p) {
 }
 
 async function saveName(target, raw) {
-  const name = raw.trim().slice(0, MAX_NAME);
+  // By code point, so a cut never leaves half an emoji.
+  const name = Array.from(raw.trim()).slice(0, MAX_NAME).join("").trim();
   if (target.terminal) {
-    const r = await hc(["label", target.terminal, `${LABEL}=${name}`]);
+    const r = await hc(["label", target.terminal, `${LABEL}=${name}`]).catch((e) => ({ code: 1, stderr: String(e), stdout: "" }));
     if (r.code !== 0) notify({ title: "Couldn't rename the pane", body: (r.stderr || r.stdout).trim(), level: "error" });
     return;
   }
@@ -87,13 +88,13 @@ export default class Pane extends View {
       .child(svg(`mods/roundup-pane/${icon}.svg`).size(14));
   }
 
-  openRename(p, given) {
+  openRename(p, given, fallback) {
     openOverlay({
       mod: "roundup-pane",
       kind: "dialog",
       width: 380,
       height: 196,
-      props: { rename: { pane: p.pane, terminal: p.terminal, value: given, fallback: this.fallbackName(p) } },
+      props: { rename: { pane: p.pane, terminal: p.terminal, value: given, fallback } },
     });
   }
 
@@ -105,7 +106,8 @@ export default class Pane extends View {
     cx.write_to_clipboard(id.copied);
     this.copied = true;
     cx.notify();
-    cx.timer.after(1200, (cx) => { this.copied = false; cx.notify(); });
+    this.copiedTimer?.cancel();
+    this.copiedTimer = cx.timer.after(1200, (cx) => { this.copied = false; this.copiedTimer = null; cx.notify(); });
   }
 
   render(cx) {
@@ -114,7 +116,8 @@ export default class Pane extends View {
     const p = this.me();
     if (!p) return div();
     const given = givenName(p);
-    const name = given || this.fallbackName(p);
+    const fallback = this.fallbackName(p);
+    const name = given || fallback;
     const id = paneId(p);
     const pic = icon(p.program, 14, t.dim);
     const st = p.status;
@@ -139,8 +142,8 @@ export default class Pane extends View {
         .max_w(260)
         .font_medium()
         .text_color(t.foreground)
-        .tooltip(given ? `${given} · ${this.fallbackName(p)} · double-click to rename` : "Double-click to name this pane")
-        .on_click((e) => { if (e.click_count === 2) this.openRename(p, given); })
+        .tooltip(given ? `${given} · ${fallback} · double-click to rename` : "Double-click to name this pane")
+        .on_click((e, cx) => { if (e.click_count === 2) { cx.stop_propagation(); this.openRename(p, given, fallback); } })
         .child(name))
       .child(div()
         .id(`ph-id-${pane}`)
@@ -151,19 +154,19 @@ export default class Pane extends View {
         .items_center()
         .rounded(4)
         .bg(this.copied ? t.accent + "26" : t.hover)
-        .font_family("JetBrains Mono")
+        .font_family(settings().font_family ?? "JetBrains Mono")
         .text_size(10.5)
         .text_color(this.copied ? t.accent : t.dim)
         .hover((s) => s.text_color(t.foreground))
         .tooltip(`${id.copied} · double-click to copy`)
-        .on_click((e, cx) => { if (e.click_count === 2) this.copyId(cx, id); })
+        .on_click((e, cx) => { if (e.click_count === 2) { cx.stop_propagation(); this.copyId(cx, id); } })
         .child(this.copied ? "copied" : id.shown))
       .child(div().flex_1().truncate().text_color(t.dim).child(folder(p.cwd)))
       .when(st === "working", el => el.child(svg("mods/workspace-chrome/spinner.svg").size(12).flex_none().text_color(t.working).spin(900)))
       .when(st === "blocked", el => el.child(div().flex_none().px(6).h(18).flex().items_center().rounded(5).bg(t.blocked + "26").text_size(10.5).font_semibold().text_color(t.blocked).child("Needs you")))
       .when(st === "done", el => el.child(div().size(7).flex_none().rounded(4).bg(t.done)))
       .when(this.hovered, el => el
-        .child(this.button(t, `ph-n-${pane}`, "rename", "Rename", () => this.openRename(p, given)))
+        .child(this.button(t, `ph-n-${pane}`, "rename", "Rename", () => this.openRename(p, given, fallback)))
         .child(this.button(t, `ph-r-${pane}`, "split-right", "Split right", () => run("pane.split", { direction: "right", pane })))
         .child(this.button(t, `ph-d-${pane}`, "split-down", "Split down", () => run("pane.split", { direction: "down", pane })))
         .child(this.button(t, `ph-z-${pane}`, p.zoomed ? "unzoom" : "zoom", p.zoomed ? "Unzoom" : "Zoom", () => run("pane.zoom", { pane })))
@@ -187,8 +190,9 @@ export default class Pane extends View {
 
   submit() {
     const p = props();
+    const value = this.input.value();
     closeOverlay(p.overlay);
-    saveName(p.rename, this.input.value());
+    saveName(p.rename, value);
   }
 
   renderDialog() {
