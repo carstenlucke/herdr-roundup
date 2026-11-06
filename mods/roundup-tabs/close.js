@@ -13,12 +13,14 @@ export const MODES = [
 export const confirmMode = () => (MODES.some(([m]) => m === shared(KEY)) ? shared(KEY) : "agents");
 export const setConfirmMode = (mode) => setShared(KEY, mode);
 
-// A tab nobody named shows its agent's program (else its first pane's), as the tab bar draws it.
-export function tabName(c) {
+// A tab's program: its agent's, else its first pane's.
+export function tabProgram(c) {
   const mine = panes().filter(p => p.tab === c.id);
-  const program = mine.find(p => p.program?.agent)?.program ?? mine[0]?.program;
-  return /^tb\d+$/.test(c.name) ? program?.name ?? "Terminal" : c.name;
+  return mine.find(p => p.program?.agent)?.program ?? mine[0]?.program;
 }
+
+// A tab nobody named shows its program, as the tab bar draws it.
+export const tabName = (c, program = tabProgram(c)) => /^tb\d+$/.test(c.name) ? program?.name ?? "Terminal" : c.name;
 
 // The dialog's title doesn't wrap: a long name is cut to what fits, a wide (CJK) character counting twice.
 function fit(name, room = 26) {
@@ -46,11 +48,13 @@ export function closeTab(id) {
   const busy = agents().filter(a => a.tab === id && (a.status === "working" || a.status === "blocked"));
   if (mode === "agents" && busy.length === 0) return run("tab.close", { id });
   const names = [...new Set(busy.map(a => a.program?.name ?? a.app ?? "An agent"))].join(", ");
-  const detail = (busy.length === 0 ? "Its terminals end."
+  const terminals = panes().some(p => p.tab === id && p.terminal);
+  const detail = (busy.length === 0 ? (terminals ? "Its terminals end." : "")
     : busy.length === 1 ? `${names} is still running in it. Closing ends it.`
     : `${busy.length} agents are still running in it (${names}). Closing ends them.`)
     + (space.tabs.length === 1 ? " It's the space's last tab, so the space closes too." : "");
+  const name = tabName(tab);
   if (asking) closeOverlay(asking);
   asking = openOverlay({ mod: "confirm", kind: "dialog", width: 400, height: 170,
-    props: { title: tab.named ? `Close tab "${fit(tab.name)}"?` : `Close tab ${tab.name}?`, detail, command: { name: "tab.close", args: { id, confirmed: true } } } });
+    props: { title: tab.named ? `Close tab "${fit(name)}"?` : `Close tab ${name}?`, detail: detail.trim(), command: { name: "tab.close", args: { id, confirmed: true } } } });
 }
