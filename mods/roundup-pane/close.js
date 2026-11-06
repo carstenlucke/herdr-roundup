@@ -1,6 +1,6 @@
 // When closing a tab or a pane asks first. Herdr's own tab.close asks only when the space would close
 // with it, and Herdr's Settings have no switch for it, so every way this layout closes one comes here:
-// a tab's × and menu and cmd-w (roundup-tabs), a pane's × and menu and cmd-shift-w (roundup-pane).
+// a tab's × and menu and cmd-w (roundup-tabs), a pane's × and menu (roundup-pane) and cmd-shift-w (roundup-tabs).
 // Mods can't import from each other: this file is copied as-is into both, and scripts/sync.sh
 // refuses to install copies that differ.
 import { spaces, panes, agents, terminals, run, openOverlay, closeOverlay, shared, setShared } from "herdr";
@@ -78,12 +78,31 @@ export function closeTab(id) {
   });
 }
 
-// `name`: the pane as its header names it. A tab's only pane takes the tab with it, so closing it
-// closes the tab, and asks as closing a tab does: a pane's × shouldn't end a tab more quietly than
-// cmd-w would. (tab.close, too: pane.close has no `confirmed` and asks before a space goes anyway.)
-export function closePane(pane, name) {
+// A pane's name, as roundup-pane's header shows it and its rename dialog sets it. herdr-core can't
+// rename a running terminal, so a terminal's name is its label; a mod pane's is in shared state.
+export const NAME_LABEL = "roundup-pane.name";
+export const NAMES = "roundup-pane.names";
+
+// The name someone gave the pane, or "".
+export function givenName(p) {
+  if (p.terminal) return terminals().find(t => t.address === p.terminal)?.labels?.[NAME_LABEL] ?? "";
+  return shared(NAMES)?.[p.pane] ?? "";
+}
+
+export const fallbackName = (p) => ((p.program?.agent || p.program?.shell) && p.program.name) || p.title || p.program?.name || "shell";
+
+// Its given name, else the program's.
+export const paneName = (p) => givenName(p) || fallbackName(p);
+
+// A tab's only pane takes the tab with it, so closing it closes the tab, and asks as closing a tab
+// does: a pane's × shouldn't end a tab more quietly than cmd-w would. (tab.close, too: pane.close
+// has no `confirmed` and asks before a space goes anyway.)
+// cmd-shift-w comes through roundup-tabs, not the pane headers: a key command reaches every shown
+// copy, and each header checking focus in turn would close one pane after the other as focus moves.
+export function closePane(pane) {
   const all = panes(), p = all.find(q => q.pane === pane);
   if (!p) return;
+  const name = paneName(p);
   const lone = all.filter(q => q.tab === p.tab).length === 1;
   const last = lone && spaces().find(s => s.tabs.some(c => c.id === p.tab))?.tabs.length === 1;
   // Its terminal's sub-agents (and theirs) end with it; a lone pane's tab takes every agent in the tab.

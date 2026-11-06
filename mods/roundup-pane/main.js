@@ -13,17 +13,15 @@
 // - The same mod draws the rename dialog: opened as an overlay with props { rename: {...} }.
 // - Closing asks first as "Ask before closing a pane" in the terminal's menu says; a tab's only pane
 //   as the tab menu's choice for tabs says (close.js, shared with roundup-tabs). Ways to close: the ×,
-//   cmd-shift-w (`roundup-pane.close`: every shown header gets it, the focused pane's acts) and Close
-//   pane in the terminal's right-click menu, which is this mod too (the layout's `terminal_menu`).
+//   cmd-shift-w (`roundup-tabs.close-pane`: the tab bar has one copy, every header would get it) and
+//   Close pane in the terminal's right-click menu, which is this mod too (the layout's `terminal_menu`).
 
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
-import { panes, terminals, props, run, theme, settings, home, hc, shared, setShared, openOverlay, closeOverlay, notify, focused, nextCommand } from "herdr";
-import { closePane } from "./close.js";
+import { panes, terminals, props, run, theme, settings, home, hc, shared, setShared, openOverlay, closeOverlay, notify } from "herdr";
+import { closePane, givenName, fallbackName, NAME_LABEL, NAMES } from "./close.js";
 import { menuView, shortcut } from "./menu.js";
 
-const LABEL = "roundup-pane.name";
-const NAMES = "roundup-pane.names";
 const MAX_NAME = 48;
 
 function icon(p, size, color) {
@@ -37,15 +35,6 @@ function folder(cwd) {
   return cwd === h ? "~" : cwd.startsWith(h + "/") ? "~" + cwd.slice(h.length) : cwd;
 }
 
-// The name someone gave this pane, or "".
-function givenName(p) {
-  if (p.terminal) {
-    const t = terminals().find((t) => t.address === p.terminal);
-    return t?.labels?.[LABEL] ?? "";
-  }
-  return shared(NAMES)?.[p.pane] ?? "";
-}
-
 // What the id chip shows and what a double-click copies.
 function paneId(p) {
   if (p.terminal) return { shown: p.terminal, copied: p.terminal };
@@ -53,18 +42,11 @@ function paneId(p) {
   return { shown: short, copied: p.pane };
 }
 
-function fallbackName(p) {
-  return ((p.program?.agent || p.program?.shell) && p.program.name) || p.title || p.program?.name || "shell";
-}
-
-// What the header calls a pane: its given name, else the program's.
-const nameOf = (p) => givenName(p) || fallbackName(p);
-
 // Herdr's pane menu (`menu`, tab "pane") item for item, with Close pane going through closePane.
 function menuRows(target) {
   const all = terminals(), term = all.find((t) => t.address === target.terminal);
   const parent = term?.parent && all.find((t) => t.address === term.parent);
-  const pane = target.pane, p = panes().find((q) => q.pane === pane);
+  const pane = target.pane;
   return [
     { label: "Split right", icon: "panel-right", act: () => run("pane.split", { direction: "right", pane }), keys: shortcut(["pane.split:right"]) },
     { label: "Split down", icon: "panel-right", act: () => run("pane.split", { direction: "down", pane }), keys: shortcut(["pane.split:down"]) },
@@ -73,7 +55,7 @@ function menuRows(target) {
       ? { label: "Use Herdr right-click menu", icon: "terminal", act: () => run("terminal.right_click", { terminal: term.address, to: "menu" }) }
       : { label: "Send right-clicks to pane", icon: "terminal", act: () => run("terminal.right_click", { terminal: term.address, to: "program" }) }] : []),
     ...(parent ? [{ label: `Send back to ${parent.name || parent.address}`, icon: "terminal", act: () => run("terminal.park", { terminal: term.address }) }] : []),
-    { label: "Close pane", icon: "x", sep: true, act: () => p && closePane(pane, nameOf(p)), keys: shortcut(["roundup-pane.close", "pane.close"]) },
+    { label: "Close pane", icon: "x", sep: true, act: () => closePane(pane), keys: shortcut(["roundup-tabs.close-pane", "pane.close"]) },
   ];
 }
 
@@ -81,7 +63,7 @@ async function saveName(target, raw) {
   // By code point, so a cut never leaves half an emoji.
   const name = Array.from(raw.trim()).slice(0, MAX_NAME).join("").trim();
   if (target.terminal) {
-    const r = await hc(["label", target.terminal, `${LABEL}=${name}`]).catch((e) => ({ code: 1, stderr: String(e), stdout: "" }));
+    const r = await hc(["label", target.terminal, `${NAME_LABEL}=${name}`]).catch((e) => ({ code: 1, stderr: String(e), stdout: "" }));
     if (r.code !== 0) notify({ title: "Couldn't rename the pane", body: (r.stderr || r.stdout).trim(), level: "error" });
     return;
   }
@@ -102,14 +84,6 @@ export default class Pane extends View {
       this.handle.focus();
       return;
     }
-    cx.spawn(async (cx) => {
-      for (;;) {
-        const command = await nextCommand();
-        const p = this.me();
-        if (command === "close" && p && p.pane === focused()?.pane) closePane(p.pane, nameOf(p));
-        cx.notify();
-      }
-    });
   }
 
   me() {
@@ -212,7 +186,7 @@ export default class Pane extends View {
         .child(this.button(t, `ph-r-${pane}`, "split-right", "Split right", () => run("pane.split", { direction: "right", pane })))
         .child(this.button(t, `ph-d-${pane}`, "split-down", "Split down", () => run("pane.split", { direction: "down", pane })))
         .child(this.button(t, `ph-z-${pane}`, p.zoomed ? "unzoom" : "zoom", p.zoomed ? "Unzoom" : "Zoom", () => run("pane.zoom", { pane })))
-        .child(this.button(t, `ph-x-${pane}`, "close", "Close", () => closePane(pane, name))));
+        .child(this.button(t, `ph-x-${pane}`, "close", "Close", () => closePane(pane))));
   }
 
   // --- the rename dialog (this mod as an overlay), shaped like Herdr's `prompt` ---

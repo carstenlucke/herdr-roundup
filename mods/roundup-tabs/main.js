@@ -1,7 +1,7 @@
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { spaces, run, openOverlay, theme, window, shared, layout, settings, focused, props, nextCommand } from "herdr";
-import { closeTab, tabName, tabProgram } from "./close.js";
+import { closeTab, closePane, tabName, tabProgram } from "./close.js";
 import { menuView, shortcut } from "./menu.js";
 
 function find(node, id) {
@@ -24,12 +24,14 @@ export default class Tabs extends View {
       return;
     }
     this.panels = JSON.parse(localStorage.getItem("panels") ?? "{}");
-    // cmd-w: the shown tab, or `close:<id>` for another one.
+    // cmd-w: the shown tab, or `close:<id>` for another one. cmd-shift-w (`close-pane`): the focused pane,
+    // here and not in roundup-pane, as the tab bar has one copy and every pane header would get it.
     cx.spawn(async (cx) => {
       for (;;) {
         const command = await nextCommand();
         if (command === "close") closeTab(focused()?.tab ?? spaces().find(s => s.active)?.tabs.find(c => c.active)?.id);
         else if (command.startsWith("close:")) closeTab(command.slice("close:".length));
+        else if (command === "close-pane" && focused()?.pane) closePane(focused().pane);
         cx.notify();
       }
     });
