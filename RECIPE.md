@@ -89,8 +89,9 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
 - **Click** a space to switch to it. **Right-click** opens Herdr's space
   menu. **Drag** a space onto another one of the same machine to move it
   there; the dragged row fades to half and a 2px `accent` bar marks where it
-  lands. Dragging a card's top row moves the whole card; any other worktree
-  snaps back to its card.
+  lands. Dragging a card's top row, or the repo name heading a card without
+  a main-checkout space, moves the whole card (the card fades instead); any
+  other worktree moves within its card and snaps back if dragged out.
 - **New spaces** get the color used least among the six (`ansi6`, `ansi3`,
   `ansi4`, `ansi5`, `ansi2`, `ansi1`). The home space `~` gets none and shows
   `ansi6`. A new space waits up to 1.5s for its git, so a worktree appears
