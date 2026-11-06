@@ -4,7 +4,8 @@
     "name": "main",
     "version": "0.1.13"
   },
-  "version": "0.2.0",
+  "version": "0.3.0",
+  "preview": "layouts/Herdr-Roundup.svg",
   "type": "row",
   "titlebar": "none",
   "traffic_lights": [
@@ -55,7 +56,7 @@
               },
               "min": 90,
               "content": {
-                "mod": "spaces"
+                "mod": "roundup-spaces"
               }
             },
             {
