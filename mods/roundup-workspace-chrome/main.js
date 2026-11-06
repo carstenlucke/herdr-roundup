@@ -1,6 +1,6 @@
 import { View, div, image, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { theme, run, props, window, shared, setShared, updates, layout, appHome, readTextFile } from "herdr";
+import { theme, run, props, window, shared, setShared, updates, layout, appHome, readTextFile, watchFolder } from "herdr";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -23,21 +23,32 @@ function toggleSidebar() {
   run("layout.resize", { id: "sidebar", px: narrow() ? (shared("sidebar.width") ?? 268) : window()?.platform === "macos" ? 76 : 44 });
 }
 
-// "Herdr Roundup 0.1.0 · based on Herdr 0.1.13". The version is the layout root's "version";
-// layout() leaves out fields Herdr doesn't know, so it is read from the layout's file.
-function versionLabel(version) {
-  const herdr = layout()?.cloned_from?.version;
-  return `Herdr Roundup ${version ?? ""}${herdr ? ` · based on Herdr ${herdr}` : ""}`;
+// "Herdr Roundup 0.1.0 · based on Herdr 0.1.13", from the layout's file: layout() leaves out
+// fields Herdr doesn't know, such as the root's "version". A copy of this layout isn't Herdr's.
+function versionLabel(file) {
+  const herdr = file?.cloned_from?.name === "main" ? file.cloned_from.version : null;
+  return ["Herdr Roundup", file?.version].filter(Boolean).join(" ") + (herdr ? ` · based on Herdr ${herdr}` : "");
 }
 
 export default class WorkspaceChrome extends View {
   init(_props, cx) {
-    this.version = null;
+    this.file = null;
     if (props()?.footer) return;
     cx.spawn(async (cx) => {
-      const text = await readTextFile(`${appHome()}/layouts/${shared("layout")}.json`).catch(() => null);
-      try { this.version = JSON.parse(text ?? "{}").version ?? null; } catch { this.version = null; }
-      cx.notify();
+      // Read again whenever the layout's file changes (a release via scripts/sync.sh), not only once.
+      const dir = `${appHome()}/layouts`;
+      for (;;) {
+        const name = shared("layout");
+        const text = await readTextFile(`${dir}/${name}.json`).catch(() => null);
+        try { this.file = JSON.parse(text ?? "null"); } catch { this.file = null; }
+        cx.notify();
+        // layouts/.state/ changes on every click; only the layout's own file matters here.
+        for (;;) {
+          const paths = await watchFolder(dir).catch(() => null);
+          if (!paths) return;
+          if (paths.some(p => p === dir || p.endsWith(`/${shared("layout")}.json`))) break;
+        }
+      }
     });
   }
   button(id, label, action) {
@@ -61,7 +72,7 @@ export default class WorkspaceChrome extends View {
     return h_flex().size_full().bg(t.chrome).pl(collapsed ? 6 : 14).pr(10).gap(4).items_center().text_size(13.5)
       .when(window()?.platform === "macos" && !window()?.fullscreen && !collapsed, el => el.pl(76))
       .when(!collapsed, el => el.child(h_flex().flex_1().items_center().child(h_flex().id("brand-name").gap(8).items_center()
-        .tooltip(versionLabel(this.version))
+        .tooltip(versionLabel(this.file))
         .child(image("mods/roundup-workspace-chrome/logo.png").size(20).rounded(5)).child(div().font_semibold().text_color(t.foreground).child("Herdr Roundup")))))
       .when(!collapsed, el => el.child(this.button("search", svg("mods/roundup-workspace-chrome/search.svg").size(15), () => run("mod.open", { name: "picker" }))))
       // On the macOS rail the traffic lights fill the row; the agents list's » unfolds it.
