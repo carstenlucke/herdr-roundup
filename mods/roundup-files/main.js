@@ -1,5 +1,5 @@
 // roundup-files: the side panel's file browser. The focused pane's folder as a tree with
-// Catppuccin icons and git state (each path's status, folders' counts, +/− lines, a branch
+// Symbols icons and git state (each path's status, folders' counts, +/− lines, a branch
 // row), a switch between all files and the changed ones, search across folders not yet
 // opened, keyboard navigation, a context menu, and bounded read-only previews.
 //
@@ -477,7 +477,7 @@ export default class Files extends View {
   }
 
   // ── drawing ──────────────────────────────────────────────────────────────────────────
-  row(r, t, dark) {
+  row(r, t) {
     const g = this.git, rel = r.rel;
     const status = g.status.get(rel) ?? (this.underUntracked(rel) ? "?" : null);
     const ignored = !status && this.isIgnored(rel);
@@ -488,7 +488,7 @@ export default class Files extends View {
       .when(selected, (el) => el.bg(t.selected)).when(!selected, (el) => el.hover((s) => s.bg(t.hover)))
       .when(Boolean(hl?.color) && !selected, (el) => el.bg(alpha(hl.color, "22") ?? t.hover))
       .child(r.dir ? svg(ICON(`chevron-${r.open ? "down" : "right"}`)).size(12).flex_none().text_color(t.dim) : div().w(12).flex_none())
-      .child(image(iconFor(rel, r.dir, r.open, dark)).size(16).flex_none().when(ignored || r.gone, (el) => el.opacity(0.5)))
+      .child(image(iconFor(rel, r.dir, r.open)).size(16).flex_none().when(ignored || r.gone, (el) => el.opacity(0.5)))
       .child(div().flex_1().min_w(0).truncate().text_color(hl?.color ?? (ignored ? t.dim : color ?? t.foreground))
         .when(r.gone, (el) => el.line_through()).child(r.name))
       .when(Boolean(counts), (el) => el.children(counts.map((n, i) => n
@@ -530,13 +530,13 @@ export default class Files extends View {
         : empty);
   }
 
-  header(t, dark) {
+  header(t) {
     const bar = h_flex().h(42).flex_none().px(12).gap(8).items_center().border_b(1).border_color(t.border);
     if (this.file) return bar
       .child(div().id("rf-back").size(22).flex_none().flex().items_center().justify_center().rounded(6).cursor_pointer().text_color(t.muted)
         .hover((s) => s.bg(t.hover).text_color(t.foreground)).tooltip("Back to the files (Esc)")
         .on_click((_e, cx) => { this.closePreview(); this.handle.focus(); cx.notify(); }).child(svg(ICON("chevron-left")).size(14)))
-      .child(image(iconFor(this.file, false, false, dark)).size(16).flex_none())
+      .child(image(iconFor(this.file, false, false)).size(16).flex_none())
       .child(div().flex_1().min_w(0).truncate().text_size(12.5).child(this.file));
     const changed = this.git.records;
     return bar
@@ -550,7 +550,7 @@ export default class Files extends View {
           .when(id === "changed" && changed > 0, (el) => el.child(div().text_size(11).text_color(on ? t.muted : t.dim).child(String(changed))));
       })))
       .child(h_flex().flex_1().min_w(0).gap(6).justify_end().items_center().text_size(12).text_color(t.dim)
-        .when(Boolean(this.root), (el) => el.child(image(rootIcon(false, dark)).size(14).flex_none()))
+        .when(Boolean(this.root), (el) => el.child(image(rootIcon(false)).size(14).flex_none()))
         .child(div().min_w(0).truncate().child(this.root?.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || this.root || "")));
   }
 
@@ -577,11 +577,11 @@ export default class Files extends View {
       this.seenRequest = req.n;
       if (req.root === this.root && (req.on ?? null) === (this.on ?? null)) this.request(req, cx);
     }
-    const t = theme(), dark = settings()?.dark !== false;
+    const t = theme();
     const root = v_flex().id(NAME).size_full().min_h(0).rounded(10).overflow_hidden().bg(t.background).border_1().border_color(t.border).text_color(t.foreground).text_size(13)
       .track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx))
       .on_size_change((size, cx) => { if (Math.abs(size.width - this.width) > 4) { this.width = size.width; cx.notify(); } })
-      .child(this.header(t, dark));
+      .child(this.header(t));
     if (this.file) {
       return root.child(this.code ? Editor.new(this.code).flex_1().min_h(0) : div().p(12).text_color(t.dim).child(this.fileError || "Loading file…"));
     }
@@ -605,7 +605,7 @@ export default class Files extends View {
           .hover((s) => s.text_color(t.foreground)).on_click((_e, cx) => this.clearSearch(cx)).child("×"))))
       .child(div().flex_1().min_h(0).relative().px(4).pb(4)
         .child(v_virtual_list("rf-rows", rows.length, ROW, (i) => rows[i]?.rel ?? String(i), (range) =>
-          rows.slice(range.start, range.end).map((r) => this.row(r, t, dark))).track_scroll(this.scroll).size_full()
+          rows.slice(range.start, range.end).map((r) => this.row(r, t))).track_scroll(this.scroll).size_full()
           .on_item_click((rel, cx) => { this.handle.focus(); this.activate(this.shown.find((r) => r.rel === rel), cx); cx.notify(); })
           .on_item_secondary_click((rel, _e, cx) => { const r = this.shown.find((x) => x.rel === rel); if (!r) return; this.cursor = rel; this.openMenu(r); cx.notify(); }))
         .child(Scrollbar.vertical("rf-rows").viewport_from_layout().absolute().inset_0())

@@ -8,7 +8,7 @@ ahead/behind and uncommitted changes, plus a badge with the number of agents
 running in it. A repo and its worktrees sit together on one card. On the
 right, the terminals of the active tab in rounded panes, with tabs above and
 a status bar below. A side panel shows the focused folder's files with
-Catppuccin icons and their git state, all of them or only the changed ones,
+Symbols icons and their git state, all of them or only the changed ones,
 searchable across folders not yet opened. Built for light and dark themes
 alike.
 
@@ -93,7 +93,7 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   - **Header** (42px): "Files" in semibold, a switch **All | Changed** (24px,
     `raised` behind, the chosen one on `background`; Changed carries the
     number of entries `git status` lists), and at the right the shown
-    folder's name in `dim` with Catppuccin's root-folder icon. While a file
+    folder's name in `dim` with Symbols' root-folder icon. While a file
     previews: a back arrow, the file's icon and its path.
   - **Branch row** (46px): a branch glyph, the branch in medium weight,
     `↑ahead` `↓behind` in `muted`, "upstream gone" when its upstream was
@@ -105,8 +105,8 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   - **Search field** (28px, `canvas`, `border`, `accent` while typing):
     "Search files".
   - **Tree** (26px rows, 14px indent per level): a chevron for folders, a
-    16px Catppuccin icon (Latte in light themes, Mocha in dark; open folders
-    their open icon), the name, then the git marks. Names take their status
+    16px Symbols icon (one set for light and dark themes; an open folder
+    keeps its icon, as in VS Code), the name, then the git marks. Names take their status
     color: new or added `ansi2`, modified `ansi3`, deleted or conflicted
     `ansi1`, renamed `ansi4`; ignored paths are `dim` with a half-faded icon.
     Files end with `+N −N` and their letter (`?`, `A`, `M`, `D`, `U`, `R`,
@@ -370,9 +370,10 @@ Reveal run `open` / `open -R` (PowerShell `Invoke-Item` / `explorer.exe
 the view. `this.highlights` (path → `{color, at}`, a theme color name) tints
 a row and colors its name; nothing fills it yet, so a later source (an
 agent's reads and writes) can light up paths without changing the tree. Its
-own art: Catppuccin Icons 1.26.0 in `icons/latte/` and `icons/mocha/` (621
-each, with `icons/LICENSE`) and `icons.js`, all written by
-`scripts/build-icons.mjs` (`docs/adr/0003-catppuccin-icons-pinned-and-generated.md`);
+own art: Symbols 0.0.26 by Miguel Solorio in `icons/` (245 SVGs, with
+`icons/LICENSE`) and `icons.js`, all written by `scripts/build-icons.mjs`
+(`docs/adr/0006-symbols-icons-replace-catppuccin.md`, the generator in
+`docs/adr/0003-catppuccin-icons-pinned-and-generated.md`);
 Herdr's `chevron-right`, `chevron-down`, `chevron-left`, `branch` and
 `search` glyphs.
 
@@ -446,9 +447,15 @@ global `tab.close` and `pane.close`.
 - **A popup's tasks end with it:** the context menu closes on a click, so
   anything that waits (a timer restoring the clipboard, `open`) runs in the
   panel (ADR 0005).
-- **Icon colors are fixed:** Catppuccin's SVGs carry their own colors
-  (`image()`), the one exception to theme colors. Light themes take Latte,
-  dark ones Mocha, by `settings().dark`.
+- **Icon colors are fixed:** Symbols' SVGs carry their own colors
+  (`image()`), the one exception to theme colors. One set serves light and
+  dark themes.
+- **Symbols leans on language ids:** `.css`, `.html`, `.php`, `.vue` and
+  more get their icons only through VS Code's languages, which Herdr
+  doesn't have. `scripts/build-icons.mjs` turns them into extensions from a
+  table of VS Code's associations; without it those files show the plain
+  document icon. It also drops the six rules of 0.0.26 that name icons the
+  release lacks (`less`, `folder-redux`), as VS Code ignores them.
 - **Search limits:** the index stops at 20,000 folders and 40,000 other
   paths and at 12 levels; a deeper or larger folder is searched only in
   part, and the footer says so. Folders show their first 500 entries.
@@ -500,8 +507,8 @@ global `tab.close` and `pane.close`.
   dim, and their folders show the counts. Changed lists exactly what
   `git status -s` lists, the deleted file struck through. Editing or
   deleting a file shows the change within a second, without a restart.
-- Files and folders, open ones too, show Catppuccin icons: Latte in a light
-  theme, Mocha in a dark one (`package.json`, `Dockerfile`, `src/`,
+- Files and folders, open ones too, show Symbols icons in light and dark
+  themes (`package.json`, `Dockerfile`, `style.css`, `index.html`, `src/`,
   `.github/`).
 - Typing the name of a file in a folder that was never opened finds it;
   `node_modules` stays out. Enter previews a file; Esc goes back.

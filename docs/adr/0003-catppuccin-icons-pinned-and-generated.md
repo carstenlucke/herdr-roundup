@@ -1,6 +1,7 @@
 # 0003: Catppuccin Icons, pinned and generated, Latte and Mocha only
 
-- **Status:** Accepted
+- **Status:** Superseded by [0006](0006-symbols-icons-replace-catppuccin.md) for the set
+  (Symbols instead of Catppuccin). The pinned, checked generator stays.
 - **Date:** 2026-11-06
 - **Concerns:** `scripts/build-icons.mjs`, `mods/roundup-files/icon.js`,
   `mods/roundup-files/icons.js`, `mods/roundup-files/icons/`
