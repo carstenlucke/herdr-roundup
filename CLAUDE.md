@@ -9,12 +9,17 @@ A Herdr App layout, cloned from Herdr's `main` (0.1.13). See README.md for the l
 
 ## Rules
 
+- The layout is `layouts/Herdr-Roundup.json`: Settings show the file name, and a name with a space can't be switched to. Mods keep the `roundup-` prefix.
 - Every mod of this layout is `mods/roundup-<name>/`. Changing a shipped mod means cloning it (`mod.clone`) into this repo first, keeping its `cloned_from` in `mod.json`.
 - Layout block ids must stay unique: a duplicate crashes Herdr App.
 - Colors in the layout and in mods are theme names (`chrome`, `canvas`, `border`, `accent`, ...), not hex, so the layout works light and dark.
-- Keys go in the `layout:roundup` section of `keys.json`, never in `global`.
+- Keys go in the `layout:Herdr-Roundup` section of `keys.json`, never in `global`.
 - Shared state keys carry the mod's name as prefix (`roundup-tabs.<key>`).
 - After a change: `herdr-app check ~/.config/herdr-app/mods/<mod>` for each changed mod, then `herdr-app status` must show no errors.
+
+## Before a release
+
+- Decide whether the layout needs a new preview picture: does it look different from what Settings shows (a plain frame, or the last `layouts/Herdr-Roundup.svg`)? If so, draw `layouts/Herdr-Roundup.svg` and set `"preview": "layouts/Herdr-Roundup.svg"` on the layout root. `scripts/sync.sh` already copies it.
 
 ## Limits found so far (in herdr-t3)
 
