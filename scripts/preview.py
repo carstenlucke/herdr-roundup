@@ -367,8 +367,9 @@ icon("monitor", WX + 14, SY + 8, 12, "dim")
 text(WX + 31, SY + 18, "This computer", 11.5, "muted")
 icon("branch", WX + 128, SY + 8, 12, "dim")
 text(WX + 145, SY + 18, "search-filters", 11.5, "muted")
-add(f'<circle cx="{WX + 243}" cy="{SY + 14}" r="2.5" fill="{paint("working")[0]}"/>')
-text(WX + 251, SY + 18, "7 agents", 11.5, "muted")
+# Herdr's workspace-status mod: a dim dot, the count, and the blocked ones in their color.
+add(f'<circle cx="{WX + 243}" cy="{SY + 14}" r="3" fill="{paint("dim")[0]}"/>')
+spans(WX + 252, SY + 18, [("7 agents", "muted", 400), ("  · 1 needs you", "blocked", 400)], 11.5, UI)
 text(W - 14, SY + 18, "⌘⇧P  commands", 11, "dim", anchor="end")
 
 add('</g></svg>')
