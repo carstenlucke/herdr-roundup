@@ -1,6 +1,7 @@
 import { View, div, svg, image } from "gpui-kit";
-import { h_flex } from "gpui-base";
-import { spaces, panes, run, openOverlay, theme, window, shared, layout, settings } from "herdr";
+import { h_flex, v_flex } from "gpui-base";
+import { spaces, panes, run, openOverlay, closeOverlay, theme, window, shared, layout, settings, keys, focused, props, nextCommand } from "herdr";
+import { MODES, confirmMode, setConfirmMode, closeTab, tabName } from "./close.js";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -11,10 +12,76 @@ function find(node, id) {
   return null;
 }
 
+// The key for the first of these actions bound here: this layout's own section first, then global.
+function shortcut(actions) {
+  const own = `layout:${shared("layout")}`, all = keys();
+  for (const action of actions)
+    for (const section of [own, "global"]) {
+      const k = all.find(b => b.section === section && b.action === action);
+      if (k) return k.keys;
+    }
+  return "";
+}
+
 export default class Tabs extends View {
-  init() {
+  init(_props, cx) {
     this.pressed = null;
+    // A tab's right-click menu is this mod again, opened as a popup with props { menu: { id, space } }.
+    if (props()?.menu) {
+      this.at = 0;
+      this.handle = cx.focus_handle();
+      this.handle.focus();
+      return;
+    }
     this.panels = JSON.parse(localStorage.getItem("panels") ?? "{}");
+    // cmd-w: the shown tab, or `close:<id>` for another one.
+    cx.spawn(async (cx) => {
+      for (;;) {
+        const command = await nextCommand();
+        if (command === "close") closeTab(focused()?.tab ?? spaces().find(s => s.active)?.tabs.find(c => c.active)?.id);
+        else if (command.startsWith("close:")) closeTab(command.slice("close:".length));
+        cx.notify();
+      }
+    });
+  }
+
+  // Herdr's own tab menu (Rename, New tab, Close), with Close going through closeTab, and below it
+  // when closing asks: Herdr's Settings have no place for that, and a mod can't add one.
+  menuItems() {
+    const { id, space } = props().menu;
+    return [
+      { label: "Rename", icon: "square-pen", act: () => run("tab.rename", { id }), keys: shortcut(["tab.rename"]) },
+      { label: "New tab", icon: "plus", act: () => run("tab.new", { space }), keys: shortcut(["tab.new"]) },
+      { label: "Close", icon: "x", act: () => closeTab(id), keys: shortcut(["roundup-tabs.close", "tab.close"]) },
+      ...MODES.map(([mode, label], i) => ({ label, mode, head: i === 0 && "Ask before closing", act: () => setConfirmMode(mode) })),
+    ];
+  }
+
+  renderMenu() {
+    const t = theme(), list = this.menuItems(), mode = confirmMode();
+    const choose = (i) => { closeOverlay(props().overlay); list[i].act(); };
+    return v_flex().id("tab-menu").track_focus(this.handle).w_full().min_h(0).p(5).bg(t.popover).text_size(12.8)
+      .on_key_down((e, cx) => {
+        if (e.key === "down") this.at = (this.at + 1) % list.length;
+        else if (e.key === "up") this.at = (this.at + list.length - 1) % list.length;
+        else if (e.key === "enter") return choose(this.at);
+        else if (e.key === "escape") return closeOverlay(props().overlay);
+        else return;
+        cx.notify();
+      })
+      .children(list.map((it, i) => v_flex()
+        .when(it.label === "Close", el => el.child(div().mx(7).my(4).h(1).bg(t.border)))
+        .when(Boolean(it.head), el => el.child(div().mx(7).my(4).h(1).bg(t.border))
+          .child(div().px(8).pt(3).pb(2).text_size(11).text_color(t.dim).child(it.head)))
+        .child(h_flex().id(`mi-${i}`).h(31).px(8).gap(9).rounded(7).items_center().text_color(t.foreground)
+          .when(i === this.at, el => el.bg(t.selected)).hover(s => s.bg(t.hover))
+          .on_click(() => choose(i))
+          // A choice of mode carries a check where the commands carry their icon.
+          .child(it.mode
+            ? div().size(14).flex_none().when(it.mode === mode, el => el.child(svg("mods/workspace-chrome/check.svg").size(14).text_color(t.accent)))
+            : svg(`mods/workspace-chrome/${it.icon}.svg`).size(14).flex_none().text_color(t.muted))
+          .child(div().flex_1().child(it.label))
+          .child(div().text_size(11).text_color(t.dim).child(it.keys ?? "")))));
   }
 
   // The side panel is remembered per space: switching shows that space's choice
@@ -46,6 +113,7 @@ export default class Tabs extends View {
   }
 
   render() {
+    if (props()?.menu) return this.renderMenu();
     const t = theme();
     const space = spaces().find(p => p.active);
     const shown = space?.tabs ?? [];
@@ -54,7 +122,7 @@ export default class Tabs extends View {
       .on_mouse_down("left", stop).on_click(action).child(label);
     const item = (c, i) => {
       const program = panes().find(p => p.tab === c.id && p.program?.agent)?.program ?? panes().find(p => p.tab === c.id)?.program;
-      const name = /^tb\d+$/.test(c.name) ? program?.name ?? "Terminal" : c.name;
+      const name = tabName(c);
       return h_flex().id(`tab-${c.id}`).h(29).px(10).gap(7).rounded(7).items_center().flex_none().text_size(12.8)
         .border(1).border_color(c.active ? t.border : t.chrome).bg(c.active ? t.raised : t.chrome).text_color(c.active ? t.foreground : t.muted)
         .hover(s => s.bg(t.hover))
@@ -64,12 +132,12 @@ export default class Tabs extends View {
           if (from !== null && from !== i) run("tab.move", { id: shown[from].id, index: space.tabs.findIndex(x => x.id === c.id) + 1 });
           else run("tab.select", { id: c.id });
         })
-        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openOverlay({ mod: "menu", kind: "popup", width: 200, props: { tab: "tab", target: { id: c.id, space: space.id } } }); })
+        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openOverlay({ mod: "roundup-tabs", kind: "popup", width: 220, height: 237, props: { menu: { id: c.id, space: space.id } } }); })
         .when(Boolean(program?.icon), el => el.child(program.tint ? svg(program.icon).size(14).text_color(t.muted) : image(program.icon).size(14)))
         .child(div().max_w(170).truncate().child(c.zoomed ? `${name} Z` : name))
         .when(c.status === "working", el => el.child(svg("mods/workspace-chrome/spinner.svg").size(12).flex_none().text_color(t.working).spin(900)))
         .when(c.status === "blocked" || c.status === "done", el => el.child(div().size(6).rounded(3).bg(t[c.status])))
-        .when(c.active, el => el.child(div().id(`close-${c.id}`).text_color(t.dim).on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); }).child(svg("mods/pane/close.svg").size(12))));
+        .when(c.active, el => el.child(div().id(`close-${c.id}`).text_color(t.dim).on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); closeTab(c.id); }).child(svg("mods/pane/close.svg").size(12))));
     };
     const root = layout(), sidebar = find(root, "sidebar"), w = window();
     // Old saved rails and a dragged-narrow sidebar can be smaller than the window buttons.
