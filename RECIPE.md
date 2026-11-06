@@ -89,17 +89,25 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
 - **Click** a space to switch to it. **Right-click** opens Herdr's space
   menu. **Drag** a space onto another one of the same machine to move it
   there; the dragged row fades to half and a 2px `accent` bar marks where it
-  lands. Worktrees always move back to their repo's card.
+  lands. Dragging a card's top row moves the whole card; any other worktree
+  snaps back to its card.
 - **New spaces** get the color used least among the six (`ansi6`, `ansi3`,
   `ansi4`, `ansi5`, `ansi2`, `ansi1`). The home space `~` gets none and shows
   `ansi6`. A new space waits up to 1.5s for its git, so a worktree appears
   on its repo's card instead of jumping there.
+- **At start** the list waits up to 1.5s for the git of every space already
+  there ("Loading…" meanwhile), then shows them all at once, already on
+  their cards. It reorders nothing before that
+  (`docs/adr/0001-first-draw-waits-for-git.md`).
 - **The git line refreshes** when something under a local repo's `.git`
   changes (a commit, a checkout, a fetch), when a command or an agent's turn
   in that space ends, when a space's terminal moves to another folder, when a
   remote machine comes back, when the window comes back to the front, and
-  every 60s while the window is in front. A commit refreshes every space of
-  the same repo.
+  while the window is in front every 10s for the active space, every 60s for
+  the others. A commit refreshes every space of the same repo. An agent's
+  turn counts by its `turn` number, so a turn too short to be seen working
+  still refreshes; a shell reports no command end, so a quick command there
+  (`echo x >> file`) shows within 10s.
 - **Machine headers:** click to fold or unfold. A machine that was rebuilt or
   replaced shows "rebuilt · Connect"; Connect removes it and adds it again
   under the same name.
@@ -149,7 +157,8 @@ own art: `logo.png` (160×160, three black sheep), `search.svg`,
 `sidebar.svg`, `settings.svg`, `plus.svg`.
 
 **`roundup-spaces`** (clone of `spaces` 0.1.13, `place: "none"`, title
-"Spaces"). Reads `spaces()`, `panes()`, `agents()`, `machines()`, `theme()`,
+"Spaces"). Reads `spaces()`, `panes()`, `terminals()` (each agent's `turn`),
+`agents()`, `machines()`, `theme()`,
 `settings().dark`, `window()?.active` and shared `space.colors` (shared with
 Herdr's mods; it fills in colors for new spaces and drops those of deleted
 ones). A space's place is its first terminal's `cwd`, else the space's
@@ -195,13 +204,15 @@ robot head in `currentColor`). It also draws icons from Herdr's shipped
   again, forever.
 - **Don't watch working trees for `±n`:** on macOS `watchFolder` is
   recursive, ignored folders included, so build output and `node_modules`
-  would fire it constantly. That is why `±n` refreshes when a turn ends and
-  when the window comes back to the front, not on every save.
+  would fire it constantly. That is why `±n` refreshes when a turn ends,
+  every 10s in the active space and when the window comes back to the front,
+  not on every save.
 - **`window()` can be `null`** (for instance under `herdr-app check`): read
   it with `?.`, and not in `init`.
 - **Colors** are theme names, not hex, so the layout works light and dark.
   `alpha()` adds transparency only to hex (`#rgb`, `#rrggbb`, `#rrggbbaa`)
-  and leaves anything else as it is.
+  and returns null for anything else; then the avatar and the badge sit on
+  `selected`, so a letter is never drawn on its own color.
 - **Known gap:** Herdr's shipped `picker` still turns `ansi1`..`ansi6` into
   fixed hex colors, so a space's color in the picker can differ from its
   avatar in the sidebar.
@@ -220,8 +231,9 @@ robot head in `currentColor`). It also draws icons from Herdr's shipped
 - A space in a repo whose name differs from the space, on branch `feat/x`,
   shows `repo · feat/x` under its name in a 44px row. A space named after its
   repo, clean on `main`, is a single 32px row.
-- Editing a file in that space's terminal shows `±1` once the command ends;
-  editing it in an outside editor shows `±1` when you switch back to Herdr.
+- Editing a file in that space's terminal shows `±1` within 10s (at once
+  after an agent's turn or a longer command); editing it in an outside
+  editor shows `±1` when you switch back to Herdr.
 - With two worktree spaces of one repo and no space in its main checkout,
   both sit on one card under a header with the repo's name, each with a
   branch icon instead of an avatar. Opening a space in the main checkout

@@ -7,7 +7,7 @@
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { spaces, machines, panes, agents, run, openOverlay, exec, hc, theme, settings, shared, setShared, watchFolder, window, layout } from "herdr";
+import { spaces, machines, panes, terminals, agents, run, openOverlay, exec, hc, theme, settings, shared, setShared, watchFolder, window, layout } from "herdr";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -35,12 +35,19 @@ const base = (path) => path.replace(/\/+$/, "").split("/").pop();
 // Changes made outside Herdr (an editor's save, a commit in another app): looked
 // for this often, in repos the list shows, while the window is in front.
 const FALLBACK = 60000;
+// The space in front, more often: a quick command in its shell (`echo x >> f`)
+// ends between two looks at its pane, and Herdr tells no shell's command end.
+const ACTIVE = 10000;
+// Spaces there at start wait this long, at most, for their git, then show together.
+const WAIT = 1500;
 
 // A color with some transparency: the theme's own color under a tinted avatar or badge.
 // #rgb, #rrggbb and #rrggbbaa alike (a layout's `colors` may carry their own alpha).
+// Null for any other form: the caller then draws on a neutral background, so a
+// letter never sits on its own color.
 const alpha = (c, a) => {
   const m = /^#([0-9a-f]{3}|[0-9a-f]{6})([0-9a-f]{2})?$/i.exec(c ?? "");
-  if (!m) return c;
+  if (!m) return null;
   const rgb = m[1].length === 3 ? [...m[1]].map((d) => d + d).join("") : m[1];
   return `#${rgb}${a}`;
 };
@@ -65,13 +72,17 @@ export default class Spaces extends View {
     this.unsure = new Set(); // where()s git couldn't answer for (a machine away)
     this.pending = new Set(); // where()s to look at next
     this.busy = {}; // pane -> an agent working or a program in front of its shell
+    this.turns = {}; // pane -> its agent's turn count (a turn shorter than a look still counts)
     this.ready = {}; // machine -> its layout was readable at the last look
     this.at = {}; // space -> its where() at the last look
     this.front = null; // the window was in front at the last look (null: not looked yet)
     this.watching = new Set(); // local repos' git folders
-    // Spaces made while this runs wait (at most a moment) for their git, so a
-    // worktree appears under its repo instead of jumping there.
-    this.shown = new Set(spaces().map((s) => s.id));
+    // Spaces wait (at most a moment) for their git, so a worktree appears under its
+    // repo instead of jumping there. Those there at start show together, so the list
+    // doesn't grow and regroup row by row (docs/adr/0001-first-draw-waits-for-git.md).
+    this.shown = new Set();
+    this.first = new Set(spaces().map((s) => s.id));
+    this.start = Date.now();
     this.born = {};
     this.pressed = null;
     this.over = null;
@@ -108,13 +119,19 @@ export default class Spaces extends View {
     this.at = at;
     const spaceOf = {};
     for (const s of sp) for (const t of s.tabs ?? []) spaceOf[t.id] = s;
-    const busy = {};
+    const turn = {}; // terminal -> its agent's turns so far (this computer's core)
+    for (const x of terminals() ?? []) if (x?.address) turn[x.address] = x.turn;
+    const busy = {}, turns = {};
     for (const p of ps) {
       if (!p.terminal || !spaceOf[p.tab]) continue;
       busy[p.pane] = p.status === "working" || !(p.program?.shell || p.program?.agent);
-      if (this.busy[p.pane] && !busy[p.pane]) this.sameRepo(at[spaceOf[p.tab].id], keys).forEach((k) => due.add(k));
+      turns[p.pane] = turn[p.terminal];
+      const ended = this.busy[p.pane] && !busy[p.pane];
+      const turned = typeof turns[p.pane] === "number" && typeof this.turns[p.pane] === "number" && turns[p.pane] !== this.turns[p.pane];
+      if (ended || turned) this.sameRepo(at[spaceOf[p.tab].id], keys).forEach((k) => due.add(k));
     }
     this.busy = busy;
+    this.turns = turns;
     for (const m of machines()) {
       const ready = m.layout === "ready";
       if (ready && this.ready[m.name] === false) for (const k of keys) if (JSON.parse(k)[0] === m.name) due.add(k);
@@ -126,9 +143,11 @@ export default class Spaces extends View {
     const back = front && this.front === false;
     this.front = front;
     if (front) {
+      const active = at[sp.find((s) => s.active)?.id];
       for (const k of keys) {
         const asks = this.git[k] || this.unsure.has(k);
-        if (asks && !this.folded.has(JSON.parse(k)[0]) && (back || now - (this.checked[k] ?? 0) > FALLBACK)) due.add(k);
+        const every = k === active ? ACTIVE : FALLBACK;
+        if (asks && !this.folded.has(JSON.parse(k)[0]) && (back || now - (this.checked[k] ?? 0) > every)) due.add(k);
       }
     }
     return due;
@@ -284,7 +303,12 @@ export default class Spaces extends View {
   // where the first of them was.
   ordered() {
     const sp = spaces(), ps = panes();
-    const ready = (w) => this.shown.has(w.id) || where(w, ps) in this.git || Date.now() - (this.born[w.id] ??= Date.now()) > 1500;
+    // Answered: git spoke for its place, or it has no place to ask about.
+    const answered = (w) => !JSON.parse(where(w, ps))[1] || where(w, ps) in this.git;
+    const late = (since) => Date.now() - since > WAIT;
+    const firstReady = late(this.start) || sp.every((w) => !this.first.has(w.id) || answered(w));
+    const ready = (w) => this.shown.has(w.id)
+      || (this.first.has(w.id) ? firstReady : answered(w) || late(this.born[w.id] ??= Date.now()));
     for (const w of sp) if (!this.shown.has(w.id) && ready(w)) this.shown.add(w.id);
     const list = sp.map((w, i) => ({ w, i, g: this.git[where(w, ps)] ?? null }));
     const mains = new Set(list.filter((r) => r.g && !r.g.linked).map((r) => r.g.repo));
@@ -310,12 +334,13 @@ export default class Spaces extends View {
     }
     // Simulate the batch so later indexes include earlier moves. An attempted
     // write can lose a sync conflict: allow the echo to settle before retrying.
+    // Not before the first answers: half the git known, worktrees would move twice.
     const order = sp.map(w => w.id);
     const target = out.map(r => r.w.id);
     const key = JSON.stringify([order, target, machines()]);
     if (order.every((id, i) => id === target[i])) {
       this.ordering = null;
-    } else if (this.ordering?.key !== key || this.orderingDue(Date.now())) {
+    } else if (firstReady && (this.ordering?.key !== key || this.orderingDue(Date.now()))) {
       const moved = new Set();
       this.ordering = { key, at: Date.now(), machines: [] };
       for (let i = 0; i < out.length; i++) {
@@ -446,7 +471,7 @@ export default class Spaces extends View {
       .rounded(9)
       .text_size(11)
       .font_semibold()
-      .bg(calm ? t.selected : alpha(color, "26"))
+      .bg(calm ? t.selected : alpha(color, "26") ?? t.selected)
       .text_color(color)
       .tooltip(tip)
       .child(svg("mods/roundup-spaces/bot.svg").size(11))
@@ -507,7 +532,7 @@ export default class Spaces extends View {
           .items_center()
           .when(Boolean(tree), el => el.child(h_flex().size(22).flex_none().items_center().justify_center().text_color(t.dim)
             .child(svg("mods/workspace-chrome/branch.svg").size(13))))
-          .when(!tree, el => el.child(h_flex().size(22).flex_none().rounded(6).bg(alpha(fill, tint))
+          .when(!tree, el => el.child(h_flex().size(22).flex_none().rounded(6).bg(alpha(fill, tint) ?? t.selected)
             .items_center().justify_center().text_size(11.5).font_bold().text_color(fill).child([...w.name][0]?.toUpperCase() ?? "?")))
           .child(v_flex().flex_1().min_w(0).gap(2)
             .child(div().min_w(0).truncate().font_medium().text_color(t.foreground).child(w.name))
