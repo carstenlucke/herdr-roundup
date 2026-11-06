@@ -37,7 +37,13 @@ const base = (path) => path.replace(/\/+$/, "").split("/").pop();
 const FALLBACK = 60000;
 
 // A color with some transparency: the theme's own color under a tinted avatar or badge.
-const alpha = (c, a) => (/^#[0-9a-f]{6}$/i.test(c ?? "") ? c + a : c);
+// #rgb, #rrggbb and #rrggbbaa alike (a layout's `colors` may carry their own alpha).
+const alpha = (c, a) => {
+  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})([0-9a-f]{2})?$/i.exec(c ?? "");
+  if (!m) return c;
+  const rgb = m[1].length === 3 ? [...m[1]].map((d) => d + d).join("") : m[1];
+  return `#${rgb}${a}`;
+};
 
 // Agents by urgency: the badge takes the color of the most urgent one.
 const RANK = { blocked: 3, done: 2, working: 1, idle: 0 };
@@ -54,7 +60,7 @@ export function tone(t, status) {
 
 export default class Spaces extends View {
   init(_props, cx) {
-    this.git = {}; // where() -> { name, branch, ahead, behind, repo, linked }, null: not a repo
+    this.git = {}; // where() -> { name, branch, ahead, behind, dirty, repo, linked }, null: not a repo
     this.checked = {}; // where() -> when it was last looked at
     this.unsure = new Set(); // where()s git couldn't answer for (a machine away)
     this.pending = new Set(); // where()s to look at next
@@ -309,7 +315,8 @@ export default class Spaces extends View {
     const rows = this.ordered();
     const crew = {}; // space -> its agents' statuses
     for (const a of agents()) (crew[a.space] ??= []).push(a.status);
-    const one = (r) => (collapsed ? this.compact(r, t) : this.row(r, t, crew[r.w.id] ?? []));
+    const tint = settings().dark ? "2e" : "24"; // the avatar's tint, read once per draw
+    const one = (r) => (collapsed ? this.compact(r, t) : this.row(r, t, crew[r.w.id] ?? [], tint));
     // A repo and its worktrees: one card, a little apart from the rest.
     const draw = (list) => {
       const groups = [];
@@ -395,7 +402,6 @@ export default class Spaces extends View {
   // How many agents run in the space. Gray while they all rest; else the color
   // of the most urgent one (blocked > done > working).
   crewBadge(id, statuses, t) {
-    if (!statuses.length) return null;
     const top = statuses.reduce((a, b) => (rank(b) > rank(a) ? b : a));
     const calm = rank(top) === 0;
     const color = calm ? t.dim : tone(t, top);
@@ -413,14 +419,14 @@ export default class Spaces extends View {
       .rounded(9)
       .text_size(11)
       .font_semibold()
-      .bg(calm ? t.selected : alpha(tone(t, top), "26"))
+      .bg(calm ? t.selected : alpha(color, "26"))
       .text_color(color)
       .tooltip(tip)
       .child(svg("mods/roundup-spaces/bot.svg").size(11))
       .child(String(n));
   }
 
-  row({ w, i, g, tree }, t, crew) {
+  row({ w, i, g, tree }, t, crew, tint) {
     const on = w.active;
     const fromIndex = this.pressed === null ? -1 : spaces().findIndex(s => s.id === this.pressed);
     const colors = shared("space.colors") ?? {};
@@ -441,8 +447,8 @@ export default class Spaces extends View {
       .when(this.pressed === w.id && this.over !== w.id, (el) => el.opacity(0.5))
       .when(this.pressed !== null && this.over === w.id && this.pressed !== w.id, (el) => el.child(
         div().absolute().left(0).right(0).h(2).bg(t.accent)
-          .when(fromIndex < i, line => line.bottom(0))
-          .when(fromIndex > i, line => line.top(0)),
+          .when(fromIndex < i, bar => bar.bottom(0))
+          .when(fromIndex > i, bar => bar.top(0)),
       ))
       .on_mouse_down("left", () => {
         this.pressed = w.id;
@@ -474,7 +480,7 @@ export default class Spaces extends View {
           .items_center()
           .when(Boolean(tree), el => el.child(h_flex().size(22).flex_none().items_center().justify_center().text_color(t.dim)
             .child(svg("mods/workspace-chrome/branch.svg").size(13))))
-          .when(!tree, el => el.child(h_flex().size(22).flex_none().rounded(6).bg(alpha(fill, settings().dark ? "2e" : "24"))
+          .when(!tree, el => el.child(h_flex().size(22).flex_none().rounded(6).bg(alpha(fill, tint))
             .items_center().justify_center().text_size(11.5).font_bold().text_color(fill).child([...w.name][0]?.toUpperCase() ?? "?")))
           .child(v_flex().flex_1().min_w(0).gap(2)
             .child(div().min_w(0).truncate().font_medium().text_color(t.foreground).child(w.name))
