@@ -6,14 +6,21 @@
 
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { run, props, closeOverlay, theme } from "herdr";
+import { run, props, closeOverlay, theme, shared, setShared } from "herdr";
 
 export default class Confirm extends View {
   init(_props, cx) {
     this.no = cx.focus_handle();
     this.yes = cx.focus_handle();
     this.at = "no";
+    this.overlay = props()?.overlay;
     this.no.focus();
+  }
+
+  // roundup-tabs and roundup-pane keep the open dialog under this key, so only one is up at a time.
+  // A newer dialog may already have replaced the id: leave that one alone.
+  async close() {
+    if (shared("roundup-confirm.open") === this.overlay) setShared("roundup-confirm.open", null);
   }
 
   // The window doesn't move the keyboard between a dialog's tab stops on Tab: the dialog hears the key

@@ -39,23 +39,28 @@ function fit(name, room = 26) {
 // An agent counts while it works or waits on the person (blocked); done and idle ones have finished.
 const busy = (keep) => agents().filter(a => (a.status === "working" || a.status === "blocked") && keep(a));
 
-// One dialog at a time: a held key replaces it rather than stacking another.
-let asking = null;
+// One dialog at a time, across both mods: a held key or the other mod's close replaces it rather than
+// stacking another. Shared, as each mod has its own copy of this file; roundup-confirm clears it on closing.
+const OPEN = "roundup-confirm.open";
 
-// `kind`'s choice decides. `never`: closes at once (`now`), a space with its last tab too. `agents`: asks while one of `agents`
-// is busy, otherwise runs Herdr's own close (`herdr`), which still asks before a space goes.
-// `always`: asks every time. `ends` says what closing ends when no agent is busy, `more` what else goes.
-function closeAsking({ kind, agents, title, ends, more, now, herdr, command }) {
+// `kind`'s choice decides. `never`: runs `command` at once, a space with its last tab too. `agents`: asks while one of
+// `agents` is busy, otherwise runs Herdr's own close (`command` without `confirmed`), which still asks before a space goes.
+// `always`: asks every time. `ends` says what closing ends when no agent is busy, `more` what else goes;
+// with neither, the dialog says nothing runs in it.
+function closeAsking({ kind, agents, title, ends, more, command }) {
   const mode = confirmMode(kind);
-  if (mode === "never") return now();
-  if (mode === "agents" && agents.length === 0) return herdr();
+  if (mode === "never") return run(command.name, command.args);
+  if (mode === "agents" && agents.length === 0) {
+    const { confirmed, ...args } = command.args;
+    return run(command.name, args);
+  }
   const names = [...new Set(agents.map(a => a.program?.name ?? a.app ?? "An agent"))].join(", ");
   const why = agents.length === 0 ? ends
     : agents.length === 1 ? `${names} is still running in it. Closing ends it.`
     : `${agents.length} agents are still running in it (${names}). Closing ends them.`;
-  if (asking) closeOverlay(asking);
-  asking = openOverlay({ mod: "roundup-confirm", kind: "dialog", width: 400, height: 170,
-    props: { title, detail: [why, more].filter(Boolean).join(" "), command } });
+  if (shared(OPEN)) closeOverlay(shared(OPEN));
+  setShared(OPEN, openOverlay({ mod: "roundup-confirm", kind: "dialog", width: 400, height: 170,
+    props: { title, detail: [why, more].filter(Boolean).join(" ") || "Nothing runs in it.", command } }));
 }
 
 export function closeTab(id) {
@@ -66,11 +71,9 @@ export function closeTab(id) {
     kind: "tab",
     // Sub-agents belong to their parent's tab, and closing the tab ends them as well.
     agents: busy(a => a.tab === id),
-    title: tab.named ? `Close tab "${fit(name)}"?` : `Close tab ${name}?`,
+    title: tab.named ? `Close tab "${fit(name)}"?` : `Close tab ${fit(name)}?`,
     ends: panes().some(p => p.tab === id && p.terminal) ? "Its terminals end." : "",
     more: space.tabs.length === 1 ? "It's the space's last tab, so the space closes too." : "",
-    now: () => run("tab.close", { id, confirmed: true }),
-    herdr: () => run("tab.close", { id }),
     command: { name: "tab.close", args: { id, confirmed: true } },
   });
 }
@@ -83,17 +86,20 @@ export function closePane(pane, name) {
   if (!p) return;
   const lone = all.filter(q => q.tab === p.tab).length === 1;
   const last = lone && spaces().find(s => s.tabs.some(c => c.id === p.tab))?.tabs.length === 1;
-  // Its terminal's sub-agents end with it; a lone pane's tab takes every agent in the tab.
+  // Its terminal's sub-agents (and theirs) end with it; a lone pane's tab takes every agent in the tab.
   const parent = new Map(terminals().map(t => [t.address, t.parent]));
+  const under = (address) => {
+    for (let a = parent.get(address), seen = new Set(); a && !seen.has(a); seen.add(a), a = parent.get(a))
+      if (a === p.terminal) return true;
+    return false;
+  };
   const close = lone ? { name: "tab.close", args: { id: p.tab, confirmed: true } } : { name: "pane.close", args: { pane } };
   closeAsking({
     kind: lone ? "tab" : "pane",
-    agents: busy(a => lone ? a.tab === p.tab : a.pane === pane || (p.terminal && parent.get(a.address) === p.terminal)),
+    agents: busy(a => lone ? a.tab === p.tab : a.pane === pane || (p.terminal && under(a.address))),
     title: `Close pane "${fit(name)}"?`,
     ends: p.terminal ? "Its terminal ends." : "",
     more: last ? "It's the space's last pane, so the space closes too." : lone ? "It's the tab's only pane, so the tab closes too." : "",
-    now: () => run(close.name, close.args),
-    herdr: () => lone ? run("tab.close", { id: p.tab }) : run("pane.close", { pane }),
     command: close,
   });
 }

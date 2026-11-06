@@ -3,7 +3,7 @@
   "title": "Pane header",
   "overlay": {
     "width": 240,
-    "height": 296
+    "height": 332
   },
   "cloned_from": {
     "name": "pane",
