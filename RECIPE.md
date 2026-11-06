@@ -24,7 +24,7 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   left for the traffic lights, then a 20px logo (three black sheep on a light
   ground, corners rounded 5px) and **Herdr Roundup** in semibold `foreground`
   at 13.5px. Hovering the logo or name shows a tooltip such as
-  `Herdr Roundup 0.3.0 · based on Herdr 0.1.13`. On the right, two 26px icon
+  `Herdr Roundup 0.4.0 · based on Herdr 0.1.13`. On the right, two 26px icon
   buttons in `muted`: search (opens the space picker) and sidebar toggle. On
   the rail the logo, name and search go away; on the macOS rail the toggle
   goes too.
@@ -71,8 +71,12 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
 - **Tabs** (42px, drags the window): Herdr's shipped `tabs`.
 - **Body** with 8px padding and an 8px gap: the active tab's panes, each one
   rounded 10px on `background` with a 1px `border` (1px `accent` when
-  focused), 8px apart, each with Herdr's `pane`
-  header (30px, on top, always shown). Terminal padding 14 × 12px.
+  focused), 8px apart, each with a `roundup-pane`
+  header (30px, on top, always shown): the program's icon, the pane's name
+  (`foreground`, medium), its id in a small mono chip (10.5px, `dim` on
+  `hover`: the terminal's address such as `t5j`, or a mod pane's id shortened
+  to `p` and 6 hex digits), the folder in `dim`, the agent's status, and on
+  hover the buttons rename, split right, split down, zoom and close. Terminal padding 14 × 12px.
 - **Side panel** on the right, hidden at first (368px, 280–900px): a stack
   of Herdr's `files` and `changes`.
 - **Status bar** (28px): Herdr's shipped `workspace-status`.
@@ -115,13 +119,19 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
 - **Sidebar toggle:** narrows the sidebar to the rail and widens it back to
   the width it had. Below 160px the sidebar counts as the rail, however it
   got there. On the macOS rail the agents list's `»` unfolds it.
+- **Pane header:** double-click the id chip to copy the id (a mod pane's
+  whole id) to the clipboard; the chip shows "copied" in `accent` for 1.2s.
+  Double-click the name, or click the pencil, to rename the pane in a dialog
+  (Enter saves, Esc cancels). An empty name goes back to the program's name.
+  A click anywhere else on the header focuses the pane. Tooltips: the id
+  chip shows the whole id, the name shows the given and the program's name.
 - **Version tooltip:** follows the layout file. After a new release is
   installed, it shows the new version without a restart.
 
 ## Built from
 
 **Layout** `layouts/Herdr-Roundup.json`, cloned from Herdr's `main` 0.1.13
-(`cloned_from`) with a root `"version"` (`0.3.0`). Root `row` (`titlebar:
+(`cloned_from`) with a root `"version"` (`0.4.0`). Root `row` (`titlebar:
 "none"`, `traffic_lights: [12, 16]`, `background: "canvas"`,
 `terminal_padding: [14, 12]`, divider 1px `border`):
 
@@ -137,13 +147,13 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   - `work-body` row (padding 8, gap 8):
     - `main` block: `tab: "active"`, `pane: { gap 8, radius 10, background
       "background", lone: true, border 1 "border", focus 1 "accent",
-      header { mod "pane", height 30, top, reveal "always" } }`
+      header { mod "roundup-pane", height 30, top, reveal "always" } }`
     - `panel` column (hidden, px 368, min 280, max 900) → `panel-body`
       stack (active `files`): shipped `files`, shipped `changes`
   - `status` block (px 28): shipped `workspace-status`
 
-The only difference from `main` is that `brand`, `sidebar-footer` and
-`spaces` point at the two `roundup-` mods.
+The only difference from `main` is that `brand`, `sidebar-footer`,
+`spaces` and the pane header point at the `roundup-` mods.
 
 **`roundup-workspace-chrome`** (clone of `workspace-chrome` 0.1.13, `place:
 "none"`). Two looks by `props().footer`. The brand row reads the layout's own
@@ -156,6 +166,23 @@ toggle stores the width in shared `sidebar.width`, sets
 `app.settings`, `mod.open {name: "machine-add"}`, `updates().app.ready`. Its
 own art: `logo.png` (160×160, three black sheep), `search.svg`,
 `sidebar.svg`, `settings.svg`, `plus.svg`.
+
+**`roundup-pane`** (clone of `pane` 0.1.13, `place: "none"`, title "Pane
+header"). One copy per pane, with `props()` `{pane, terminal}`; it finds its
+pane in `panes()`. herdr-core can't rename a running terminal (`hc run
+--name` only at start), so a terminal pane's name is its core label
+`roundup-pane.name`, read from `terminals()[i].labels` and written with
+`hc(["label", terminal, "roundup-pane.name=<name>"])` (`…=` removes it). A mod
+pane has no terminal: its name is in shared `roundup-pane.names` (pane id →
+name). See `docs/adr/0002-pane-names-in-core-labels.md`. The id chip copies
+with `cx.write_to_clipboard` on `click_count === 2`. The rename dialog is the
+same mod, opened with `openOverlay({ mod: "roundup-pane", kind: "dialog",
+width: 380, height: 196, props: { rename: { pane, terminal, value, fallback }
+} })`; it is shaped like Herdr's `prompt`. Commands: `pane.focus`,
+`pane.split`, `pane.zoom`, `pane.close`. Its own art: `rename.svg` (a
+pencil) and the shipped header's `split-right`, `split-down`, `zoom`,
+`unzoom`, `close`; the working spinner is Herdr's
+`mods/workspace-chrome/spinner.svg`.
 
 **`roundup-spaces`** (clone of `spaces` 0.1.13, `place: "none"`, title
 "Spaces"). Reads `spaces()`, `panes()`, `terminals()` (each agent's `turn`),
@@ -184,7 +211,7 @@ robot head in `currentColor`). It also draws icons from Herdr's shipped
 `mods/workspace-chrome/` folder: `branch`, `plus`, `monitor`, `server`,
 `chevron-down`, `chevron-right`, `folder`.
 
-**Shipped mods used:** `agents`, `tabs`, `pane`, `files`, `changes`,
+**Shipped mods used:** `agents`, `tabs`, `files`, `changes`,
 `workspace-status`, plus `picker`, `menu` and `machine-add` as overlays.
 
 **Keys:** `keys.json` has an empty `layout:Herdr-Roundup` section.
@@ -217,6 +244,11 @@ robot head in `currentColor`). It also draws icons from Herdr's shipped
 - **Known gap:** Herdr's shipped `picker` still turns `ansi1`..`ansi6` into
   fixed hex colors, so a space's color in the picker can differ from its
   avatar in the sidebar.
+- **Pane names don't reach Herdr's other lists:** the shipped `agents` list
+  and `tabs` still show the program's or the tab's name; only the pane
+  header reads `roundup-pane.name`. A name ends with its terminal.
+- **A double-click is two clicks:** the first one of a double-click on the
+  name or the id still focuses the pane; only `click_count === 2` acts.
 - **Mods can't import from each other:** `find()` and `narrow()` are copied
   into both mods.
 - **Install by copying, not symlinking:** Herdr App doesn't load a mod's own
@@ -224,7 +256,7 @@ robot head in `currentColor`). It also draws icons from Herdr's shipped
 
 ## Done when
 
-- `herdr-app check` passes for both `roundup-` mods, `herdr-app status`
+- `herdr-app check` passes for every `roundup-` mod, `herdr-app status`
   shows no errors, and `layout.switch {"name": "Herdr-Roundup"}` shows the
   window.
 - The top left shows the sheep logo and "Herdr Roundup", and hovering it
@@ -243,5 +275,9 @@ robot head in `currentColor`). It also draws icons from Herdr's shipped
   idle, in `working` while it works, in `blocked` while it waits for you.
 - The sidebar toggle narrows to the rail (numbers and `●`/`·`) and widens
   back to the width it had.
+- Every pane header shows its terminal's address (`t5j`); double-clicking it
+  puts `t5j` on the clipboard. `hc label t5j roundup-pane.name=Build` shows
+  "Build" in that header within a second; renaming in the dialog does the
+  same, and saving an empty name shows the program's name again.
 - In a light and a dark theme, every avatar's letter and every badge count
   can be read.
