@@ -14,14 +14,16 @@ A Herdr App layout, cloned from Herdr's `main` (0.1.13). See README.md for the l
 - Layout block ids must stay unique: a duplicate crashes Herdr App.
 - Colors in the layout and in mods are theme names (`chrome`, `canvas`, `border`, `accent`, ...), not hex, so the layout works light and dark.
 - Keys go in the `layout:Herdr-Roundup` section of `keys.json`, never in `global`.
-- Shared state keys carry the mod's name as prefix (`roundup-tabs.<key>`).
+- Shared state keys: a mod's own state goes under its name (`roundup-<name>.<key>`); keys that mods share with Herdr's shipped mods (`sidebar.width`, `space.colors`, `workspace.panels`, ...) keep Herdr's names.
 - After a change: `herdr-app check ~/.config/herdr-app/mods/<mod>` for each changed mod, then `herdr-app status` must show no errors.
 
 ## Before a release
 
+- Raise `"version"` on the root of `layouts/Herdr-Roundup.json`. It is the layout's only version: `roundup-workspace-chrome` reads it from the file (`layout()` leaves out fields Herdr doesn't know) and shows it on hover over the icon and name at the top left.
+
 - Decide whether the layout needs a new preview picture: does it look different from what Settings shows (a plain frame, or the last `layouts/Herdr-Roundup.svg`)? If so, draw `layouts/Herdr-Roundup.svg` and set `"preview": "layouts/Herdr-Roundup.svg"` on the layout root. `scripts/sync.sh` already copies it.
 
-## Limits found so far (in herdr-t3)
+## Limits found so far
 
 - `<mod>.<command>` reaches only shown copies of a mod; a mod runs only where a layout places it.
 - Mods can't add entries to Settings (cmd-,) or to the command palette (cmd-shift-p).

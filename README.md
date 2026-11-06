@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/logo.png" width="160" alt="Herdr Roundup logo: three sheep"></p>
+
 # Herdr Roundup
 
 A layout for [Herdr App](https://herdr.dev), started from Herdr's default layout (`main`, Herdr 0.1.13).
@@ -9,9 +11,10 @@ The layout is called `Herdr-Roundup`: Herdr's Settings show a layout by its file
 | Path | What |
 | --- | --- |
 | `layouts/Herdr-Roundup.json` | The window: its tree of rows, columns, stacks and blocks, and its look |
-| `mods/roundup-*/` | The layout's own mods. Until a mod is cloned here, the layout uses Herdr's shipped ones (`workspace-chrome`, `spaces`, `agents`, `tabs`, `pane`, `files`, `changes`, `workspace-status`) |
+| `mods/roundup-*/` | The layout's own mods. Until a mod is cloned here, the layout uses Herdr's shipped ones (`spaces`, `agents`, `tabs`, `pane`, `files`, `changes`, `workspace-status`) |
 | `themes/` | Themes. One named `Herdr-Roundup.json` is the layout's own: Settings offers it only there |
 | `keys.json` | The `layout:Herdr-Roundup` section: keys that apply only while this layout shows |
+| `assets/` | Files for this README, such as the logo |
 | `scripts/sync.sh` | Installs all of the above into `~/.config/herdr-app` |
 
 ## Install

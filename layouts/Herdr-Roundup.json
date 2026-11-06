@@ -4,6 +4,7 @@
     "name": "main",
     "version": "0.1.13"
   },
+  "version": "0.2.0",
   "type": "row",
   "titlebar": "none",
   "traffic_lights": [
@@ -39,7 +40,7 @@
           },
           "window_drag": true,
           "content": {
-            "mod": "workspace-chrome"
+            "mod": "roundup-workspace-chrome"
           }
         },
         {
@@ -77,7 +78,7 @@
             "px": 69
           },
           "content": {
-            "mod": "workspace-chrome",
+            "mod": "roundup-workspace-chrome",
             "props": {
               "footer": true
             }
