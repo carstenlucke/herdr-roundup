@@ -3,6 +3,9 @@
 // file's name beats its extension, and the longest extension wins ("spec.ts" over "ts").
 // Light themes draw the Latte set, dark themes the Mocha set (settings().dark).
 // The icons and icons.js come from scripts/build-icons.mjs; see docs/adr/0003.
+//
+// The matching follows cybertron288/herdr-mods `file-icons` (MIT, (c) 2026 cybertron288).
+// See THIRD_PARTY_NOTICES.md.
 import ICONS from "./icons.js";
 
 const DIR = "mods/roundup-files/icons";
