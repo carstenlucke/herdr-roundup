@@ -225,7 +225,7 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
 ## Built from
 
 **Layout** `layouts/Herdr-Roundup.json`, cloned from Herdr's `main` 0.1.13
-(`cloned_from`) with a root `"version"` (`0.5.0`). Root `row` (`titlebar:
+(`cloned_from`) with a root `"version"` (`0.6.0`). Root `row` (`titlebar:
 "none"`, `traffic_lights: [12, 16]`, `background: "canvas"`,
 `terminal_padding: [14, 12]`, `terminal_menu: "roundup-pane"`, divider 1px
 `border`):
