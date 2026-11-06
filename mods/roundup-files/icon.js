@@ -5,7 +5,7 @@
 // as an extension too, since Symbols lists some names there ("tsconfig.json"), which VS Code
 // would only match in "x.tsconfig.json". The icons carry their own colors and read on light
 // and dark themes alike. The icons and icons.js come from scripts/build-icons.mjs;
-// see docs/adr/0006.
+// see docs/adr/0002-file-icon-set.md.
 //
 // The matching follows cybertron288/herdr-mods `file-icons` (MIT, (c) 2026 cybertron288).
 // See THIRD_PARTY_NOTICES.md.

@@ -79,7 +79,8 @@ export default class Spaces extends View {
     this.watching = new Set(); // local repos' git folders
     // Spaces wait (at most a moment) for their git, so a worktree appears under its
     // repo instead of jumping there. Those there at start show together, so the list
-    // doesn't grow and regroup row by row (docs/adr/0001-first-draw-waits-for-git.md).
+    // doesn't grow and regroup row by row. A cache of the last run's git would show them
+    // sooner but could show an old state; it can go on top of this if the wait gets long.
     this.shown = new Set();
     this.first = new Set(spaces().map((s) => s.id));
     this.start = Date.now();

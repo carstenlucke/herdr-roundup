@@ -403,8 +403,7 @@ export default class Files extends View {
     openOverlay({ mod: NAME, kind: "popup", width: 228, height: items * 28 + (groups.length - 1) * 9 + 10, props: { menu: m } });
   }
 
-  // What the menu asked for, run by the panel: its tasks outlive the closed popup
-  // (docs/adr/0005).
+  // What the menu asked for, run by the panel: its tasks outlive the closed popup.
   request(req, cx) {
     const abs = join(this.root, req.rel);
     if (req.action === "preview") { this.cursor = req.rel; this.show(req.rel, cx, true); return; }
@@ -501,7 +500,7 @@ export default class Files extends View {
 
   // The branch, ↑ ahead ↓ behind its upstream, the lines changed, and a bar of new,
   // modified and deleted paths. Always 46px high, git or not, so nothing below moves when
-  // git answers (docs/adr/0004).
+  // git answers.
   summary(t) {
     const g = this.git, b = g.branch;
     const box = v_flex().h(46).flex_none().px(12).gap(7).justify_center().border_b(1).border_color(t.border).text_size(12);

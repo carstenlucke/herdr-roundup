@@ -15,7 +15,7 @@ The layout is called `Herdr-Roundup`: Herdr's Settings show a layout by its file
 | `themes/` | Themes. One named `Herdr-Roundup.json` is the layout's own: Settings offers it only there |
 | `keys.json` | The `layout:Herdr-Roundup` section: keys that apply only while this layout shows |
 | `assets/` | Files for this README, such as the logo |
-| `docs/ARCHITECTURE_DECISIONS.md` | Why the layout and its mods work the way they do: an index of the decisions, details in `docs/adr/` |
+| `docs/ARCHITECTURE_DECISIONS.md` | The few decisions whose reasons need keeping, and when to write one: an index, details in `docs/adr/` |
 | `scripts/sync.sh` | Installs all of the above into `~/.config/herdr-app` |
 | `scripts/build-icons.mjs` | Regenerates `roundup-files`' icons from a pinned release of Symbols (needs `curl`, `unzip`, Node) |
 | `THIRD_PARTY_NOTICES.md` | Other people's work in this repo (icons, adapted code) and their licences |

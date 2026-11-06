@@ -15,6 +15,7 @@ A Herdr App layout, cloned from Herdr's `main` (0.1.13). See README.md for the l
 - Colors in the layout and in mods are theme names (`chrome`, `canvas`, `border`, `accent`, ...), not hex, so the layout works light and dark.
 - Keys go in the `layout:Herdr-Roundup` section of `keys.json`, never in `global`.
 - Shared state keys: a mod's own state goes under its name (`roundup-<name>.<key>`); keys that mods share with Herdr's shipped mods (`sidebar.width`, `space.colors`, `workspace.panels`, ...) keep Herdr's names.
+- ADRs are rare: read the bar in `docs/ARCHITECTURE_DECISIONS.md` before writing one. When in doubt, none; behaviour goes in `RECIPE.md`.
 - After a change: `herdr-app check ~/.config/herdr-app/mods/<mod>` for each changed mod, then `herdr-app status` must show no errors.
 
 ## Before a release
@@ -28,3 +29,4 @@ A Herdr App layout, cloned from Herdr's `main` (0.1.13). See README.md for the l
 - `<mod>.<command>` reaches only shown copies of a mod; a mod runs only where a layout places it.
 - Mods can't add entries to Settings (cmd-,) or to the command palette (cmd-shift-p).
 - Mods can't import from another mod's folder: shared code is copied into each mod.
+- A popup overlay is a copy of its mod that ends when it closes, timers and tasks included: work that must outlive it runs in the copy that stays.

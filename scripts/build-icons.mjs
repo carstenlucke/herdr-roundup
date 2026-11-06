@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Vendors Symbols (https://github.com/miguelsolorio/vscode-symbols, MIT) into
 // mods/roundup-files: the SVGs its icon theme refers to, its LICENSE, and icons.js with the
-// rules that pick an icon. Why this set, pinned and generated:
-// docs/adr/0006-symbols-icons-replace-catppuccin.md (and 0003 for the generator).
+// rules that pick an icon. Why this set: docs/adr/0002-file-icon-set.md. Generated from a
+// pinned release rather than copied by hand (nobody could tell the version or redo it) or
+// fetched at run time (the panel would need the network; offline, no icons).
 //
 // Run from anywhere: node scripts/build-icons.mjs. It needs curl and unzip. It reads the
 // released .vsix (the compiled VS Code icon theme and its SVGs) and checks its SHA-256

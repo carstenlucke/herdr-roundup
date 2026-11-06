@@ -138,8 +138,7 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   on its repo's card instead of jumping there.
 - **At start** the list waits up to 1.5s for the git of every space already
   there ("Loading…" meanwhile), then shows them all at once, already on
-  their cards. It reorders nothing before that
-  (`docs/adr/0001-first-draw-waits-for-git.md`).
+  their cards. It reorders nothing before that.
 - **The git line refreshes** when something under a local repo's `.git`
   changes (a commit, a checkout, a fetch), when a command or an agent's turn
   in that space ends, when a space's terminal moves to another folder, when a
@@ -184,8 +183,8 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
 - **Files panel follows the focused pane's folder** (a mod pane: the first
   terminal of its tab), on its machine. Each folder keeps its open folders,
   selection and preview while another one shows. The files show at once;
-  git fills in its marks without moving a row
-  (`docs/adr/0004-file-tree-draws-before-git.md`). A local folder refreshes
+  git fills in its marks without moving a row, so unlike the spaces panel
+  nothing waits for it. A local folder refreshes
   when anything under it changes (`watchFolder`), any folder every 10s.
 - **All** lists the disk, folders first, in natural order ("file2" before
   "file10"), dotfiles included, `.git` left out. Folders load when opened.
@@ -272,7 +271,7 @@ pane in `panes()`. herdr-core can't rename a running terminal (`hc run
 `roundup-pane.name`, read from `terminals()[i].labels` and written with
 `hc(["label", terminal, "roundup-pane.name=<name>"])` (`…=` removes it). A mod
 pane has no terminal: its name is in shared `roundup-pane.names` (pane id →
-name). See `docs/adr/0002-pane-names-in-core-labels.md`. The id chip copies
+name). See `docs/adr/0001-pane-names-in-core-labels.md`. The id chip copies
 with `cx.write_to_clipboard` on `click_count === 2`. The rename dialog is the
 same mod, opened with `openOverlay({ mod: "roundup-pane", kind: "dialog",
 width: 380, height: 196, props: { rename: { pane, terminal, value, fallback }
@@ -361,7 +360,7 @@ Previews use `readTextFile` and a read-only `EditorState` + `Editor`. The
 menu is `openOverlay({mod: "roundup-files", kind: "popup", width: 228,
 props: {menu}})`, 28px per item and 9px per divider; its Preview, Open,
 Reveal and Send write shared `roundup-files.request` (`{n, action, root,
-on, rel}`), which the panel runs (`docs/adr/0005-file-menu-acts-through-the-panel.md`).
+on, rel}`), which the panel runs (see "A popup's tasks end with it").
 Copy uses `cx.write_to_clipboard` and `notify`. Send uses `focused()`,
 `panes()`, `agents()`, `pane.focus {terminal}` and `terminal.paste`. Open and
 Reveal run `open` / `open -R` (PowerShell `Invoke-Item` / `explorer.exe
@@ -372,8 +371,7 @@ a row and colors its name; nothing fills it yet, so a later source (an
 agent's reads and writes) can light up paths without changing the tree. Its
 own art: Symbols 0.0.26 by Miguel Solorio in `icons/` (245 SVGs, with
 `icons/LICENSE`) and `icons.js`, all written by `scripts/build-icons.mjs`
-(`docs/adr/0006-symbols-icons-replace-catppuccin.md`, the generator in
-`docs/adr/0003-catppuccin-icons-pinned-and-generated.md`);
+(`docs/adr/0002-file-icon-set.md`);
 Herdr's `chevron-right`, `chevron-down`, `chevron-left`, `branch` and
 `search` glyphs.
 
@@ -446,7 +444,7 @@ global `tab.close` and `pane.close`.
   `on_item_secondary_click(key, event)` on the list, with the path as key.
 - **A popup's tasks end with it:** the context menu closes on a click, so
   anything that waits (a timer restoring the clipboard, `open`) runs in the
-  panel (ADR 0005).
+  panel.
 - **Icon colors are fixed:** Symbols' SVGs carry their own colors
   (`image()`), the one exception to theme colors. One set serves light and
   dark themes.
