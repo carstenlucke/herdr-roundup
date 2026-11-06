@@ -46,10 +46,14 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
     on main under its repo's name, has no git line.
   - An **agent badge** on the right when agents run in the space: an 18px
     pill, rounded 9px, with a small robot icon and the count in semibold 11px.
-  - **Worktrees** sit under their repo's space, indented 12px, with a branch
-    icon in `dim` where the avatar would be. The repo's row and its worktrees
-    share a card: 1px `border`, rounded 10px, 6px apart from the rows around
-    it.
+  - **Worktrees** of one repo share a card: 1px `border`, rounded 10px, 3px
+    padding, 6px apart from the rows around it. Each worktree row is indented
+    12px and has a branch icon in `dim` where the avatar would be. A space in
+    the repo's main checkout heads the card. Without one (Herdr makes each
+    worktree its own space, so this is the usual case), a 24px header heads
+    it: a folder icon in `dim` and the repo's name in medium `muted` 11.5px.
+    A single worktree whose main checkout has no space is an ordinary row
+    with an avatar and no card.
   - Once a remote machine is known, spaces are grouped under a header per
     machine (26px, `dim` 11px): a monitor or server icon, "This computer" or
     the machine's name, its state when not connected, `+` (a new space
@@ -85,11 +89,11 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
 - **Click** a space to switch to it. **Right-click** opens Herdr's space
   menu. **Drag** a space onto another one of the same machine to move it
   there; the dragged row fades to half and a 2px `accent` bar marks where it
-  lands. Worktrees always move back under their repo.
+  lands. Worktrees always move back to their repo's card.
 - **New spaces** get the color used least among the six (`ansi6`, `ansi3`,
   `ansi4`, `ansi5`, `ansi2`, `ansi1`). The home space `~` gets none and shows
   `ansi6`. A new space waits up to 1.5s for its git, so a worktree appears
-  under its repo instead of jumping there.
+  on its repo's card instead of jumping there.
 - **The git line refreshes** when something under a local repo's `.git`
   changes (a commit, a checkout, a fetch), when a command or an agent's turn
   in that space ends, when a space's terminal moves to another folder, when a
@@ -166,7 +170,7 @@ props: { tab: "space", target: { id } } })`. `localStorage` keeps
 `machines.folded` and `machines.reconnecting`. Its own art: `bot.svg` (a
 robot head in `currentColor`). It also draws icons from Herdr's shipped
 `mods/workspace-chrome/` folder: `branch`, `plus`, `monitor`, `server`,
-`chevron-down`, `chevron-right`.
+`chevron-down`, `chevron-right`, `folder`.
 
 **Shipped mods used:** `agents`, `tabs`, `pane`, `files`, `changes`,
 `workspace-status`, plus `picker`, `menu` and `machine-add` as overlays.
@@ -216,8 +220,10 @@ robot head in `currentColor`). It also draws icons from Herdr's shipped
   repo, clean on `main`, is a single 32px row.
 - Editing a file in that space's terminal shows `±1` once the command ends;
   editing it in an outside editor shows `±1` when you switch back to Herdr.
-- A `git worktree add` space appears under its repo, on a shared card, with a
-  branch icon instead of an avatar.
+- With two worktree spaces of one repo and no space in its main checkout,
+  both sit on one card under a header with the repo's name, each with a
+  branch icon instead of an avatar. Opening a space in the main checkout
+  puts that space at the top of the card instead of the header.
 - Starting an agent in a space shows a badge with `1`: gray while it is
   idle, in `working` while it works, in `blocked` while it waits for you.
 - The sidebar toggle narrows to the rail (numbers and `●`/`·`) and widens

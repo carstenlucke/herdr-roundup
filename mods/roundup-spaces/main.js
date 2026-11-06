@@ -276,23 +276,34 @@ export default class Spaces extends View {
       && this.ordering.machines.every(name => machines().some(m => m.name === name && m.layout === "ready"));
   }
 
-  // Spaces in order, each worktree space moved under its main checkout's.
+  // Spaces in order, a repo's worktree spaces together: under its main checkout's
+  // space, or, when no space is there (Herdr makes each worktree its own space),
+  // where the first of them was.
   ordered() {
     const sp = spaces(), ps = panes();
     const ready = (w) => this.shown.has(w.id) || where(w, ps) in this.git || Date.now() - (this.born[w.id] ??= Date.now()) > 1500;
     for (const w of sp) if (!this.shown.has(w.id) && ready(w)) this.shown.add(w.id);
     const list = sp.map((w, i) => ({ w, i, g: this.git[where(w, ps)] ?? null }));
     const mains = new Set(list.filter((r) => r.g && !r.g.linked).map((r) => r.g.repo));
-    const nested = (r) => r.g?.linked && mains.has(r.g.repo);
+    const trees = {}; // repo -> how many worktree spaces it has
+    for (const r of list) if (r.g?.linked) trees[r.g.repo] = (trees[r.g.repo] ?? 0) + 1;
+    // A lone worktree without its main checkout stays a space of its own.
+    const nested = (r) => r.g?.linked && (mains.has(r.g.repo) || trees[r.g.repo] > 1);
     const out = [];
-    const placed = new Set(); // repos whose worktrees are listed (under the first of its spaces)
+    const placed = new Set(); // repos whose worktrees are listed
+    const kids = (repo) => list.filter((k) => nested(k) && k.g.repo === repo);
+    const tree = (k, n, all) => ({ ...k, tree: n === all.length - 1 ? "└─" : "├─" });
     for (const r of list) {
-      if (nested(r)) continue;
+      if (nested(r)) {
+        if (mains.has(r.g.repo) || placed.has(r.g.repo)) continue;
+        placed.add(r.g.repo);
+        out.push(...kids(r.g.repo).map(tree));
+        continue;
+      }
       out.push({ ...r, tree: null });
       if (!r.g || r.g.linked || placed.has(r.g.repo)) continue;
       placed.add(r.g.repo);
-      const kids = list.filter((k) => nested(k) && k.g.repo === r.g.repo);
-      kids.forEach((k, n) => out.push({ ...k, tree: n === kids.length - 1 ? "└─" : "├─" }));
+      out.push(...kids(r.g.repo).map(tree));
     }
     // Simulate the batch so later indexes include earlier moves. An attempted
     // write can lose a sync conflict: allow the echo to settle before retrying.
@@ -323,15 +334,21 @@ export default class Spaces extends View {
     for (const a of agents()) (crew[a.space] ??= []).push(a.status);
     const tint = settings().dark ? "2e" : "24"; // the avatar's tint, read once per draw
     const one = (r) => (collapsed ? this.compact(r, t) : this.row(r, t, crew[r.w.id] ?? [], tint));
-    // A repo and its worktrees: one card, a little apart from the rest.
+    // A repo and its worktrees: one card, a little apart from the rest. Without a
+    // space in the main checkout, the repo's name heads the card.
     const draw = (list) => {
       const groups = [];
       for (const r of list) {
-        if (r.tree && groups.length) groups[groups.length - 1].push(r);
+        const last = groups[groups.length - 1];
+        if (r.tree && last && last[0].g?.repo === r.g.repo) last.push(r);
         else groups.push([r]);
       }
-      return groups.map((g) => (g.length < 2 || collapsed ? g.map(one) : [
+      return groups.map((g) => ((g.length < 2 && !g[0].tree) || collapsed ? g.map(one) : [
         v_flex().id(`repo-${g[0].w.id}`).flex_none().my(6).p(3).gap(2).rounded(10).border_1().border_color(t.border)
+          .when(Boolean(g[0].tree), (el) => el.child(h_flex().h(24).flex_none().px(9).gap(7).items_center()
+            .text_size(11.5).text_color(t.muted)
+            .child(svg("mods/workspace-chrome/folder.svg").size(12).flex_none().text_color(t.dim))
+            .child(div().min_w(0).truncate().font_medium().child(g[0].g.name))))
           .children(g.map(one)),
       ])).flat();
     };
