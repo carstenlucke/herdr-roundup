@@ -54,7 +54,7 @@ function closeAsking({ kind, agents, title, ends, more, now, herdr, command }) {
     : agents.length === 1 ? `${names} is still running in it. Closing ends it.`
     : `${agents.length} agents are still running in it (${names}). Closing ends them.`;
   if (asking) closeOverlay(asking);
-  asking = openOverlay({ mod: "confirm", kind: "dialog", width: 400, height: 170,
+  asking = openOverlay({ mod: "roundup-confirm", kind: "dialog", width: 400, height: 170,
     props: { title, detail: [why, more].filter(Boolean).join(" "), command } });
 }
 

@@ -145,6 +145,10 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   tab's only pane closes the tab, and the question says so ("It's the tab's
   only pane, so the tab closes too."), as it says when the space closes too.
   The choice stays after a restart.
+- **The question** has Cancel and Confirm, and Cancel holds the keyboard
+  when it opens (a 2px `accent` ring around it): Enter cancels, so a second
+  `cmd-w` or Enter too many closes nothing. Tab and Shift-Tab move between
+  the two, Enter or Space presses the one with the ring, Esc cancels.
 - **Version tooltip:** follows the layout file. After a new release is
   installed, it shows the new version without a restart.
 
@@ -244,7 +248,7 @@ Herdr's tab bar, except how a tab closes (`close.js`). The choice for tabs is
 shared `roundup-tabs.confirm-close`, for panes `roundup-pane.confirm-close`:
 `never`, `agents` (also when unset) or `always`; a tab's only pane goes by
 the one for tabs. A tab's busy agents are `agents()` with its `tab` and status
-`working` or `blocked`. Asking opens Herdr's `confirm` as a dialog (400×170)
+`working` or `blocked`. Asking opens `roundup-confirm` as a dialog (400×170)
 with `command: { name: "tab.close", args: { id, confirmed: true } }`; not
 asking runs `tab.close {id, confirmed: true}` (never) or `tab.close {id}`
 (agents). A tab's right-click menu is the mod itself as a popup (220×237,
@@ -253,9 +257,15 @@ asking runs `tab.close {id, confirmed: true}` (never) or `tab.close {id}`
 commands: `close` (the shown tab) and `close:<id>`. `close.js` and `menu.js`
 are copied as-is into `roundup-pane`.
 
+**`roundup-confirm`** (clone of `confirm` 0.1.13, `place: "none"`). Herdr's
+question dialog, props `{ title, detail, command: { name, args } }`; Confirm
+runs `command`. Each button tracks its own focus handle with `tab_index(0)`;
+the dialog keeps which one is chosen (Cancel in `init`), moves it on Tab and
+Shift-Tab, focuses its handle and draws the ring on it. Herdr's own questions ("Close space?") still use
+the shipped `confirm`.
+
 **Shipped mods used:** `agents`, `files`, `changes`,
-`workspace-status`, plus `picker`, `menu`, `confirm` and `machine-add` as
-overlays.
+`workspace-status`, plus `picker`, `menu` and `machine-add` as overlays.
 
 **Keys:** the `layout:Herdr-Roundup` section binds `cmd-w` to
 `roundup-tabs.close` and `cmd-shift-w` to `roundup-pane.close`, in place of
@@ -304,6 +314,9 @@ global `tab.close` and `pane.close`.
 - **Mods can't import from each other:** `find()` and `narrow()` are copied
   into both chrome mods, and `close.js` and `menu.js` into `roundup-tabs`
   and `roundup-pane`. `scripts/sync.sh` stops when the two copies differ.
+- **Tab doesn't move a dialog's keyboard by itself:** with two `tab_index`
+  buttons, Tab left the keyboard where it was. The dialog hears Tab go down
+  and moves it itself (`stop_propagation`).
 - **Install by copying, not symlinking:** Herdr App doesn't load a mod's own
   SVGs through a symlink.
 
@@ -343,5 +356,6 @@ global `tab.close` and `pane.close`.
   space's last pane the question adds that the space closes too. Right-
   clicking a terminal shows Close pane and "Ask before closing a pane";
   choosing there leaves the tab menu's choice as it was.
+- In the question, Enter right away cancels; Tab, then Enter closes.
 - In a light and a dark theme, every avatar's letter and every badge count
   can be read.
