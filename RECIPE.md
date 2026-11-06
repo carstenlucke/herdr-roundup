@@ -103,7 +103,9 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
     its right; when clean, no bar, only its space. Outside a repo: "Not a git
     repository"; before git answers: "Reading git…".
   - **Search field** (28px, `canvas`, `border`, `accent` while typing):
-    "Search files".
+    "Search files". In All and inside a repo, a 20px switch at its right
+    end, the branch glyph: lit (`accent` on `raised`) while search reads
+    git's files, `dim` while it reads the disk.
   - **Tree** (26px rows, 14px indent per level): a chevron for folders, a
     16px Symbols icon (one set for light and dark themes; an open folder
     keeps its icon, as in VS Code), the name, then the git marks. Names take their status
@@ -194,14 +196,23 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   folds and unfolds without reading the disk. The view stays after a restart.
 - **Search** (type in the field, or `/`): in All it searches every path
   below the folder, opened or not, and shows the matches as a tree, names
-  that match first, at most 200. It skips `.git`, `node_modules`, `target`,
-  `.venv`, `venv`, `__pycache__`, `dist`, `build`, `.next`, `.nuxt`,
-  `.cache`, `.gradle`, `.idea`, `vendor`, `Pods`, `.tox`, `.mypy_cache`,
-  `.pytest_cache` and `coverage`, goes 12 levels deep (5 at home or `/`) and
-  reads at most 20,000 folders and 40,000 other paths. The index is read on
-  the first search and again when a new path appears, a folder changes or
-  it is 5 minutes old. In Changed, the search filters git's paths. `×` or
-  Esc clears it.
+  that match first, at most 200. The switch in the field picks what it
+  reads, and the panel keeps the choice:
+  - **Git's files** (the default): what git counts as the project, tracked
+    and new files, without what `.gitignore` leaves out, at most 40,000
+    files, at any depth. A file deleted but not yet committed shows struck
+    through. "No matches · ignored files left out" says where else to look.
+    Outside a repo, or where git can't run, search reads the disk instead.
+  - **The disk:** everything but `.git`, `node_modules`, `target`,
+    `.venv`, `venv`, `__pycache__`, `dist`, `build`, `.next`, `.nuxt`,
+    `.cache`, `.gradle`, `.idea`, `vendor`, `Pods`, `.tox`, `.mypy_cache`,
+    `.pytest_cache` and `coverage`, ignored files included (`.env`, local
+    settings), 12 levels deep (5 at home or `/`), at most 20,000 folders
+    and 40,000 other paths.
+
+  The index is read on the first search and again when a new path appears,
+  a folder changes, a `.gitignore` changes (git's files) or it is 5 minutes
+  old. In Changed, the search filters git's paths. `×` or Esc clears it.
 - **Click** a folder to open or close it, a file to preview it. **Keys**,
   once the panel has the keyboard (a click on it, or `pane.go`): ↑ ↓ select,
   PgUp PgDn Home End jump, → opens a folder or steps into an open one, ←
@@ -340,8 +351,9 @@ the shipped `confirm`.
 "Files", `focusable: true`). `main.js` draws the panel and, opened with
 `props().menu`, the context menu; `disk.js` lists folders (`sh` here and on
 other machines, PowerShell on Windows, as `files` does; 500 entries per
-folder) and builds the search index with `find` (PowerShell
-`Get-ChildItem -Recurse` on Windows); `git.js` reads git; `actions.js`
+folder) and builds the disk's search index with `find` (PowerShell
+`Get-ChildItem -Recurse` on Windows); `git.js` reads git and git's search
+index; `actions.js`
 opens, reveals, copies and sends; `icon.js` picks an icon from `icons.js`.
 The tree is a `v_virtual_list` (rows report clicks through `on_item_click`
 and `on_item_secondary_click`) with a `Scrollbar` and a
@@ -356,6 +368,8 @@ and `on_item_secondary_click`) with a `Scrollbar` and a
 - alongside status, `diff HEAD --numstat -z --no-renames -- .` for the
   `+N −N` of files, summed up for folders (it fails before the first commit:
   no lines then)
+- for search from git's files, `ls-files -z --cached --others
+  --exclude-standard -- .`; when it fails (no repo, no git), search reads the disk
 
 Previews use `readTextFile` and a read-only `EditorState` + `Editor`. The
 menu is `openOverlay({mod: "roundup-files", kind: "popup", width: 228,
@@ -366,8 +380,8 @@ Copy uses `cx.write_to_clipboard` and `notify`. Send uses `focused()`,
 `panes()`, `agents()`, `pane.focus {terminal}` and `terminal.paste`. Open and
 Reveal run `open` / `open -R` (PowerShell `Invoke-Item` / `explorer.exe
 /select` on Windows, `xdg-open` elsewhere). Its key commands (none bound):
-`focus`, `search`, `view:all`, `view:changed`, `menu`. `localStorage` keeps
-the view. `this.highlights` (path → `{color, at}`, a theme color name) tints
+`focus`, `search`, `view:all`, `view:changed`, `source:git`,
+`source:disk`, `menu`. `localStorage` keeps the view and the search's source. `this.highlights` (path → `{color, at}`, a theme color name) tints
 a row and colors its name; nothing fills it yet, so a later source (an
 agent's reads and writes) can light up paths without changing the tree. Its
 own art: Symbols 0.0.26 by Miguel Solorio in `icons/` (245 SVGs, with
@@ -455,9 +469,13 @@ global `tab.close` and `pane.close`.
   table of VS Code's associations; without it those files show the plain
   document icon. It also drops the six rules of 0.0.26 that name icons the
   release lacks (`less`, `folder-redux`), as VS Code ignores them.
-- **Search limits:** the index stops at 20,000 folders and 40,000 other
-  paths and at 12 levels; a deeper or larger folder is searched only in
-  part, and the footer says so. Folders show their first 500 entries.
+- **Search limits:** from the disk the index stops at 20,000 folders and
+  40,000 other paths and at 12 levels, from git at 40,000 files; a deeper or
+  larger folder is searched only in part, and the footer says so. Folders
+  show their first 500 entries.
+- **Search from the disk on Windows is slow in big folders:** `Get-ChildItem
+  -Recurse` walks into `node_modules` and the other pruned folders and drops
+  them afterwards. Git's files, the default inside a repo, don't walk.
 
 ## Done when
 
@@ -510,7 +528,9 @@ global `tab.close` and `pane.close`.
   themes (`package.json`, `Dockerfile`, `style.css`, `index.html`, `src/`,
   `.github/`).
 - Typing the name of a file in a folder that was never opened finds it;
-  `node_modules` stays out. Enter previews a file; Esc goes back.
+  `node_modules` stays out. Enter previews a file; Esc goes back. In a repo,
+  an ignored `.env` is found only after the switch in the field goes to the
+  disk; a folder outside a repo is searched with the switch hidden.
 - ↑ ↓ → ← Enter and Esc work as described; right-clicking a file shows the
   menu, and Copy relative path puts the path on the clipboard.
 - A folder without git shows "Not a git repository" and its files; a folder

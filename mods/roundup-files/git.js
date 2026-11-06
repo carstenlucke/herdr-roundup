@@ -106,3 +106,22 @@ export async function readGit(root, on) {
   if (numstat?.code === 0) parseNumstat(numstat.stdout, git);
   return git;
 }
+
+// The files git counts as the project below root: tracked and new ones, without what
+// .gitignore leaves out, and the folders that hold them. At most `limit` files. Null outside
+// a repo or without git: the caller reads the disk then.
+export async function listFiles(root, on, limit) {
+  let r;
+  try { r = await exec("git", [...READ, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "."], { cwd: root, on }); }
+  catch { return null; }
+  if (r.code !== 0) return null;
+  const dirs = new Set(), files = new Set();
+  let full = true;
+  for (const rel of r.stdout.split("\0")) {
+    if (!rel || files.has(rel)) continue; // a conflicted file is listed once per stage
+    if (files.size >= limit) { full = false; break; }
+    files.add(rel);
+    for (const a of ancestors(rel)) { if (dirs.has(a)) break; dirs.add(a); }
+  }
+  return { dirs, all: [...dirs, ...files], full };
+}

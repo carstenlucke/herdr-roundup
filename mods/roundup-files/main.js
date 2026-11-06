@@ -12,7 +12,7 @@ import { v_flex, h_flex, Editor, EditorState, InputState, Input, Scrollbar, v_vi
 import { spaces, panes, focused, readTextFile, watchFolder, theme, settings, window, props, notify, openOverlay, closeOverlay, shared, setShared, nextCommand } from "herdr";
 import { iconFor, rootIcon } from "./icon.js";
 import { listDir, buildIndex, compare, pruned, PER_FOLDER, INDEX_PATHS } from "./disk.js";
-import { readGit, emptyGit, ancestors, dirOf, NEW, MODIFIED, DELETED } from "./git.js";
+import { readGit, listFiles, emptyGit, ancestors, dirOf, NEW, MODIFIED, DELETED } from "./git.js";
 import { openExternal, revealExternal, copy, sendToAgent, relTo } from "./actions.js";
 
 const NAME = "roundup-files";
@@ -23,6 +23,9 @@ const FIND_LIMIT = 200;
 const INDEX_AGE = 300000;
 const LANG = { ts: "js", tsx: "js", mts: "js", cts: "js", jsx: "js", mjs: "js", cjs: "js", toml: "yaml", yml: "yaml", jsonc: "json", svelte: "html", vue: "html", htm: "html", sh: "bash", zsh: "bash" };
 const VIEWS = [["all", "All"], ["changed", "Changed"]];
+// What search in All reads: git's files (without ignored ones; the disk outside a repo) or
+// the disk (everything but the pruned folders).
+const SOURCES = ["git", "disk"];
 // Shared: what the context menu (a popup copy of this mod) asks the panel to do.
 const REQUEST = `${NAME}.request`;
 
@@ -76,6 +79,7 @@ export default class Files extends View {
     let prefs = {};
     try { prefs = JSON.parse(localStorage.getItem("prefs") ?? "{}"); } catch {}
     this.view = VIEWS.some(([v]) => v === prefs.view) ? prefs.view : "all";
+    this.source = SOURCES.includes(prefs.source) ? prefs.source : "git";
     this.saved = new Map();
     // Per-path highlights, for a later source (an agent's reads and writes, say):
     // rel → { color: a theme color name, at: ms }. Rows tint from it; nothing writes it yet.
@@ -102,6 +106,7 @@ export default class Files extends View {
         if (c === "focus") this.handle.focus();
         else if (c === "search") { this.closePreview(); this.input.focus(); }
         else if (c.startsWith("view:")) this.setView(c.slice(5), cx);
+        else if (c.startsWith("source:")) this.setSource(c.slice(7), cx);
         else if (c === "menu") { const r = this.shown.find((x) => x.rel === this.cursor); if (r) this.openMenu(r); }
         cx.notify();
       }
@@ -111,11 +116,25 @@ export default class Files extends View {
   setView(view, cx) {
     if (view === this.view || !VIEWS.some(([v]) => v === view)) return;
     this.view = view;
-    try { localStorage.setItem("prefs", JSON.stringify({ view })); } catch {}
+    this.savePrefs();
     this.hits = null; this.searchSeq++;
     if (this.query.trim()) this.search(this.query, cx);
     this.scrollTo = this.cursor || null;
     cx.notify();
+  }
+
+  // The index of the other source is read on the next search; a search typed already reruns.
+  setSource(source, cx) {
+    if (source === this.source || !SOURCES.includes(source)) return;
+    this.source = source;
+    this.savePrefs();
+    this.index = null;
+    if (this.query.trim() && this.view === "all") this.search(this.query, cx);
+    cx.notify();
+  }
+
+  savePrefs() {
+    try { localStorage.setItem("prefs", JSON.stringify({ view: this.view, source: this.source })); } catch {}
   }
 
   // ── the folder shown ─────────────────────────────────────────────────────────────────
@@ -200,13 +219,16 @@ export default class Files extends View {
 
   // A path the index doesn't know, a folder it knows, or the root (too many changes to
   // list) means the folder structure may have changed: the index is read again. Paths the
-  // index never holds (.git, node_modules, build output) don't count.
+  // index never holds don't count: .git and, from the disk, the pruned folders, from git,
+  // what it ignores. From git, a changed .gitignore counts.
   changed(paths, cx) {
-    const index = this.index;
+    const index = this.index, fromGit = index?.from === "git";
     for (const abs of paths) {
       const rel = relTo(this.root, abs);
-      if (rel === null || (rel && pruned(this.root, rel))) continue;
-      if (index && (rel === "" || index.dirs.has(rel) || !index.known.has(rel))) index.stale = true;
+      if (rel === null || !index) continue;
+      if (fromGit && baseOf(rel) === ".gitignore") { index.stale = true; continue; }
+      if (rel && (fromGit ? rel.split("/").includes(".git") || this.isIgnored(rel) : pruned(this.root, rel))) continue;
+      if (rel === "" || index.dirs.has(rel) || !index.known.has(rel)) index.stale = true;
     }
     if (index?.stale && this.query.trim() && this.view === "all") this.search(this.query, cx);
     this.refresh(cx);
@@ -252,7 +274,7 @@ export default class Files extends View {
   }
 
   // ── search ───────────────────────────────────────────────────────────────────────────
-  // All: every path below the folder, from an index (find). Changed: git's paths.
+  // All: every path below the folder, from an index (git ls-files or find). Changed: git's paths.
   search(query, cx) {
     this.query = query;
     const q = query.trim().toLowerCase(), seq = ++this.searchSeq;
@@ -274,16 +296,23 @@ export default class Files extends View {
     });
   }
 
-  // One index build at a time; searches typed meanwhile wait for it.
+  // One index build per source at a time; searches typed meanwhile wait for it. `from`: what
+  // it was read from ("disk" also when git was asked for outside a repo).
   ensureIndex(ctx) {
-    const i = this.index;
-    if (i && !i.stale && Date.now() - i.at < INDEX_AGE) return Promise.resolve(i);
-    this.indexing ??= buildIndex(ctx.root, ctx.on).then((built) => {
-      const index = { ...built, known: new Set(built.all), at: Date.now(), stale: false };
-      if (this.current(ctx)) this.index = index;
-      return index;
-    }).finally(() => { if (this.current(ctx)) this.indexing = null; });
-    return this.indexing;
+    const i = this.index, source = this.source;
+    if (i && i.source === source && !i.stale && Date.now() - i.at < INDEX_AGE) return Promise.resolve(i);
+    if (this.indexing?.source !== source) {
+      const job = { source };
+      job.promise = (async () => {
+        const fromGit = source === "git" ? await listFiles(ctx.root, ctx.on, INDEX_PATHS) : null;
+        const built = fromGit ?? await buildIndex(ctx.root, ctx.on);
+        const index = { ...built, source, from: fromGit ? "git" : "disk", known: new Set(built.all), at: Date.now(), stale: false };
+        if (this.current(ctx) && this.source === source) this.index = index;
+        return index;
+      })().finally(() => { if (this.current(ctx) && this.indexing === job) this.indexing = null; });
+      this.indexing = job;
+    }
+    return this.indexing.promise;
   }
 
   clearSearch(cx) {
@@ -311,7 +340,8 @@ export default class Files extends View {
     }
   }
 
-  // Search matches as a tree: each match under its folders, all open.
+  // Search matches as a tree: each match under its folders, all open. Git still lists a file
+  // deleted but not yet committed; it shows struck through, as in Changed.
   hitRows() {
     const out = [], keep = new Set(), kids = new Map(), dirs = this.index?.dirs ?? new Set();
     for (const h of this.hits) { keep.add(h); for (const a of ancestors(h)) keep.add(a); }
@@ -319,7 +349,7 @@ export default class Files extends View {
     const walk = (p, depth) => {
       const list = (kids.get(p) ?? []).sort((a, b) => Number(dirs.has(b)) - Number(dirs.has(a)) || compare(baseOf(a), baseOf(b)));
       for (const rel of list) {
-        out.push({ rel, name: baseOf(rel), dir: dirs.has(rel), depth, open: kids.has(rel), gone: false });
+        out.push({ rel, name: baseOf(rel), dir: dirs.has(rel), depth, open: kids.has(rel), gone: this.git.files.get(rel) === DELETED });
         if (kids.has(rel)) walk(rel, depth + 1);
       }
     };
@@ -560,6 +590,16 @@ export default class Files extends View {
         .child(div().min_w(0).truncate().child(this.root?.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || this.root || "")));
   }
 
+  // In the search field, inside a repo: whether All searches git's files (lit) or the disk.
+  sourceToggle(t) {
+    const git = this.source === "git";
+    return div().id("rf-source").size(20).flex_none().flex().items_center().justify_center().rounded(5).cursor_pointer()
+      .text_color(git ? t.accent : t.dim).when(git, (el) => el.bg(t.raised)).hover((s) => s.bg(t.hover).text_color(git ? t.accent : t.foreground))
+      .tooltip(git ? "Searching git's files, without ignored ones. Click to search the disk" : "Searching the disk. Click to search git's files only")
+      .on_click((_e, cx) => this.setSource(git ? "disk" : "git", cx))
+      .child(svg(ICON("branch")).size(13));
+  }
+
   note(rows) {
     const g = this.git;
     if (this.error) return this.error;
@@ -570,7 +610,7 @@ export default class Files extends View {
       return rows.length ? null : this.query.trim() ? "No matching changes" : "No changes";
     }
     if (this.searching && !rows.length) return "Searching…";
-    if (this.hits) return rows.length ? null : "No matches";
+    if (this.hits) return rows.length ? null : this.index?.from === "git" ? "No matches · ignored files left out" : "No matches";
     if (this.loading && !rows.length) return "Loading files…";
     return rows.length ? null : "Empty folder";
   }
@@ -608,7 +648,8 @@ export default class Files extends View {
         .child(svg(ICON("search")).size(13).flex_none().text_color(t.dim))
         .child(Input.new(this.input).flex_1().h_full().text_size(12).text_color(t.foreground))
         .when(Boolean(this.query), (el) => el.child(div().id("rf-clear").flex_none().text_size(13).text_color(t.dim).cursor_pointer()
-          .hover((s) => s.text_color(t.foreground)).on_click((_e, cx) => this.clearSearch(cx)).child("×"))))
+          .hover((s) => s.text_color(t.foreground)).on_click((_e, cx) => this.clearSearch(cx)).child("×")))
+        .when(this.view === "all" && this.git.repo, (el) => el.child(this.sourceToggle(t))))
       .child(div().flex_1().min_h(0).relative().px(4).pb(4)
         .child(v_virtual_list("rf-rows", rows.length, ROW, (i) => rows[i]?.rel ?? String(i), (range) =>
           rows.slice(range.start, range.end).map((r) => this.row(r, t))).track_scroll(this.scroll).size_full()
