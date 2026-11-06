@@ -3,10 +3,12 @@
 # the roundup- mods, colors from the graphite theme. Run from the repo:
 #   python3 scripts/preview.py . layouts/Herdr-Roundup.svg
 #   rsvg-convert -z 2 layouts/Herdr-Roundup.svg -o preview.png
-import base64, sys
+import base64, os, re, sys
 from html import escape
 
 REPO, OUT = sys.argv[1], sys.argv[2]
+# Program icons come from the install, as Herdr draws them.
+HOME = os.environ.get("HERDR_APP_HOME", os.path.expanduser("~/.config/herdr-app"))
 W, H = 1440, 900
 
 T = {
@@ -84,6 +86,22 @@ def icon(name, x, y, size, color, sw=1.5):
     k = size / 24
     add(f'<g transform="translate({x} {y}) scale({k:.4f})" fill="none" stroke="{c}" stroke-opacity="{o:.3f}" '
         f'stroke-width="{sw}" stroke-linecap="round" stroke-linejoin="round" color="{c}">{ICON[name]}</g>')
+
+# Herdr's program table (built into the app): tint true is a one-color glyph drawn in the
+# text color, tint false a picture drawn as it is.
+PROGRAM = {"claude": False, "codex": False, "pi": True, "shell": True, "vite": True}
+
+def program(key, x, y, size, color):
+    src = open(f"{HOME}/icons/{key}.svg").read()
+    src = re.sub(r"<\?xml[^>]*>\s*", "", src)
+    if PROGRAM[key]:
+        c = paint(color)[0]
+        src = re.sub(r'(fill|stroke)="(?!none)[^"]*"', rf'\1="{c}"', src)
+        src = src.replace("currentColor", c)
+        if not re.search(r'<svg[^>]*\sfill=', src):
+            src = src.replace("<svg", f'<svg fill="{c}"', 1)
+    data = base64.b64encode(src.encode()).decode()
+    add(f'<image x="{x}" y="{y}" width="{size}" height="{size}" href="data:image/svg+xml;base64,{data}"/>')
 
 def avatar(x, y, letter, color):
     rect(x, y, 22, 22, color, rx=6, op=0x2e / 255)  # dark themes tint with alpha 2e
@@ -200,10 +218,10 @@ def spinner(cx, cy, color):
     add(f'<circle cx="{cx}" cy="{cy}" r="4.5" fill="none" stroke="{paint("raised")[0]}" stroke-width="1.5"/>')
     add(f'<path d="M{cx} {cy - 4.5}a4.5 4.5 0 0 1 4.5 4.5" fill="none" stroke="{c}" stroke-width="1.5" stroke-linecap="round"/>')
 
-def agent(y, space, task, when, status, active=False):
+def agent(y, prog, space, task, when, status, active=False):
     if active:
         rect(8, y, 252, 26, "selected", rx=7)
-    icon("bot", 16, y + 6, 14, "ansi3", sw=2)
+    program(prog, 16, y + 5, 16, "foreground")
     spans(38, y + 17.5, [(space, "foreground", 500), (f" · {task}", "dim", 400)], 12.5, UI)
     text(234, y + 17.5, when, 11, "dim", anchor="end")
     if status == "working":
@@ -221,13 +239,13 @@ def group(label, n, color, items):
         agent(ay, *it)
         ay += 28
 
-group("Blocked", 1, "blocked", [("fix-login", "Run the migration?", "4m", "blocked")])
-group("Done", 1, "done", [("website", "Pricing page", "12m", "done")])
-group("Working", 2, "working", [("search-filters", "Facet filters", "1m", "working", True),
-                                ("research", "Benchmarks", "3m", "working")])
-group("Idle", 3, "dim", [("search-filters", "Tests", "18m", "idle"),
-                         ("dotfiles", "brew bundle", "1h", "idle"),
-                         ("api-gateway", "Rate limits", "1d", "idle")])
+group("Blocked", 1, "blocked", [("codex", "fix-login", "Run the migration?", "4m", "blocked")])
+group("Done", 1, "done", [("claude", "website", "Pricing page", "12m", "done")])
+group("Working", 2, "working", [("claude", "search-filters", "Facet filters", "1m", "working", True),
+                                ("pi", "research", "Benchmarks", "3m", "working")])
+group("Idle", 3, "dim", [("codex", "search-filters", "Tests", "18m", "idle"),
+                         ("pi", "dotfiles", "brew bundle", "1h", "idle"),
+                         ("claude", "api-gateway", "Rate limits", "1d", "idle")])
 
 # Footer, 69px.
 FY = H - 69
@@ -241,12 +259,12 @@ text(39, FY + 51, "Add machine", 13, "dim")
 WX = SB + 1
 # Tabs, 42px.
 rect(WX + 8, 8, 150, 26, "selected", rx=6)
-icon("bot", WX + 18, 14, 14, "ansi3", sw=2)
+program("claude", WX + 18, 14, 14, "muted")
 text(WX + 38, 25.5, "search-filters", 13, "foreground", 500)
 icon("close", WX + 140, 16, 10, "dim", sw=2.5)
-icon("terminal", WX + 172, 15, 12, "muted", sw=2)
+program("shell", WX + 171, 14, 14, "muted")
 text(WX + 189, 25.5, "zsh", 13, "muted")
-icon("terminal", WX + 228, 15, 12, "muted", sw=2)
+program("vite", WX + 227, 14, 14, "muted")
 text(WX + 245, 25.5, "dev server", 13, "muted")
 icon("plus", W - 190, 15, 12, "dim", sw=2)
 icon("files", W - 160, 15, 12, "muted", sw=2)
@@ -265,10 +283,10 @@ for px, pw, focus in panes:
         icon(name, px + pw - 22 - 26 * k, PY + 9, 12, "dim", sw=2)
 
 lx, rx_ = panes[0][0], panes[1][0]
-icon("bot", lx + 12, PY + 8, 14, "ansi3", sw=2)
+program("claude", lx + 12, PY + 8, 14, "dim")
 text(lx + 32, PY + 19.5, "Claude Code", 12.5, "foreground", 600)
 text(lx + 112, PY + 19.5, "~/code/atlas-search-filters", 12, "dim")
-icon("terminal", rx_ + 12, PY + 9, 12, "muted", sw=2)
+program("shell", rx_ + 12, PY + 8, 14, "dim")
 text(rx_ + 30, PY + 19.5, "zsh", 12.5, "foreground", 600)
 text(rx_ + 56, PY + 19.5, "~/code/atlas-search-filters", 12, "dim")
 
