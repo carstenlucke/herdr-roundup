@@ -9,6 +9,9 @@ file; its status names the one that replaced it.
 | --- | --- | --- | --- |
 | [0001](adr/0001-first-draw-waits-for-git.md) | `roundup-spaces` shows the spaces there at start together, after up to 1.5s for their git, instead of row by row or from a cache | Accepted | 2026-11-06 |
 | [0002](adr/0002-pane-names-in-core-labels.md) | `roundup-pane` keeps a terminal pane's name as the core label `roundup-pane.name`, not in Herdr App's shared state | Accepted | 2026-11-06 |
+| [0003](adr/0003-catppuccin-icons-pinned-and-generated.md) | `roundup-files` draws Catppuccin Icons (Latte light, Mocha dark), vendored from a pinned release by `scripts/build-icons.mjs` | Accepted | 2026-11-06 |
+| [0004](adr/0004-file-tree-draws-before-git.md) | `roundup-files` shows the files at once and lets git fill in its marks, unlike 0001: git moves no rows there | Accepted | 2026-11-06 |
+| [0005](adr/0005-file-menu-acts-through-the-panel.md) | The file menu (a popup copy of `roundup-files`) asks the panel to act through shared `roundup-files.request` | Accepted | 2026-11-06 |
 
 ## Writing one
 

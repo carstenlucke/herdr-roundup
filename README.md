@@ -11,12 +11,14 @@ The layout is called `Herdr-Roundup`: Herdr's Settings show a layout by its file
 | Path | What |
 | --- | --- |
 | `layouts/Herdr-Roundup.json` | The window: its tree of rows, columns, stacks and blocks, and its look |
-| `mods/roundup-*/` | The layout's own mods. Until a mod is cloned here, the layout uses Herdr's shipped ones (`agents`, `files`, `changes`, `workspace-status`) |
+| `mods/roundup-*/` | The layout's own mods. Until a mod is cloned here, the layout uses Herdr's shipped ones (`agents`, `changes`, `workspace-status`). The side panel's file list is `roundup-files`, in place of Herdr's `files` |
 | `themes/` | Themes. One named `Herdr-Roundup.json` is the layout's own: Settings offers it only there |
 | `keys.json` | The `layout:Herdr-Roundup` section: keys that apply only while this layout shows |
 | `assets/` | Files for this README, such as the logo |
 | `docs/ARCHITECTURE_DECISIONS.md` | Why the layout and its mods work the way they do: an index of the decisions, details in `docs/adr/` |
 | `scripts/sync.sh` | Installs all of the above into `~/.config/herdr-app` |
+| `scripts/build-icons.mjs` | Regenerates `roundup-files`' icons from a pinned Catppuccin Icons release (needs `curl`, `unzip`, Node) |
+| `THIRD_PARTY_NOTICES.md` | Other people's work in this repo (icons, adapted code) and their licences |
 
 ## Install
 
@@ -45,4 +47,4 @@ herdr-app do layout.switch '{"name":"Herdr-Roundup"}'
 
 ## License
 
-Apache-2.0, see [LICENSE](LICENSE).
+Apache-2.0, see [LICENSE](LICENSE). Icons and code adapted from others are listed, with their licences, in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
