@@ -123,12 +123,13 @@ export default class Files extends View {
     cx.notify();
   }
 
-  // The index of the other source is read on the next search; a search typed already reruns.
+  // The index of the other source is read on the next search (ensureIndex compares sources);
+  // a search typed already reruns. The old index stays until then: the hits shown still need
+  // its folders.
   setSource(source, cx) {
     if (source === this.source || !SOURCES.includes(source)) return;
     this.source = source;
     this.savePrefs();
-    this.index = null;
     if (this.query.trim() && this.view === "all") this.search(this.query, cx);
     cx.notify();
   }
@@ -144,7 +145,7 @@ export default class Files extends View {
     const key = JSON.stringify([root, on]), s = this.saved.get(key);
     this.ctx = { key, root, on }; this.root = root; this.on = on;
     this.entries = new Map(); this.folders = new Set(s?.folders); this.shut = new Set(s?.shut); this.pending = new Set();
-    this.cursor = s?.cursor ?? ""; this.git = emptyGit(); this.index = null; this.indexing = null; this.hits = null;
+    this.cursor = s?.cursor ?? ""; this.git = emptyGit(); this.index = null; this.indexing = null; this.hits = null; this.searchError = null;
     this.error = null; this.limited = false; this.loading = false; this.again = false; this.watched = null;
     this.scrollTo = this.cursor || null;
     if (this.query) { this.query = ""; this.input?.set_value(""); }
@@ -268,8 +269,6 @@ export default class Files extends View {
   reveal(rel, openIt, cx) {
     if (this.query) this.clearSearch(cx);
     this.cursor = rel;
-    if (this.view === "changed" && !this.git.files.has(rel) && ![...this.git.files.keys()].some((p) => p.startsWith(rel + "/"))) this.setView("all", cx);
-    if (this.view === "changed") { for (const a of [rel, ...ancestors(rel)]) this.shut.delete(a); this.scrollTo = rel; cx.notify(); return; }
     this.open(openIt ? [rel] : ancestors(rel), cx, () => { this.scrollTo = rel; });
   }
 
@@ -280,7 +279,7 @@ export default class Files extends View {
     const q = query.trim().toLowerCase(), seq = ++this.searchSeq;
     if (!q || this.view !== "all") { this.hits = null; this.searching = false; this.scrollTo = this.cursor || null; cx.notify(); return; }
     const ctx = this.ctx;
-    this.searching = true;
+    this.searching = true; this.searchError = null;
     cx.notify();
     cx.spawn(async (cx) => {
       try {
@@ -291,7 +290,7 @@ export default class Files extends View {
         this.hits = [...new Set([...named, ...matches])].slice(0, FIND_LIMIT);
         if (!this.hits.includes(this.cursor)) this.cursor = this.hits[0] ?? "";
         this.scrollTo = this.cursor;
-      } catch (e) { if (seq === this.searchSeq && this.current(ctx)) { this.hits = []; this.error = message(e); } }
+      } catch (e) { if (seq === this.searchSeq && this.current(ctx)) { this.hits = []; this.searchError = message(e); } }
       finally { if (seq === this.searchSeq) this.searching = false; cx.notify(); }
     });
   }
@@ -316,7 +315,7 @@ export default class Files extends View {
   }
 
   clearSearch(cx) {
-    this.query = ""; this.hits = null; this.searchSeq++; this.searching = false;
+    this.query = ""; this.hits = null; this.searchSeq++; this.searching = false; this.searchError = null;
     this.input.set_value("");
     this.scrollTo = this.cursor || null;
     cx.notify();
@@ -388,7 +387,7 @@ export default class Files extends View {
 
   isIgnored(rel) { return selfOrAbove(this.git.ignored, rel); }
 
-  underUntracked(rel) { return selfOrAbove(this.git.untracked, rel); }
+  underUntracked(rel) { return this.git.rootUntracked || selfOrAbove(this.git.untracked, rel); }
 
   highlightOf(rel, t) {
     const h = this.highlights.get(rel);
@@ -413,6 +412,8 @@ export default class Files extends View {
         if (this.file !== rel || !this.current(ctx)) return;
         if (text === null) { this.fileError = "This file is no longer available"; return; }
         if (text.includes("\0")) { this.fileError = "Binary file · no text preview"; return; }
+        // Two loads of the same file (closed and opened again meanwhile): keep one editor.
+        this.code?.release();
         const t = theme(), name = baseOf(rel), ext = name.includes(".") ? name.split(".").pop().toLowerCase() : "txt";
         this.code = EditorState.new({ language: LANG[ext] ?? ext, readonly: true,
           value: text.length > 400000 ? text.slice(0, 400000) + "\n… (file truncated)" : text,
@@ -520,7 +521,7 @@ export default class Files extends View {
     const color = statusColor(t, status), hl = this.highlightOf(rel, t);
     const lines = g.diff.get(rel), counts = r.dir ? g.counts.get(rel) : null, selected = rel === this.cursor;
     const showLines = Boolean(lines?.[0] || lines?.[1]) && (!r.dir || this.width >= 360);
-    return h_flex().id(`rf-${rel}`).h(ROW).flex_none().pl(8 + r.depth * 14).pr(10).gap(6).items_center().rounded(6).cursor_pointer()
+    return h_flex().id(`rf-row-${rel}`).h(ROW).flex_none().pl(8 + r.depth * 14).pr(10).gap(6).items_center().rounded(6).cursor_pointer()
       .when(selected, (el) => el.bg(t.selected)).when(!selected, (el) => el.hover((s) => s.bg(t.hover)))
       .when(Boolean(hl?.color) && !selected, (el) => el.bg(alpha(hl.color, "22") ?? t.hover))
       .child(r.dir ? svg(ICON(`chevron-${r.open ? "down" : "right"}`)).size(12).flex_none().text_color(t.dim) : div().w(12).flex_none())
@@ -607,9 +608,10 @@ export default class Files extends View {
     if (this.view === "changed") {
       if (!g.known) return "Reading git…";
       if (!g.repo) return "Not a git repository";
-      return rows.length ? null : this.query.trim() ? "No matching changes" : "No changes";
+      return rows.length ? null : this.query.trim() ? "No matching changes" : g.rootUntracked ? "This whole folder is new to git" : "No changes";
     }
     if (this.searching && !rows.length) return "Searching…";
+    if (this.hits && this.searchError) return this.searchError;
     if (this.hits) return rows.length ? null : this.index?.from === "git" ? "No matches · ignored files left out" : "No matches";
     if (this.loading && !rows.length) return "Loading files…";
     return rows.length ? null : "Empty folder";

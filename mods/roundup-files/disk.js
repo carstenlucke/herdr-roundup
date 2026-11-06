@@ -80,6 +80,8 @@ export async function buildIndex(root, on) {
   const windowsIndex = async () => {
     const names = prune.map((n) => n.replace(/\./g, "\\.")).join("|");
     const r = await exec("powershell", ["-NoProfile", "-Command", `[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); & { param($p) $b = (Resolve-Path -LiteralPath $p).ProviderPath.TrimEnd('\\'); Get-ChildItem -LiteralPath $b -Recurse -Force -Depth ${depth} -ErrorAction SilentlyContinue | Where-Object { $_.FullName.Substring($b.Length) -notmatch '[\\\\/](${names})([\\\\/]|$)' } | Select-Object -First ${INDEX_PATHS + 1} | ForEach-Object { $(if ($_.PSIsContainer) {'d'} else {'f'}) + ($_.FullName.Substring($b.Length + 1) -replace '\\\\', '/') } } ${psQuote(root)}`], { on });
+    // Unreadable subfolders end PowerShell with 1 too; only a run that read nothing failed.
+    if (r.code !== 0 && !r.stdout.trim()) throw new Error("Cannot open this folder");
     for (const line of r.stdout.split(/\r?\n/)) if (line.length > 1) { const rel = line.slice(1); all.push(rel); if (line[0] === "d") dirs.add(rel); }
     return { dirs, all: all.slice(0, INDEX_PATHS), full: all.length <= INDEX_PATHS };
   };

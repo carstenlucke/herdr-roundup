@@ -29,6 +29,7 @@ export const emptyGit = (known = false) => ({
   status: new Map(), // rel (file or folder) → letter: ? A M R T D U
   files: new Map(), // rel → change, for every path git status lists (files and untracked folders)
   untracked: new Set(), // untracked folders git lists as a whole ("dir/")
+  rootUntracked: false, // the shown folder is itself one of them
   ignored: new Set(), // ignored files and folders (at most IGNORED)
   diff: new Map(), // rel (file or folder, "" the whole) → [added, deleted] lines against HEAD
   counts: new Map(), // folder ("" the whole) → [new, modified, deleted]
@@ -65,6 +66,8 @@ export function parseStatus(stdout, git) {
       xy = fields[1].replace(/\./g, " "); raw = fields.slice(n).join(" ");
     } else continue;
     const rel = map(raw);
+    // The shown folder itself untracked ("? sub/" run from sub): everything below is new.
+    if (rel === "" && xy === "??") { git.rootUntracked = true; git.records++; git.counts.set("", [1, 0, 0]); continue; }
     if (!rel) continue;
     if (xy === "!!") { if (git.ignored.size < IGNORED) git.ignored.add(rel); continue; }
     git.records++;
@@ -117,11 +120,14 @@ export async function listFiles(root, on, limit) {
   if (r.code !== 0) return null;
   const dirs = new Set(), files = new Set();
   let full = true;
-  for (const rel of r.stdout.split("\0")) {
-    if (!rel || files.has(rel)) continue; // a conflicted file is listed once per stage
+  const addDirs = (rel) => { for (const a of ancestors(rel)) { if (dirs.has(a)) break; dirs.add(a); } };
+  for (const entry of r.stdout.split("\0")) {
+    // An untracked repo inside this one comes as a whole folder ("nested/").
+    if (entry.endsWith("/")) { const d = entry.replace(/\/+$/, ""); if (d && !dirs.has(d)) { dirs.add(d); addDirs(d); } continue; }
+    if (!entry || files.has(entry)) continue; // a conflicted file is listed once per stage
     if (files.size >= limit) { full = false; break; }
-    files.add(rel);
-    for (const a of ancestors(rel)) { if (dirs.has(a)) break; dirs.add(a); }
+    files.add(entry);
+    addDirs(entry);
   }
   return { dirs, all: [...dirs, ...files], full };
 }

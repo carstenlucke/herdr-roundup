@@ -193,7 +193,9 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   **Changed** lists exactly the paths `git status` lists, as a tree with
   every folder open: deleted files too (struck through, faded icon), and an
   untracked folder as one row that opens from disk. A tracked folder there
-  folds and unfolds without reading the disk. The view stays after a restart.
+  folds and unfolds without reading the disk. When the shown folder is
+  itself new to git, Changed says so and every row in All shows `?`. The
+  view stays after a restart.
 - **Search** (type in the field, or `/`): in All it searches every path
   below the folder, opened or not, and shows the matches as a tree, names
   that match first, at most 200. The switch in the field picks what it
@@ -369,7 +371,8 @@ and `on_item_secondary_click`) with a `Scrollbar` and a
   `+N −N` of files, summed up for folders (it fails before the first commit:
   no lines then)
 - for search from git's files, `ls-files -z --cached --others
-  --exclude-standard -- .`; when it fails (no repo, no git), search reads the disk
+  --exclude-standard -- .` (an untracked repo inside comes as `dir/`: one
+  folder); when it fails (no repo, no git), search reads the disk
 
 Previews use `readTextFile` and a read-only `EditorState` + `Editor`. The
 menu is `openOverlay({mod: "roundup-files", kind: "popup", width: 228,
