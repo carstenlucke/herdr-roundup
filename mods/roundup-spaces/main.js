@@ -320,39 +320,93 @@ export default class Spaces extends View {
     const placed = new Set(); // repos whose worktrees are listed
     // `tree`: a worktree row, drawn on its repo's card.
     const kids = (repo) => list.filter((k) => nested(k) && k.g.repo === repo).map((k) => ({ ...k, tree: true }));
+    this.cards = {}; // space -> the spaces of its card, in order (only spaces on a card)
+    const card = (rows) => {
+      const ids = rows.map((r) => r.w.id);
+      if (ids.length > 1) for (const id of ids) this.cards[id] = ids;
+      out.push(...rows);
+    };
     for (const r of list) {
       if (nested(r)) {
         if (mains.has(r.g.repo) || placed.has(r.g.repo)) continue;
         placed.add(r.g.repo);
-        out.push(...kids(r.g.repo));
+        card(kids(r.g.repo));
         continue;
       }
-      out.push({ ...r, tree: false });
-      if (!r.g || r.g.linked || placed.has(r.g.repo)) continue;
+      if (!r.g || r.g.linked || placed.has(r.g.repo)) { out.push({ ...r, tree: false }); continue; }
       placed.add(r.g.repo);
-      out.push(...kids(r.g.repo));
+      card([{ ...r, tree: false }, ...kids(r.g.repo)]);
     }
-    // Simulate the batch so later indexes include earlier moves. An attempted
-    // write can lose a sync conflict: allow the echo to settle before retrying.
     // Not before the first answers: half the git known, worktrees would move twice.
+    // An attempted write can lose a sync conflict: allow the echo to settle before retrying.
     const order = sp.map(w => w.id);
     const target = out.map(r => r.w.id);
     const key = JSON.stringify([order, target, machines()]);
     if (order.every((id, i) => id === target[i])) {
       this.ordering = null;
     } else if (firstReady && (this.ordering?.key !== key || this.orderingDue(Date.now()))) {
-      const moved = new Set();
-      this.ordering = { key, at: Date.now(), machines: [] };
-      for (let i = 0; i < out.length; i++) {
-        const from = order.indexOf(out[i].w.id);
-        if (from === i) continue;
-        run("space.move", { id: out[i].w.id, index: i + 1 });
-        moved.add(out[i].w.machine ?? null);
-        order.splice(i, 0, order.splice(from, 1)[0]);
-      }
-      this.ordering.machines = [...moved];
+      this.ordering = { key, at: Date.now(), machines: this.arrange(order, target) };
     }
     return out.filter(r => this.shown.has(r.w.id));
+  }
+
+  // Moves the spaces from `order` into `target` (both: space ids, all of them).
+  // Simulates the batch so later indexes include earlier moves. Returns the
+  // machines that had a space moved.
+  arrange(order, target) {
+    const on = Object.fromEntries(spaces().map((s) => [s.id, s.machine ?? null]));
+    const now = [...order];
+    const moved = new Set();
+    for (let i = 0; i < target.length; i++) {
+      const from = now.indexOf(target[i]);
+      if (from === i || from === -1) continue;
+      run("space.move", { id: target[i], index: i + 1 });
+      moved.add(on[target[i]] ?? null);
+      now.splice(i, 0, now.splice(from, 1)[0]);
+    }
+    return [...moved];
+  }
+
+  // A drag from `from` let go on `onto`: above it when it came from below, under
+  // it when from above. A card's first row (or its header) carries the whole card,
+  // so a card without a space in its main checkout keeps its first worktree on top;
+  // any other row moves alone, and back onto its card if it left it.
+  drop(from, onto) {
+    const order = spaces().map((s) => s.id);
+    const card = this.cards?.[from];
+    const rows = card && card[0] === from && !card.includes(onto) ? card : [from];
+    const down = order.indexOf(from) < order.indexOf(onto);
+    const target = order.filter((id) => !rows.includes(id));
+    const at = target.indexOf(onto);
+    if (at === -1) return;
+    target.splice(at + (down ? 1 : 0), 0, ...rows);
+    this.arrange(order, target);
+  }
+
+  // Press, move over and let go: a row's drag, or a card header's for its first row.
+  draggable(el, id, machine, click) {
+    return el
+      .on_mouse_down("left", () => {
+        this.pressed = id;
+        this.over = id;
+      })
+      .on_mouse_move((_e, cx) => {
+        const source = spaces().find(s => s.id === this.pressed);
+        const over = source && (source.machine ?? null) === machine ? id : null;
+        if (this.pressed !== null && this.over !== over) {
+          this.over = over;
+          cx.notify();
+        }
+      })
+      .on_mouse_up("left", (_e, cx) => {
+        const from = this.pressed;
+        const over = this.over;
+        this.pressed = null;
+        this.over = null;
+        if (from !== null && over === id && from !== id) this.drop(from, id);
+        else if (from === id) click?.();
+        cx.notify();
+      });
   }
 
   // The rows, under a header per machine once one isn't this computer.
@@ -371,12 +425,16 @@ export default class Spaces extends View {
         if (r.tree && last && last[0].g?.repo === r.g.repo) last.push(r);
         else groups.push([r]);
       }
+      // Dragging a card's first row carries the card: the card fades, not the row.
+      const away = (g) => this.pressed === g[0].w.id && !g.some((r) => r.w.id === this.over);
       return groups.map((g) => ((g.length < 2 && !g[0].tree) || collapsed ? g.map(one) : [
         v_flex().id(`repo-${g[0].w.id}`).flex_none().my(6).p(3).gap(2).rounded(10).border_1().border_color(t.border)
-          .when(Boolean(g[0].tree), (el) => el.child(h_flex().h(24).flex_none().px(9).gap(7).items_center()
+          .when(away(g), (el) => el.opacity(0.5))
+          .when(Boolean(g[0].tree), (el) => el.child(this.draggable(h_flex().id(`repo-head-${g[0].w.id}`)
+            .h(24).flex_none().px(9).gap(7).items_center()
             .text_size(11.5).text_color(t.muted)
             .child(svg("mods/workspace-chrome/folder.svg").size(12).flex_none().text_color(t.dim))
-            .child(div().min_w(0).truncate().font_medium().child(g[0].g.name))))
+            .child(div().min_w(0).truncate().font_medium().child(g[0].g.name)), g[0].w.id, g[0].w.machine ?? null)))
           .children(g.map(one)),
       ])).flat();
     };
@@ -485,7 +543,7 @@ export default class Spaces extends View {
     const color = colors[w.id] ?? "ansi6";
     const fill = color.startsWith("#") ? color : (t[color] ?? t.accent);
     const line = g ? this.gitLine(g, tree, w.name, t, w.id) : null;
-    return v_flex()
+    return this.draggable(v_flex()
       .relative()
       .id(`space-${w.id}`)
       .pl(tree ? 12 : 8)
@@ -496,35 +554,12 @@ export default class Spaces extends View {
       .rounded(8)
       .when(on, (el) => el.bg(t.selected))
       .when(!on, (el) => el.hover((s) => s.bg(t.hover)))
-      .when(this.pressed === w.id && this.over !== w.id, (el) => el.opacity(0.5))
+      .when(this.pressed === w.id && this.over !== w.id && this.cards?.[w.id]?.[0] !== w.id, (el) => el.opacity(0.5))
       .when(this.pressed !== null && this.over === w.id && this.pressed !== w.id, (el) => el.child(
         div().absolute().left(0).right(0).h(2).bg(t.accent)
           .when(fromIndex < i, bar => bar.bottom(0))
           .when(fromIndex > i, bar => bar.top(0)),
       ))
-      .on_mouse_down("left", () => {
-        this.pressed = w.id;
-        this.over = w.id;
-      })
-      .on_mouse_move((_e, cx) => {
-        const source = spaces().find(s => s.id === this.pressed);
-        const over = source && (source.machine ?? null) === (w.machine ?? null) ? w.id : null;
-        if (this.pressed !== null && this.over !== over) {
-          this.over = over;
-          cx.notify();
-        }
-      })
-      .on_mouse_up("left", (_e, cx) => {
-        const from = this.pressed;
-        const over = this.over;
-        this.pressed = null;
-        this.over = null;
-        if (from !== null && over === w.id && from !== w.id) {
-          const index = spaces().findIndex(s => s.id === w.id);
-          if (index !== -1) run("space.move", { id: from, index: index + 1 });
-        } else if (from === w.id) run("space.select", { id: w.id });
-        cx.notify();
-      })
       .on_mouse_down("right", () => this.menu(w))
       .child(
         h_flex()
@@ -538,7 +573,7 @@ export default class Spaces extends View {
             .child(div().min_w(0).truncate().font_medium().text_color(t.foreground).child(w.name))
             .when(Boolean(line), el => el.child(line)))
           .when(crew.length > 0, el => el.child(this.crewBadge(w.id, crew, t))),
-      );
+      ), w.id, w.machine ?? null, () => run("space.select", { id: w.id }));
   }
 
   compact({ w, i }, t) {
