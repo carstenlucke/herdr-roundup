@@ -1,11 +1,13 @@
-// Workspace spaces: stable colored avatars, worktrees under their checkout,
-// grouped by machine when more than one is known. After a space's name, the repo
-// its first terminal is in now, only where unusual: branch, ahead/behind. Agent state lives in the agents list, not here. Click to
-// switch, right-click for its menu, drag to reorder.
+// Workspace spaces, in Herdr Roundup's quiet look: a tinted initial, the name, and
+// under it where its first terminal is now (repo · branch, ahead/behind, uncommitted
+// changes). A repo with worktrees sits on a card with them; spaces are grouped by
+// machine when more than one is known. On the right, how many agents run in it,
+// colored only when one needs you (blocked, done) or works. Click to switch,
+// right-click for its menu, drag to reorder.
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout } from "herdr";
+import { spaces, machines, panes, agents, run, openOverlay, exec, hc, theme, settings, shared, setShared, watchFolder, window, layout } from "herdr";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -25,16 +27,21 @@ function place(s, ps) {
   const tabs = new Set((s.tabs ?? []).map((c) => c.id));
   return ps.find((p) => tabs.has(p.tab) && p.cwd)?.cwd || s.folder;
 }
-const rowHeight = ({ tree }) => (tree ? 28 : 30);
+// A row with git under its name is two lines high.
+const ROW = 32;
+const ROW_TWO = 44;
 const where = (s, ps) => JSON.stringify([s.machine ?? null, place(s, ps)]);
 const base = (path) => path.replace(/\/+$/, "").split("/").pop();
 // Changes made outside Herdr (an editor's save, a commit in another app): looked
 // for this often, in repos the list shows, while the window is in front.
 const FALLBACK = 60000;
 
-// What a stored color name looks like on an avatar (the same in every mod
-// that draws space avatars): one strong color per hue, light and dark alike.
-const MARK = { ansi6: "#22a99a", ansi3: "#e3814f", ansi4: "#5b8def", ansi5: "#8b7cf6", ansi2: "#3fae6a", ansi1: "#d9649a" };
+// A color with some transparency: the theme's own color under a tinted avatar or badge.
+const alpha = (c, a) => (/^#[0-9a-f]{6}$/i.test(c ?? "") ? c + a : c);
+
+// Agents by urgency: the badge takes the color of the most urgent one.
+const RANK = { blocked: 3, done: 2, working: 1, idle: 0 };
+const rank = (status) => RANK[status] ?? 0;
 
 // A space speaks up only when something in it needs you.
 export function glyph(status) {
@@ -213,9 +220,11 @@ export default class Spaces extends View {
       const common = await exec("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], { cwd, on });
       const repo = common.stdout.trim();
       const name = repo.endsWith("/.git") ? base(repo.slice(0, -5)) : base(repo).replace(/\.git$/, "");
-      const info = { name, branch: null, ahead: 0, behind: 0, repo: JSON.stringify([on, repo]), linked: repo !== `${top.stdout.trim()}/.git` };
+      const info = { name, branch: null, ahead: 0, behind: 0, dirty: 0, repo: JSON.stringify([on, repo]), linked: repo !== `${top.stdout.trim()}/.git` };
       for (const line of r.stdout.split("\n")) {
-        if (line.startsWith("# branch.head ")) info.branch = line.slice(14);
+        // Changed, renamed, conflicted and untracked files: one line each.
+        if (/^[12u?] /.test(line)) info.dirty++;
+        else if (line.startsWith("# branch.head ")) info.branch = line.slice(14);
         else if (line.startsWith("# branch.ab ")) {
           const [a, b] = line.slice(12).split(" ");
           info.ahead = Math.abs(parseInt(a, 10)) || 0;
@@ -298,7 +307,21 @@ export default class Spaces extends View {
   // The rows, under a header per machine once one isn't this computer.
   grouped(t, collapsed) {
     const rows = this.ordered();
-    const draw = (r) => (collapsed ? this.compact(r, t) : this.row(r, t));
+    const crew = {}; // space -> its agents' statuses
+    for (const a of agents()) (crew[a.space] ??= []).push(a.status);
+    const one = (r) => (collapsed ? this.compact(r, t) : this.row(r, t, crew[r.w.id] ?? []));
+    // A repo and its worktrees: one card, a little apart from the rest.
+    const draw = (list) => {
+      const groups = [];
+      for (const r of list) {
+        if (r.tree && groups.length) groups[groups.length - 1].push(r);
+        else groups.push([r]);
+      }
+      return groups.map((g) => (g.length < 2 || collapsed ? g.map(one) : [
+        v_flex().id(`repo-${g[0].w.id}`).flex_none().my(6).p(3).gap(2).rounded(10).border_1().border_color(t.border)
+          .children(g.map(one)),
+      ])).flat();
+    };
     const remote = [...new Set([...rows.map(r => r.w.machine).filter(Boolean), ...this.machines.map(m => m.name), ...Object.keys(this.reconnecting)])].sort();
     const loading = m => {
       const layout = machines().find(k => k.name === m)?.layout;
@@ -306,7 +329,7 @@ export default class Spaces extends View {
         || spaces().some(s => (s.machine ?? null) === m && !this.shown.has(s.id));
     };
     const loadingRow = m => div().id(`machine-loading-${m ?? "local"}`).h(28).flex_none().px(8).text_size(12).text_color(t.dim).child(collapsed ? "…" : "Loading…");
-    if (!remote.length) return loading(null) && !rows.length ? [loadingRow(null)] : rows.map(draw);
+    if (!remote.length) return loading(null) && !rows.length ? [loadingRow(null)] : draw(rows);
     const machineNames = [null, ...remote];
     return machineNames.flatMap((m) => {
       const mine = rows.filter((r) => (r.w.machine ?? null) === m);
@@ -341,43 +364,75 @@ export default class Spaces extends View {
         .on_click(() => run("space.new", { machine: m ?? "" }))
         .child(svg("mods/workspace-chrome/plus.svg").size(12)).when(!collapsed, el => el.child("New space there"));
       if (!collapsed && rebuilt) return [head];
-      return [head, ...(folded ? [] : mine.length ? mine.map(draw) : [loading(m) ? loadingRow(m) : empty])];
+      return [head, ...(folded ? [] : mine.length ? draw(mine) : [loading(m) ? loadingRow(m) : empty])];
     });
   }
 
-  // Only what's unusual, after the name: "herdr \u00b7 spike \u21912 \u21931". The repo or
-  // branch goes when the name already says it (a worktree is named after its branch),
-  // and master/main go: nearly every space is on one.
-  gitTail(g, tree, name, t) {
+  // Under the name: "repo · branch ↑2 ↓1 ±3". The repo goes when the name already
+  // says it (and in a worktree, whose card names it); the branch when the space is
+  // named after it (a worktree is). Null: nothing to show.
+  gitLine(g, tree, name, t, id) {
     const raw = g.branch ?? "detached";
     const same = (a) => a.toLowerCase() === name.toLowerCase();
-    const branch = same(raw) || raw === "master" || raw === "main" ? "" : raw;
+    const branch = same(raw) ? "" : raw;
     const repo = tree || same(g.name) ? "" : g.name;
     const where = [repo, branch].filter(Boolean).join(" \u00b7 ");
+    if (!where && !g.ahead && !g.behind && !g.dirty) return null;
     return h_flex()
-      .flex_1()
       .min_w(0)
       .gap(5)
-      .justify_end()
       .items_center()
       .text_size(11.5)
       .text_color(t.dim)
-      .when(Boolean(where), (el) => el.child(div().min_w(0).truncate().child(where)))
-      .when(g.ahead > 0, (el) => el.child(div().flex_none().text_color(t.ansi2).child(`\u2191${g.ahead}`)))
-      .when(g.behind > 0, (el) => el.child(div().flex_none().text_color(t.ansi1).child(`\u2193${g.behind}`)));
+      .when(Boolean(where), (el) => el
+        .child(svg("mods/workspace-chrome/branch.svg").size(11).flex_none())
+        .child(div().min_w(0).truncate().child(where)))
+      .when(g.ahead > 0, (el) => el.child(div().flex_none().text_color(t.muted).child(`\u2191${g.ahead}`)))
+      .when(g.behind > 0, (el) => el.child(div().flex_none().text_color(t.muted).child(`\u2193${g.behind}`)))
+      .when(g.dirty > 0, (el) => el.child(div().id(`dirty-${id}`).flex_none().tooltip(`${g.dirty} uncommitted change${g.dirty === 1 ? "" : "s"}`).child(`\u00b1${g.dirty}`)));
   }
 
-  row({ w, i, g, tree }, t) {
+  // How many agents run in the space. Gray while they all rest; else the color
+  // of the most urgent one (blocked > done > working).
+  crewBadge(id, statuses, t) {
+    if (!statuses.length) return null;
+    const top = statuses.reduce((a, b) => (rank(b) > rank(a) ? b : a));
+    const calm = rank(top) === 0;
+    const color = calm ? t.dim : tone(t, top);
+    const counts = {};
+    for (const s of statuses) counts[s] = (counts[s] ?? 0) + 1;
+    const n = statuses.length;
+    const tip = `${n} agent${n === 1 ? "" : "s"}: ` + Object.keys(counts).sort((a, b) => rank(b) - rank(a)).map((s) => `${counts[s]} ${s}`).join(", ");
+    return h_flex()
+      .id(`crew-${id}`)
+      .flex_none()
+      .h(18)
+      .px(6)
+      .gap(4)
+      .items_center()
+      .rounded(9)
+      .text_size(11)
+      .font_semibold()
+      .bg(calm ? t.selected : alpha(tone(t, top), "26"))
+      .text_color(color)
+      .tooltip(tip)
+      .child(svg("mods/roundup-spaces/bot.svg").size(11))
+      .child(String(n));
+  }
+
+  row({ w, i, g, tree }, t, crew) {
     const on = w.active;
     const fromIndex = this.pressed === null ? -1 : spaces().findIndex(s => s.id === this.pressed);
     const colors = shared("space.colors") ?? {};
     const color = colors[w.id] ?? "ansi6";
-    const fill = color.startsWith("#") ? color : (MARK[color] ?? t[color]);
+    const fill = color.startsWith("#") ? color : (t[color] ?? t.accent);
+    const line = g ? this.gitLine(g, tree, w.name, t, w.id) : null;
     return v_flex()
       .relative()
       .id(`space-${w.id}`)
-      .px(8)
-      .h(rowHeight({ tree }))
+      .pl(tree ? 12 : 8)
+      .pr(8)
+      .h(line ? ROW_TWO : ROW)
       .flex_none()
       .justify_center()
       .rounded(8)
@@ -417,10 +472,14 @@ export default class Spaces extends View {
         h_flex()
           .gap(9)
           .items_center()
-          .when(Boolean(tree), el => el.pl(22).child(svg("mods/workspace-chrome/branch.svg").size(13).text_color(t.dim)))
-          .when(!tree, el => el.child(h_flex().size(18).flex_none().rounded(5).bg(fill).items_center().justify_center().text_size(10.5).font_bold().text_color("#ffffff").child([...w.name][0]?.toUpperCase() ?? "?")))
-          .child(div().flex_shrink(0).max_w(150).truncate().text_color(t.foreground).child(w.name))
-          .child(g ? this.gitTail(g, tree, w.name, t) : div().flex_1()),
+          .when(Boolean(tree), el => el.child(h_flex().size(22).flex_none().items_center().justify_center().text_color(t.dim)
+            .child(svg("mods/workspace-chrome/branch.svg").size(13))))
+          .when(!tree, el => el.child(h_flex().size(22).flex_none().rounded(6).bg(alpha(fill, settings().dark ? "2e" : "24"))
+            .items_center().justify_center().text_size(11.5).font_bold().text_color(fill).child([...w.name][0]?.toUpperCase() ?? "?")))
+          .child(v_flex().flex_1().min_w(0).gap(2)
+            .child(div().min_w(0).truncate().font_medium().text_color(t.foreground).child(w.name))
+            .when(Boolean(line), el => el.child(line)))
+          .when(crew.length > 0, el => el.child(this.crewBadge(w.id, crew, t))),
       );
   }
 
@@ -458,7 +517,7 @@ export default class Spaces extends View {
         .when(!collapsed, el => el.child("Spaces"))
         .child(div().id("space-new").size(26).flex_none().flex().items_center().justify_center().rounded(6).hover(s => s.bg(t.hover).text_color(t.foreground))
           .on_click(() => run("space.new")).child(svg("mods/workspace-chrome/plus.svg").size(14))))
-      .child(v_flex().flex_1().min_h(0).px(8).pb(14).overflow_y_scrollbar().mode("always")
+      .child(v_flex().flex_1().min_h(0).px(8).pb(14).gap(2).overflow_y_scrollbar().mode("always")
         .on_mouse_up("left", (_e, cx) => { this.pressed = null; cx.notify(); })
         .children(this.grouped(t, collapsed)));
   }
