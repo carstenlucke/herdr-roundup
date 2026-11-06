@@ -2,7 +2,7 @@
 
 A layout for [Herdr App](https://herdr.dev), started from Herdr's default layout (`main`, Herdr 0.1.13).
 
-The layout is called `Herdr-Roundup`: Herdr's Settings show a layout by its file name, which can't hold a space. Its mods keep the short `roundup-` prefix.
+The layout is called `Herdr-Roundup`: Herdr's Settings show a layout by its file name, and a name with a space can't be switched to. Its mods keep the short `roundup-` prefix.
 
 ## Contents
 
