@@ -21,12 +21,16 @@ const ROW = 26;
 const FIND_LIMIT = 200;
 // A search index older than this is read again on the next search, whatever the watch said.
 const INDEX_AGE = 300000;
+// After a file the index knows changed (it may be gone), the index is read again once it is
+// this old: at most one rebuild per 30 s while files keep changing.
+const DIRTY_AGE = 30000;
 const LANG = { ts: "js", tsx: "js", mts: "js", cts: "js", jsx: "js", mjs: "js", cjs: "js", toml: "yaml", yml: "yaml", jsonc: "json", svelte: "html", vue: "html", htm: "html", sh: "bash", zsh: "bash" };
 const VIEWS = [["all", "All"], ["changed", "Changed"]];
 // What search in All reads: git's files (without ignored ones; the disk outside a repo) or
 // the disk (everything but the pruned folders).
 const SOURCES = ["git", "disk"];
-// Shared: what the context menu (a popup copy of this mod) asks the panel to do.
+// Shared: what the context menu (a popup copy of this mod) asks the panel to do. `from` names
+// the panel copy that opened it: every shown copy reads the request, only that one runs it.
 const REQUEST = `${NAME}.request`;
 
 const baseOf = (rel) => rel.slice(rel.lastIndexOf("/") + 1);
@@ -86,6 +90,7 @@ export default class Files extends View {
     this.highlights = new Map();
     this.width = 368; this.query = ""; this.hits = null; this.searchSeq = 0; this.shown = [];
     this.seenRequest = shared(REQUEST)?.n ?? 0;
+    this.uid = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
     this.input = InputState.new({ placeholder: "Search files" });
     this.input.on("change", (_e, cx) => this.search(this.input.value(), cx));
     this.input.on("submit", (_e, cx) => {
@@ -97,7 +102,11 @@ export default class Files extends View {
     this.input.on("focus", (_e, cx) => { this.typing = true; cx.notify(); });
     this.input.on("blur", (_e, cx) => { this.typing = false; cx.notify(); });
     this.reset(null, null);
-    cx.timer.every(10000, (cx) => this.refresh(cx));
+    cx.timer.every(10000, (cx) => {
+      this.refresh(cx);
+      // A known file changed while no other change came after it: the hits may still list it.
+      if (this.index?.dirty && this.outdated(this.index)) this.searchAgain(cx);
+    });
     // Commands (keys.json: "roundup-files.<command>"). "focus" also comes from Herdr: pane.go
     // moved onto this panel (mod.json "focusable"), or a popup over it closed.
     cx.spawn(async (cx) => {
@@ -219,9 +228,10 @@ export default class Files extends View {
   }
 
   // A path the index doesn't know, a folder it knows, or the root (too many changes to
-  // list) means the folder structure may have changed: the index is read again. Paths the
-  // index never holds don't count: .git and, from the disk, the pruned folders, from git,
-  // what it ignores. From git, a changed .gitignore counts.
+  // list) means the folder structure may have changed: the index is read again. A file it
+  // knows may have been deleted: the index is read again once it is DIRTY_AGE old, not on
+  // every save. Paths the index never holds don't count: .git and, from the disk, the pruned
+  // folders, from git, what it ignores. From git, a changed .gitignore counts.
   changed(paths, cx) {
     const index = this.index, fromGit = index?.from === "git";
     for (const abs of paths) {
@@ -230,10 +240,19 @@ export default class Files extends View {
       if (fromGit && baseOf(rel) === ".gitignore") { index.stale = true; continue; }
       if (rel && (fromGit ? rel.split("/").includes(".git") || this.isIgnored(rel) : pruned(this.root, rel))) continue;
       if (rel === "" || index.dirs.has(rel) || !index.known.has(rel)) index.stale = true;
+      else index.dirty = true;
     }
-    if (index?.stale && this.query.trim() && this.view === "all") this.search(this.query, cx);
+    if (index && this.outdated(index)) this.searchAgain(cx);
     this.refresh(cx);
   }
+
+  // Whether the next search reads the index again.
+  outdated(i) {
+    const age = Date.now() - i.at;
+    return i.stale || age >= INDEX_AGE || (i.dirty && age >= DIRTY_AGE);
+  }
+
+  searchAgain(cx) { if (this.query.trim() && this.view === "all") this.search(this.query, cx); }
 
   toggle(r, cx) {
     if (!r?.dir) return;
@@ -299,7 +318,7 @@ export default class Files extends View {
   // it was read from ("disk" also when git was asked for outside a repo).
   ensureIndex(ctx) {
     const i = this.index, source = this.source;
-    if (i && i.source === source && !i.stale && Date.now() - i.at < INDEX_AGE) return Promise.resolve(i);
+    if (i && i.source === source && !this.outdated(i)) return Promise.resolve(i);
     if (this.indexing?.source !== source) {
       const job = { source };
       job.promise = (async () => {
@@ -436,7 +455,7 @@ export default class Files extends View {
 
   // ── context menu ─────────────────────────────────────────────────────────────────────
   openMenu(r) {
-    const m = { root: this.root, on: this.on, rel: r.rel, abs: join(this.root, r.rel), dir: r.dir, gone: r.gone, local: !this.on };
+    const m = { from: this.uid, root: this.root, on: this.on, rel: r.rel, abs: join(this.root, r.rel), dir: r.dir, gone: r.gone, local: !this.on };
     const groups = menuItems(m), items = groups.reduce((n, g) => n + g.length, 0);
     openOverlay({ mod: NAME, kind: "popup", width: 228, height: items * 28 + (groups.length - 1) * 9 + 10, props: { menu: m } });
   }
@@ -461,7 +480,7 @@ export default class Files extends View {
         close();
         if (id === "copy-rel") copy(cx, m.rel);
         else if (id === "copy-abs") copy(cx, m.abs);
-        else setShared(REQUEST, { n: Date.now(), action: id, root: m.root, on: m.on, rel: m.rel });
+        else setShared(REQUEST, { n: Date.now(), action: id, from: m.from, root: m.root, on: m.on, rel: m.rel });
       }).child(label);
     const groups = menuItems(m);
     return v_flex().id("rf-menu").size_full().p(5).bg(t.popover ?? t.surface).text_color(t.foreground)
@@ -623,7 +642,8 @@ export default class Files extends View {
     const req = shared(REQUEST);
     if (req && req.n !== this.seenRequest) {
       this.seenRequest = req.n;
-      if (req.root === this.root && (req.on ?? null) === (this.on ?? null)) this.request(req, cx);
+      // Only the copy that opened the menu, and only while it still shows the same folder.
+      if (req.from === this.uid && req.root === this.root && (req.on ?? null) === (this.on ?? null)) this.request(req, cx);
     }
     const t = theme();
     const root = v_flex().id(NAME).size_full().min_h(0).rounded(10).overflow_hidden().bg(t.background).border_1().border_color(t.border).text_color(t.foreground).text_size(13)

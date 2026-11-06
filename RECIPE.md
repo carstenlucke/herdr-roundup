@@ -214,7 +214,9 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
 
   The index is read on the first search and again when a new path appears,
   a folder changes, a `.gitignore` changes (git's files) or it is 5 minutes
-  old. In Changed, the search filters git's paths. `×` or Esc clears it.
+  old. When a file it knows changes (it may be deleted), it is read again
+  once it is 30 seconds old, also without typing: at most one read per 30 s
+  while an agent keeps writing. In Changed, the search filters git's paths. `×` or Esc clears it.
 - **Click** a folder to open or close it, a file to preview it. **Keys**,
   once the panel has the keyboard (a click on it, or `pane.go`): ↑ ↓ select,
   PgUp PgDn Home End jump, → opens a folder or steps into an open one, ←
@@ -377,8 +379,11 @@ and `on_item_secondary_click`) with a `Scrollbar` and a
 Previews use `readTextFile` and a read-only `EditorState` + `Editor`. The
 menu is `openOverlay({mod: "roundup-files", kind: "popup", width: 228,
 props: {menu}})`, 28px per item and 9px per divider; its Preview, Open,
-Reveal and Send write shared `roundup-files.request` (`{n, action, root,
-on, rel}`), which the panel runs (see "A popup's tasks end with it").
+Reveal and Send write shared `roundup-files.request` (`{n, action, from,
+root, on, rel}`), which the panel runs (see "A popup's tasks end with it").
+`from` is a random id of the panel copy that opened the menu: every shown
+copy reads the request, and only that copy runs it, so two windows on the
+same folder don't open or send twice.
 Copy uses `cx.write_to_clipboard` and `notify`. Send uses `focused()`,
 `panes()`, `agents()`, `pane.focus {terminal}` and `terminal.paste`. Open and
 Reveal run `open` / `open -R` (PowerShell `Invoke-Item` / `explorer.exe
