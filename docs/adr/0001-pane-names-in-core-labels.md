@@ -1,4 +1,4 @@
-# 0002: A terminal pane's name is a core label
+# 0001: A terminal pane's name is a core label
 
 - **Status:** Accepted
 - **Date:** 2026-11-06
