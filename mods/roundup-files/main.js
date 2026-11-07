@@ -355,11 +355,11 @@ export default class Files extends View {
   searchAgain(cx) { if (this.query.trim() && this.view === "all") this.search(this.query, cx, true); }
 
   toggle(r, cx) {
-    if (!r?.dir) return;
+    if (!r?.dir || r.gone) return;
     if (this.hits) { this.reveal(r.rel, true, cx); return; }
-    // Changed: a folder git lists file by file folds; an untracked one opens from disk.
-    // A search there opens every folder: nothing to fold until it is cleared.
-    if (this.view === "changed" && !this.underUntracked(r.rel)) {
+    // Changed: a folder git lists file by file folds; an untracked one or a submodule opens
+    // from disk. A search there opens every folder: nothing to fold until it is cleared.
+    if (this.view === "changed" && !r.disk) {
       if (this.query.trim()) return;
       if (this.shut.has(r.rel)) this.shut.delete(r.rel); else this.shut.add(r.rel);
     } else if (this.folders.has(r.rel)) {
@@ -449,7 +449,8 @@ export default class Files extends View {
   }
 
   // ── rows ─────────────────────────────────────────────────────────────────────────────
-  // Every row: { rel, name, dir, depth, open, gone }. gone: a deleted file, not on disk.
+  // Every row: { rel, name, dir, depth, open, gone, disk }. gone: not on disk (deleted).
+  // disk: a folder that opens from disk (this.folders); in Changed, the others fold (this.shut).
   rows() {
     const out = [], q = this.query.trim().toLowerCase();
     if (this.error) return out; // the folder failed to load: only the error shows
@@ -462,7 +463,7 @@ export default class Files extends View {
   diskRows(prefix, depth, out) {
     for (const e of this.entries.get(prefix) ?? []) {
       const rel = prefix ? `${prefix}/${e.name}` : e.name, open = e.dir && this.folders.has(rel);
-      out.push({ rel, name: e.name, dir: e.dir, depth, open, gone: false });
+      out.push({ rel, name: e.name, dir: e.dir, depth, open, gone: false, disk: e.dir });
       if (open && depth < 40) this.diskRows(rel, depth + 1, out);
     }
   }
@@ -476,7 +477,7 @@ export default class Files extends View {
     const walk = (p, depth) => {
       const list = (kids.get(p) ?? []).sort((a, b) => Number(dirs.has(b)) - Number(dirs.has(a)) || compare(baseOf(a), baseOf(b)));
       for (const rel of list) {
-        out.push({ rel, name: baseOf(rel), dir: dirs.has(rel), depth, open: kids.has(rel), gone: this.git.files.get(rel) === DELETED });
+        out.push({ rel, name: baseOf(rel), dir: dirs.has(rel), depth, open: kids.has(rel), gone: this.git.gone.has(rel), disk: false });
         if (kids.has(rel)) walk(rel, depth + 1);
       }
     };
@@ -484,29 +485,52 @@ export default class Files extends View {
     return out;
   }
 
-  // Exactly the paths git status lists, as a tree: deleted files too, untracked folders
-  // as one row that opens from disk. A search filters them.
+  // Exactly the paths git status lists, as a tree: deleted files too, untracked folders and
+  // submodules as one row that opens from disk. A search filters them.
   changedRows(q) {
-    const g = this.git, out = [], kids = new Map(), dirs = new Set(g.untracked);
+    const g = this.git, out = [], kids = new Map(), dirs = new Set([...g.untracked, ...g.links]);
     const add = (rel) => { const p = dirOf(rel); if (!kids.has(p)) kids.set(p, new Set()); kids.get(p).add(rel); };
     for (const rel of g.files.keys()) {
       if (q && !rel.toLowerCase().includes(q)) continue;
       add(rel);
       for (const a of ancestors(rel)) { dirs.add(a); add(a); }
     }
+    const order = (list) => list.sort((a, b) => Number(b[1]) - Number(a[1]) || compare(baseOf(a[0]), baseOf(b[0])));
+    // A folder git lists file by file: what it lists.
     const walk = (p, depth) => {
-      const list = [...(kids.get(p) ?? [])].sort((a, b) => Number(dirs.has(b)) - Number(dirs.has(a)) || compare(baseOf(a), baseOf(b)));
-      for (const rel of list) {
-        const dir = dirs.has(rel);
-        if (g.untracked.has(rel)) {
-          const open = this.folders.has(rel);
-          out.push({ rel, name: baseOf(rel), dir: true, depth, open, gone: false });
-          if (open) this.diskRows(rel, depth + 1, out);
-        } else if (dir) {
+      for (const [rel, dir] of order([...(kids.get(p) ?? [])].map((rel) => [rel, dirs.has(rel)]))) {
+        const gone = g.gone.has(rel);
+        if (dir && !gone && (g.untracked.has(rel) || g.links.has(rel))) {
+          const open = this.folders.has(rel) || (Boolean(q) && kids.has(rel));
+          out.push({ rel, name: baseOf(rel), dir: true, depth, open, gone: false, disk: true });
+          if (open) mixed(rel, depth + 1);
+        } else if (dir && !gone) {
           const open = Boolean(q) || !this.shut.has(rel);
-          out.push({ rel, name: baseOf(rel), dir: true, depth, open, gone: false });
+          out.push({ rel, name: baseOf(rel), dir: true, depth, open, gone: false, disk: false });
           if (open) walk(rel, depth + 1);
-        } else out.push({ rel, name: baseOf(rel), dir: false, depth, open: false, gone: g.files.get(rel) === DELETED });
+        } else out.push({ rel, name: baseOf(rel), dir, depth, open: false, gone, disk: false });
+      }
+    };
+    // A folder that opens from disk: what it holds there and, with it, what git lists below it
+    // that isn't there (a file deleted next to new ones). During a search it opens for what
+    // the search found in it, and shows what is on disk once opened.
+    const mixed = (p, depth) => {
+      const disk = this.folders.has(p) ? this.entries.get(p) ?? [] : [], here = new Map();
+      for (const e of disk) here.set(`${p}/${e.name}`, e.dir);
+      const list = new Map(here);
+      for (const rel of kids.get(p) ?? []) if (!list.has(rel)) list.set(rel, dirs.has(rel));
+      for (const [rel, dir] of order([...list])) {
+        const name = baseOf(rel), onDisk = here.has(rel), gone = !onDisk && g.gone.has(rel);
+        if (dir && onDisk) {
+          const open = this.folders.has(rel) || (Boolean(q) && kids.has(rel));
+          out.push({ rel, name, dir, depth, open, gone, disk: true });
+          if (open && depth < 40) mixed(rel, depth + 1);
+        } else if (dir && !gone) {
+          // Only in git's list (its files deleted): it folds, as in walk.
+          const open = Boolean(q) || !this.shut.has(rel);
+          out.push({ rel, name, dir, depth, open, gone, disk: false });
+          if (open && depth < 40) mixed(rel, depth + 1);
+        } else out.push({ rel, name, dir, depth, open: false, gone, disk: false });
       }
     };
     walk("", 0);
@@ -553,12 +577,12 @@ export default class Files extends View {
     if (!inRender) cx.notify();
   }
 
-  // Enter, a click: a file previews (unless it is gone), a folder opens or closes.
+  // Enter, a click: a file previews, a folder opens or closes; neither when it is gone.
   activate(r, cx) {
     if (!r) return;
     this.cursor = r.rel;
-    if (r.dir) this.toggle(r, cx);
-    else if (r.gone) notify({ title: "Deleted file", body: `${r.rel} is no longer on disk`, level: "info", timeout: 2500 });
+    if (r.gone) notify({ title: r.dir ? "Deleted folder" : "Deleted file", body: `${r.rel} is no longer on disk`, level: "info", timeout: 2500 });
+    else if (r.dir) this.toggle(r, cx);
     else this.show(r.rel, cx);
   }
 

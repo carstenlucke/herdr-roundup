@@ -192,8 +192,12 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   "file10"), dotfiles included, `.git` left out. Folders load when opened.
   **Changed** lists exactly the paths `git status` lists, as a tree with
   every folder open: deleted files too (struck through, faded icon), and an
-  untracked folder as one row that opens from disk. A tracked folder there
-  folds and unfolds without reading the disk. When the shown folder is
+  untracked folder or a submodule as one row that opens from disk. Such a
+  folder also shows what git lists below it and isn't on disk (a file
+  deleted next to new ones), and a search opens it for what it found there.
+  A tracked folder there folds and unfolds without reading the disk.
+  Struck through means not on disk, not deleted in git: after
+  `git rm --cached` the file is red but still previews. When the shown folder is
   itself new to git, Changed says so and every row in All shows `?`. The
   view stays after a restart.
 - **Search** (type in the field, or `/`): in All it searches every path
@@ -480,6 +484,11 @@ global `tab.close` and `pane.close`.
   [ahead 1]` follows the user's language (`[voraus 1]` in German); v2's
   `# branch.ab +1 -0` doesn't. Its entries mark an unchanged side with `.`
   where v1 has a space.
+- **A deletion in git's index isn't a missing file:** after `git rm --cached`,
+  status says `D.` with working-tree mode `000000`, as for a file really
+  gone, and lists the file as new (`?`) as well. Only below a folder git
+  lists as a whole, or an ignored one, does it not: `roundup-files` asks the
+  disk for those. A submodule is one path with `S` in `<sub>`, not a file.
 - **`roundup-files` watches its whole folder:** on macOS that includes
   `.git` and ignored folders, so a build in `node_modules` refreshes it
   often. A refresh while one runs only marks another one due, so they never

@@ -23,6 +23,9 @@ export function ancestors(rel) {
   return out;
 }
 const stronger = (a, b) => (!a ? b : (RANK[b] ?? 0) > (RANK[a] ?? 0) ? b : a);
+const within = (set, rel) => [rel, ...ancestors(rel)].some((d) => set.has(d));
+// At most this many unsure paths are looked up on disk per read; the rest count as gone.
+const UNSURE = 500;
 
 // repo: inside a work tree; known: git has answered (or there is none).
 export const emptyGit = (known = false) => ({
@@ -30,6 +33,9 @@ export const emptyGit = (known = false) => ({
   status: new Map(), // rel (file or folder) → letter: ? A M R T D U
   files: new Map(), // rel → change, for every path git status lists (files and untracked folders)
   untracked: new Set(), // untracked folders git lists as a whole ("dir/")
+  links: new Set(), // submodules: folders, though git lists them as one path
+  gone: new Set(), // listed paths not in the working tree (a deletion in the index alone isn't one)
+  unsure: new Set(), // gone ones git can't vouch for: below an untracked or ignored folder
   rootUntracked: false, // the shown folder is itself one of them
   ignored: new Set(), // ignored files and folders (at most IGNORED)
   diff: new Map(), // rel (file or folder, "" the whole) → [added, deleted] lines against HEAD
@@ -53,24 +59,31 @@ function parseHeader(rec, git) {
 //   1 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <path>          (changed; "." in XY: unchanged)
 //   u <XY> <sub> <m1> <m2> <m3> <mW> <h1> <h2> <h3> <path> (unmerged)
 //   ? <path> (untracked; a folder ends in /)   ! <path> (ignored)
+// <sub> starts with S for a submodule. <mW>, the working tree's mode, is 000000 where the path
+// isn't there for git: also after `git rm --cached`, but then git lists the file as new too.
 export function parseStatus(stdout, git) {
   const map = (p) => (p.startsWith(git.prefix) ? p.slice(git.prefix.length).replace(/\/$/, "") : null);
   const up = (rel, fn) => { for (const d of [...ancestors(rel), ""]) fn(d); };
+  const absent = new Set(), present = new Set();
   for (const rec of stdout.split("\0")) {
     if (rec.startsWith("# ")) { parseHeader(rec, git); continue; }
     const kind = rec[0];
-    let xy, raw;
+    let xy, raw, sub = "", worktree = "";
     if (kind === "?" || kind === "!") { xy = kind + kind; raw = rec.slice(2); }
     else if (kind === "1" || kind === "u") {
       const fields = rec.split(" "), n = kind === "1" ? 8 : 10;
       if (fields.length <= n) continue;
       xy = fields[1].replace(/\./g, " "); raw = fields.slice(n).join(" ");
+      sub = fields[2]; worktree = fields[kind === "1" ? 5 : 6];
     } else continue;
     const rel = map(raw);
     // The shown folder itself untracked ("? sub/" run from sub): everything below is new.
     if (rel === "" && xy === "??") { git.rootUntracked = true; git.records++; git.counts.set("", [1, 0, 0]); continue; }
     if (!rel) continue;
     if (xy === "!!") { if (git.ignored.size < IGNORED) git.ignored.add(rel); continue; }
+    if (xy === "??") present.add(rel);
+    if (sub.startsWith("S")) git.links.add(rel);
+    if (worktree === "000000") absent.add(rel);
     git.records++;
     const conflict = kind === "u" || /U/.test(xy) || xy === "AA" || xy === "DD";
     const change = conflict ? MODIFIED : xy === "??" || (xy.includes("A") && !xy.includes("D")) ? NEW : xy.includes("D") ? DELETED : MODIFIED;
@@ -80,6 +93,13 @@ export function parseStatus(stdout, git) {
     up(rel, (d) => { const c = git.counts.get(d) ?? [0, 0, 0]; c[change]++; git.counts.set(d, c); });
     git.status.set(rel, stronger(git.status.get(rel), letter));
     up(rel, (d) => git.status.set(d, stronger(git.status.get(d), letter)));
+  }
+  // Git lists a file it doesn't track and that is there as new, unless it lists the folder
+  // above as a whole or leaves it out as ignored: then only the disk can tell.
+  for (const rel of absent) {
+    if (present.has(rel)) continue;
+    git.gone.add(rel);
+    if (git.rootUntracked || within(git.untracked, rel) || within(git.ignored, rel)) git.unsure.add(rel);
   }
 }
 
@@ -107,6 +127,10 @@ export async function readGit(root, on) {
     g(["diff", "HEAD", "--numstat", "-z", "--no-renames", "--", "."]).catch(() => null),
   ]);
   if (status?.code === 0) parseStatus(status.stdout, git);
+  if (git.unsure.size) {
+    const found = await kinds(root, [...git.unsure].slice(0, UNSURE), on).catch(() => new Map());
+    for (const rel of found.keys()) git.gone.delete(rel);
+  }
   if (numstat?.code === 0) parseNumstat(numstat.stdout, git);
   return git;
 }
