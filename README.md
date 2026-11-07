@@ -37,7 +37,7 @@ scripts/sync.sh
 herdr-app do layout.switch '{"name":"Herdr-Roundup"}'
 ```
 
-`sync.sh` copies the layout, the `roundup-*` mods and the themes, and replaces only the `layout:Herdr-Roundup` section of your `keys.json`. Sizes, hidden columns and theme picks you change by clicking stay in `layouts/.state/`.
+`sync.sh` copies the layout, the `roundup-*` mods and the themes (copies, not symlinks: Herdr App doesn't load a mod's own SVGs through a symlink), and replaces only the `layout:Herdr-Roundup` section of your `keys.json`. Sizes, hidden columns and theme picks you change by clicking stay in `layouts/.state/`.
 
 ## Updates
 
