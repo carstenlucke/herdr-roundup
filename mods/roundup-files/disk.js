@@ -76,10 +76,11 @@ export async function buildIndex(root, on) {
   const depth = indexDepth(root);
   const dirs = new Set(), all = [];
   const prune = [...PRUNE, ...(atHome ? HOME_PRUNE : [])];
-  // Matched against the part below root, so a root inside a pruned name still indexes.
+  // Matched against the part below root, so a root inside a pruned name still indexes. Only
+  // folders are pruned: a file named `build` or `vendor` is indexed.
   const windowsIndex = async () => {
     const names = prune.map((n) => n.replace(/\./g, "\\.")).join("|");
-    const r = await exec("powershell", ["-NoProfile", "-Command", `[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); & { param($p) $b = (Resolve-Path -LiteralPath $p).ProviderPath.TrimEnd('\\'); Get-ChildItem -LiteralPath $b -Recurse -Force -Depth ${depth} -ErrorAction SilentlyContinue | Where-Object { $_.FullName.Substring($b.Length) -notmatch '[\\\\/](${names})([\\\\/]|$)' } | Select-Object -First ${INDEX_PATHS + 1} | ForEach-Object { $(if ($_.PSIsContainer) {'d'} else {'f'}) + ($_.FullName.Substring($b.Length + 1) -replace '\\\\', '/') } } ${psQuote(root)}`], { on });
+    const r = await exec("powershell", ["-NoProfile", "-Command", `[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); & { param($p) $b = (Resolve-Path -LiteralPath $p).ProviderPath.TrimEnd('\\'); Get-ChildItem -LiteralPath $b -Recurse -Force -Depth ${depth} -ErrorAction SilentlyContinue | Where-Object { $r = $_.FullName.Substring($b.Length); $r -notmatch '[\\\\/](${names})[\\\\/]' -and -not ($_.PSIsContainer -and $r -match '[\\\\/](${names})$') } | Select-Object -First ${INDEX_PATHS + 1} | ForEach-Object { $(if ($_.PSIsContainer) {'d'} else {'f'}) + ($_.FullName.Substring($b.Length + 1) -replace '\\\\', '/') } } ${psQuote(root)}`], { on });
     // Unreadable subfolders end PowerShell with 1 too; only a run that read nothing failed.
     if (r.code !== 0 && !r.stdout.trim()) throw new Error("Cannot open this folder");
     for (const line of r.stdout.split(/\r?\n/)) if (line.length > 1) { const rel = line.slice(1); all.push(rel); if (line[0] === "d") dirs.add(rel); }
@@ -87,7 +88,7 @@ export async function buildIndex(root, on) {
   };
   if (windows(on)) return windowsIndex();
   const names = prune.map((n) => `-name '${n}'`).join(" -o ");
-  const script = `cd "$1" || exit 3; find . -maxdepth ${depth} \\( ${names} \\) -prune -o -type d -print 2>/dev/null | head -n ${INDEX_DIRS + 1}; echo //; find . -maxdepth ${depth} \\( ${names} \\) -prune -o ! -type d -print 2>/dev/null | head -n ${INDEX_PATHS + 1}`;
+  const script = `cd "$1" || exit 3; find . -maxdepth ${depth} -type d \\( ${names} \\) -prune -o -type d -print 2>/dev/null | head -n ${INDEX_DIRS + 1}; echo //; find . -maxdepth ${depth} -type d \\( ${names} \\) -prune -o ! -type d -print 2>/dev/null | head -n ${INDEX_PATHS + 1}`;
   let r;
   try { r = await exec("sh", ["-c", script, "roundup-files", root], { on }); }
   catch (e) { if (noSh(e, on)) return windowsIndex(); throw e; }

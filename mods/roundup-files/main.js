@@ -28,6 +28,8 @@ const DIRTY_AGE = 30000;
 const CHECK_PATHS = 100;
 const LANG = { ts: "js", tsx: "js", mts: "js", cts: "js", jsx: "js", mjs: "js", cjs: "js", toml: "yaml", yml: "yaml", jsonc: "json", svelte: "html", vue: "html", htm: "html", sh: "bash", zsh: "bash" };
 const VIEWS = [["all", "All"], ["changed", "Changed"]];
+// The menu's height: 28 per entry, 9 per divider, 5 of padding above and below.
+const menuHeight = (groups) => groups.reduce((n, g) => n + g.length, 0) * 28 + (groups.length - 1) * 9 + 10;
 // What search in All reads: git's files (without ignored ones; the disk outside a repo) or
 // the disk (everything but the pruned folders).
 const SOURCES = ["git", "disk"];
@@ -195,7 +197,7 @@ export default class Files extends View {
         const limited = more.some(Boolean);
         this.git = git; this.limited = limited; this.error = null;
         this.watch(cx);
-      } catch (e) { if (this.current(ctx)) { this.error = message(e); this.git = emptyGit(true); } }
+      } catch (e) { if (this.current(ctx)) { this.error = message(e); this.git = emptyGit(true); this.entries = new Map(); } }
       finally {
         if (this.current(ctx)) {
           this.loading = false;
@@ -250,7 +252,8 @@ export default class Files extends View {
       if (this.unindexed(rel, fromGit)) continue;
       if (rel === "" || index.dirs.has(rel)) index.stale = true;
       else if (index.added.has(rel) || (!index.known.has(rel) && this.placeable(index, rel))) check.push(rel);
-      else if (!index.known.has(rel)) index.stale = true;
+      // A capped index can't place it, and reading it again would be cut short as well.
+      else if (!index.known.has(rel)) { if (index.full) index.stale = true; else index.dirty = true; }
       else index.dirty = true;
     }
     if (index && !index.stale && check.length) {
@@ -262,12 +265,12 @@ export default class Files extends View {
   }
 
   // Whether recheck can take rel into the index: not into one a limit cut short; from the
-  // disk, only into a folder the index holds, within its depth.
+  // disk, only into a folder the index holds (unindexed already left out what is too deep).
   placeable(index, rel) {
     if (!index.full) return false;
     if (index.from === "git") return true;
     const dir = dirOf(rel);
-    return (!dir || index.dirs.has(dir)) && rel.split("/").length <= indexDepth(this.root);
+    return !dir || index.dirs.has(dir);
   }
 
   // Reads what rels are now and puts that into the index: a new file goes in (from git, with
@@ -329,9 +332,10 @@ export default class Files extends View {
   }
 
   // Whether an index never holds rel: .git and, from git, what it ignores; from the disk, the
-  // pruned folders.
+  // pruned folders and what lies deeper than it reads.
   unindexed(rel, fromGit) {
-    return Boolean(rel) && (fromGit ? rel.split("/").includes(".git") || this.isIgnored(rel) : pruned(this.root, rel));
+    return Boolean(rel) && (fromGit ? rel.split("/").includes(".git") || this.isIgnored(rel)
+      : pruned(this.root, rel) || rel.split("/").length > indexDepth(this.root));
   }
 
   // Whether the next search reads the index again.
@@ -362,9 +366,9 @@ export default class Files extends View {
     const ctx = this.ctx, todo = [];
     for (const p of paths) for (const d of parents ? [...ancestors(p).reverse(), p] : [p]) if (d && !this.folders.has(d)) { this.folders.add(d); todo.push(d); }
     cx.spawn(async (cx) => {
-      for (const d of todo) {
-        if (!this.current(ctx)) return;
-        if (this.entries.has(d) || this.pending.has(d)) continue;
+      // All at once: each is its own read (on another machine, its own round trip).
+      await Promise.all(todo.map(async (d) => {
+        if (!this.current(ctx) || this.entries.has(d) || this.pending.has(d)) return;
         this.pending.add(d);
         try { if (await this.loadFolder(d, ctx)) this.limited = true; }
         catch (e) {
@@ -373,7 +377,7 @@ export default class Files extends View {
           notify({ title: "Cannot open this folder", body: `${d}: ${message(e)}`, level: "warning", timeout: 3000 });
         }
         finally { if (this.current(ctx)) this.pending.delete(d); }
-      }
+      }));
       if (this.current(ctx)) then?.();
       cx.notify();
     });
@@ -402,8 +406,9 @@ export default class Files extends View {
         const matches = index.all.filter((rel) => rel.toLowerCase().includes(q));
         const named = matches.filter((rel) => baseOf(rel).toLowerCase().includes(q));
         this.hits = [...new Set([...named, ...matches])].slice(0, FIND_LIMIT);
-        const before = this.cursor;
-        if (!this.hits.includes(this.cursor)) this.cursor = this.hits[0] ?? "";
+        // The cursor stays on a hit or on a folder above one: both are rows of the hit tree.
+        const before = this.cursor, kept = Boolean(before) && this.hits.some((h) => h === before || h.startsWith(`${before}/`));
+        if (!kept) this.cursor = this.hits[0] ?? "";
         if (!quiet || this.cursor !== before) this.scrollTo = this.cursor;
       } catch (e) { if (seq === this.searchSeq && this.current(ctx)) { this.hits = []; this.searchError = message(e); } }
       finally { if (seq === this.searchSeq) this.searching = false; cx.notify(); }
@@ -556,8 +561,8 @@ export default class Files extends View {
 
   // A right-click: the menu as a popup of this mod, at the pointer.
   openMenu(r) {
-    const m = this.menuOf(r), groups = menuItems(m), items = groups.reduce((n, g) => n + g.length, 0);
-    openOverlay({ mod: NAME, kind: "popup", width: 228, height: items * 28 + (groups.length - 1) * 9 + 10, props: { menu: m } });
+    const m = this.menuOf(r);
+    openOverlay({ mod: NAME, kind: "popup", width: 228, height: menuHeight(menuItems(m)), props: { menu: m } });
   }
 
   // The Menu key, Shift-F10, the `menu` command: the panel draws the menu itself, pinned below
@@ -599,7 +604,7 @@ export default class Files extends View {
     const offset = Math.max(0, Math.min(k.row * ROW + ROW / 2 - h / 2, n * ROW - h));
     const top = k.row * ROW - offset, left = 4 + 8 + k.depth * 14 + 18;
     // Where it wouldn't fit below its row, it opens above it.
-    const groups = menuItems(k.m), tall = k.items.length * 28 + (groups.length - 1) * 9 + 14;
+    const tall = menuHeight(menuItems(k.m)) + 4; // with its 2px margin and 1px border
     return top + ROW + tall > h ? { top, left, up: true } : { top: top + ROW, left };
   }
 
