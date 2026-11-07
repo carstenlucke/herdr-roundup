@@ -212,11 +212,16 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
     settings), 12 levels deep (5 at home or `/`), at most 20,000 folders
     and 40,000 other paths.
 
-  The index is read on the first search and again when a new path appears,
-  a folder changes, a `.gitignore` changes (git's files) or it is 5 minutes
-  old. When a file it knows changes (it may be deleted), it is read again
-  once it is 30 seconds old, also without typing: at most one read per 30 s
-  while an agent keeps writing. In Changed, the search filters git's paths. `×` or Esc clears it.
+  The index is read on the first search and again when a folder changes, a
+  `.gitignore` changes (git's files) or it is 5 minutes old. A new path is
+  checked on its own and added (git's files: `ls-files` for that path, with
+  what is below a new folder; the disk: whether it is there, in a folder the
+  index holds), and a path added that way that is gone again comes out, so
+  saves through temporary files don't read the whole index. A new folder
+  from the disk, more than 100 new paths at once, an index a limit cut short
+  or a failed check read it again. When a file it knows changes (it may be
+  deleted), it is read again once it is 30 seconds old, also without typing:
+  at most one read per 30 s while an agent keeps writing. In Changed, the search filters git's paths. `×` or Esc clears it.
 - **Click** a folder to open or close it, a file to preview it. **Keys**,
   once the panel has the keyboard (a click on it, or `pane.go`): ↑ ↓ select,
   PgUp PgDn Home End jump, → opens a folder or steps into an open one, ←
@@ -225,7 +230,10 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   the search; in the field ↑ ↓ move the selection and Enter acts on it. In
   search results, Enter on a folder shows it in the tree with the search
   cleared.
-- **Right-click** a row (or the Menu key, Shift-F10): Preview, Open with
+- **Right-click** a row (or the Menu key, Shift-F10, the `menu` command:
+  then the menu opens below the selected row, ↑ ↓ Home End pick, Enter
+  runs, Esc or ← closes, and it opens above the row where it doesn't fit
+  below): Preview, Open with
   default app, Reveal in Finder ("Show in folder" elsewhere) / Copy relative
   path, Copy absolute path / Send @path to agent. Send types `@path ` into
   the agent of the shown tab (the focused pane's if it is an agent, else the
@@ -377,13 +385,22 @@ and `on_item_secondary_click`) with a `Scrollbar` and a
   folder); when it fails (no repo, no git), search reads the disk
 
 Previews use `readTextFile` and a read-only `EditorState` + `Editor`. The
-menu is `openOverlay({mod: "roundup-files", kind: "popup", width: 228,
+right-click menu is `openOverlay({mod: "roundup-files", kind: "popup", width: 228,
 props: {menu}})`, 28px per item and 9px per divider; its Preview, Open,
 Reveal and Send write shared `roundup-files.request` (`{n, action, from,
 root, on, rel}`), which the panel runs (see "A popup's tasks end with it").
 `from` is a random id of the panel copy that opened the menu: every shown
 copy reads the request, and only that copy runs it, so two windows on the
 same folder don't open or send twice.
+The keyboard menu is the panel's own: a `Popup` (gpui-base) on a 1px point
+in the list's box, which runs its items itself. It can't sit in the row: a
+virtual list's item renderer refuses click handlers (`on_click` there
+throws, and the list draws nothing). Opening centres the row
+(`scroll_to_item(i, "center")`), so its place follows from the list's
+height, the row height and the row count; `on_size_change` reports the
+window's pixels, so the height is divided by `settings().zoom` (without it,
+the search field's measured height / 28). A wheel scroll, a press outside
+(`on_mouse_down_out`) or its row moving closes it.
 Copy uses `cx.write_to_clipboard` and `notify`. Send uses `focused()`,
 `panes()`, `agents()`, `pane.focus {terminal}` and `terminal.paste`. Open and
 Reveal run `open` / `open -R` (PowerShell `Invoke-Item` / `explorer.exe

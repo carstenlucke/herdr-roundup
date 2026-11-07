@@ -8,7 +8,7 @@
 // claude-code-filetree (MIT, (c) 2026 Kurt Buhler): rows from a virtual list, search tree,
 // keys, the context menu as a popup of this mod. See THIRD_PARTY_NOTICES.md.
 import { View, div, svg, image } from "gpui-kit";
-import { v_flex, h_flex, Editor, EditorState, InputState, Input, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
+import { v_flex, h_flex, Editor, EditorState, InputState, Input, Scrollbar, Popup, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { spaces, panes, focused, readTextFile, watchFolder, theme, settings, window, props, notify, openOverlay, closeOverlay, shared, setShared, nextCommand } from "herdr";
 import { iconFor, rootIcon } from "./icon.js";
 import { listDir, buildIndex, kinds, indexDepth, compare, pruned, PER_FOLDER, INDEX_PATHS } from "./disk.js";
@@ -118,7 +118,7 @@ export default class Files extends View {
         else if (c === "search") { this.closePreview(); this.input.focus(); }
         else if (c.startsWith("view:")) this.setView(c.slice(5), cx);
         else if (c.startsWith("source:")) this.setSource(c.slice(7), cx);
-        else if (c === "menu") { const r = this.shown.find((x) => x.rel === this.cursor); if (r) this.openMenu(r); }
+        else if (c === "menu") { const r = this.shown.find((x) => x.rel === this.cursor); if (r && !this.file) this.openKeyMenu(r); }
         cx.notify();
       }
     });
@@ -155,6 +155,7 @@ export default class Files extends View {
     if (this.ctx?.root) this.saved.set(this.ctx.key, { folders: this.folders, shut: this.shut, cursor: this.cursor, file: this.file });
     const key = JSON.stringify([root, on]), s = this.saved.get(key);
     this.ctx = { key, root, on }; this.root = root; this.on = on;
+    this.kmenu = null;
     this.entries = new Map(); this.folders = new Set(s?.folders); this.shut = new Set(s?.shut); this.pending = new Set();
     this.cursor = s?.cursor ?? ""; this.git = emptyGit(); this.index = null; this.indexing = null; this.hits = null; this.searchError = null;
     this.error = null; this.limited = false; this.loading = false; this.again = false; this.watched = null;
@@ -549,10 +550,83 @@ export default class Files extends View {
   }
 
   // ── context menu ─────────────────────────────────────────────────────────────────────
+  menuOf(r) {
+    return { from: this.uid, root: this.root, on: this.on, rel: r.rel, abs: join(this.root, r.rel), dir: r.dir, gone: r.gone, local: !this.on };
+  }
+
+  // A right-click: the menu as a popup of this mod, at the pointer.
   openMenu(r) {
-    const m = { from: this.uid, root: this.root, on: this.on, rel: r.rel, abs: join(this.root, r.rel), dir: r.dir, gone: r.gone, local: !this.on };
-    const groups = menuItems(m), items = groups.reduce((n, g) => n + g.length, 0);
+    const m = this.menuOf(r), groups = menuItems(m), items = groups.reduce((n, g) => n + g.length, 0);
     openOverlay({ mod: NAME, kind: "popup", width: 228, height: items * 28 + (groups.length - 1) * 9 + 10, props: { menu: m } });
+  }
+
+  // The Menu key, Shift-F10, the `menu` command: the panel draws the menu itself, pinned below
+  // the selected row (keyMenu), so it opens there and not at the pointer. ↑ ↓ pick, Enter runs.
+  openKeyMenu(r) {
+    const at = this.shown.findIndex((x) => x.rel === r.rel);
+    if (at < 0) return;
+    const m = this.menuOf(r);
+    this.kmenu = { m, items: menuItems(m).flat(), at: 0, row: at, depth: r.depth };
+    this.scroll.scroll_to_item(at, "center");
+    this.handle.focus();
+  }
+
+  closeKeyMenu() { this.kmenu = null; }
+
+  // What the keyboard menu runs: here, in the panel.
+  runKeyMenu(id, cx) {
+    const m = this.kmenu?.m;
+    this.kmenu = null;
+    if (!m) return;
+    if (id === "copy-rel") copy(cx, m.rel);
+    else if (id === "copy-abs") copy(cx, m.abs);
+    else this.request({ action: id, rel: m.rel }, cx);
+    cx.notify();
+  }
+
+  // Where the keyboard menu hangs in the list's box: below its row's name. openKeyMenu centred
+  // the row, so with the list's height its place is known: in the middle, or at the top or
+  // bottom when the list can't scroll that far. Null before the list was measured.
+  // (A virtual list's rows can't hold the menu: they take no click handlers.)
+  // on_size_change measures in the window's pixels, which Herdr's zoom makes larger than the
+  // mod's: settings() has the zoom; without it the search field, 28 of the mod's high and
+  // measured rounded, gives it roughly.
+  keyMenuAt(n) {
+    const k = this.kmenu, set = Number(settings()?.zoom);
+    const zoom = set > 0 ? set : this.fieldHeight ? this.fieldHeight / 28 : 0;
+    if (!this.listHeight || !zoom) return null;
+    const h = this.listHeight / zoom - 4; // the list, inside the box's bottom padding
+    const offset = Math.max(0, Math.min(k.row * ROW + ROW / 2 - h / 2, n * ROW - h));
+    const top = k.row * ROW - offset, left = 4 + 8 + k.depth * 14 + 18;
+    // Where it wouldn't fit below its row, it opens above it.
+    const groups = menuItems(k.m), tall = k.items.length * 28 + (groups.length - 1) * 9 + 14;
+    return top + ROW + tall > h ? { top, left, up: true } : { top: top + ROW, left };
+  }
+
+  // A 1px point the keyboard menu's surface hangs from.
+  keyMenuPin(t, at) {
+    return Popup.new("rf-kmenu", div()).absolute().top(at.top).left(at.left).size(1).anchor(at.up ? "bottom_left" : "top_left")
+      .content(this.keyMenu(t, at.up));
+  }
+
+  // The keyboard menu's surface.
+  keyMenu(t, up) {
+    return this.menuList(t, this.kmenu.m, this.kmenu.at, "rf-kmenu", (id, cx) => this.runKeyMenu(id, cx))
+      .w(228).when(up, (el) => el.mb(2)).when(!up, (el) => el.mt(2)).rounded(8).border_1().border_color(t.border).bg(t.popover ?? t.surface).shadow_lg()
+      .on_mouse_down_out((_e, cx) => { if (this.kmenu) { this.closeKeyMenu(); cx.notify(); } });
+  }
+
+  // The menu's entries in groups; `at`: the one the keyboard is on (-1: none).
+  menuList(t, m, at, prefix, pick) {
+    let n = 0;
+    const item = ([id, label]) => {
+      const on = n++ === at;
+      return div().id(`${prefix}-${id}`).h(28).px(10).flex().items_center().rounded(6).cursor_pointer().text_size(12.5)
+        .when(on, (el) => el.bg(t.selected)).when(!on, (el) => el.hover((s) => s.bg(t.hover)))
+        .on_click((_e, cx) => pick(id, cx)).child(label);
+    };
+    return v_flex().p(5).text_color(t.foreground)
+      .children(menuItems(m).flatMap((g, i) => [...(i ? [div().h(1).mx(6).my(4).bg(t.border)] : []), ...g.map(item)]));
   }
 
   // What the menu asked for, run by the panel: its tasks outlive the closed popup.
@@ -568,18 +642,15 @@ export default class Files extends View {
     });
   }
 
+  // The right-click menu, drawn by its popup copy: the panel runs what needs it.
   renderMenu() {
-    const t = theme(), m = this.menu, close = () => closeOverlay(props().overlay);
-    const item = ([id, label]) => div().id(`rf-menu-${id}`).h(28).px(10).flex().items_center().rounded(6).cursor_pointer().text_size(12.5)
-      .hover((s) => s.bg(t.hover)).on_click((_e, cx) => {
-        close();
-        if (id === "copy-rel") copy(cx, m.rel);
-        else if (id === "copy-abs") copy(cx, m.abs);
-        else setShared(REQUEST, { n: Date.now(), action: id, from: m.from, root: m.root, on: m.on, rel: m.rel });
-      }).child(label);
-    const groups = menuItems(m);
-    return v_flex().id("rf-menu").size_full().p(5).bg(t.popover ?? t.surface).text_color(t.foreground)
-      .children(groups.flatMap((g, i) => [...(i ? [div().h(1).mx(6).my(4).bg(t.border)] : []), ...g.map(item)]));
+    const t = theme(), m = this.menu;
+    return this.menuList(t, m, -1, "rf-menu", (id, cx) => {
+      closeOverlay(props().overlay);
+      if (id === "copy-rel") copy(cx, m.rel);
+      else if (id === "copy-abs") copy(cx, m.abs);
+      else setShared(REQUEST, { n: Date.now(), action: id, from: m.from, root: m.root, on: m.on, rel: m.rel });
+    }).id("rf-menu").size_full().bg(t.popover ?? t.surface);
   }
 
   // ── keyboard ─────────────────────────────────────────────────────────────────────────
@@ -596,6 +667,16 @@ export default class Files extends View {
   key(e, cx) {
     const k = e.key, rows = this.shown, cur = rows.find((r) => r.rel === this.cursor);
     if (e.modifiers?.platform || e.modifiers?.control || e.modifiers?.alt) return;
+    if (this.kmenu) {
+      const km = this.kmenu, n = km.items.length;
+      if (k === "down" || k === "tab") km.at = (km.at + 1) % n;
+      else if (k === "up") km.at = (km.at - 1 + n) % n;
+      else if (k === "home" || k === "pageup") km.at = 0;
+      else if (k === "end" || k === "pagedown") km.at = n - 1;
+      else if (k === "enter" || k === "space") this.runKeyMenu(km.items[km.at][0], cx);
+      else if (k === "escape" || k === "left" || k === "menu" || (k === "f10" && e.modifiers?.shift)) this.closeKeyMenu();
+      cx.stop_propagation(); cx.notify(); return;
+    }
     if (this.typing) {
       if (k === "escape") { if (this.query) this.clearSearch(cx); else this.handle.focus(); }
       else if (k === "down" || k === "up") this.move(rows, k === "down" ? 1 : -1);
@@ -622,7 +703,7 @@ export default class Files extends View {
       else { const at = rows.findIndex((r) => r.rel === dirOf(cur.rel)); if (dirOf(cur.rel) && at >= 0) { this.cursor = rows[at].rel; this.scroll.scroll_to_item(at); } }
     }
     else if (k === "enter" || k === "space") this.activate(cur, cx);
-    else if (k === "menu" || (k === "f10" && e.modifiers?.shift)) this.openMenu(cur);
+    else if (k === "menu" || (k === "f10" && e.modifiers?.shift)) this.openKeyMenu(cur);
     else return;
     cx.stop_propagation(); cx.notify();
   }
@@ -749,6 +830,9 @@ export default class Files extends View {
       return root.child(this.code ? Editor.new(this.code).flex_1().min_h(0) : div().p(12).text_color(t.dim).child(this.fileError || "Loading file…"));
     }
     const rows = this.shown = this.rows();
+    // The keyboard menu goes when its row moves or goes.
+    if (this.kmenu && rows[this.kmenu.row]?.rel !== this.kmenu.m.rel) this.closeKeyMenu();
+    const pin = this.kmenu ? this.keyMenuAt(rows.length) : null;
     if (this.scrollTo !== null && this.scrollTo !== undefined) {
       const at = rows.findIndex((r) => r.rel === this.scrollTo);
       if (at >= 0) { this.scroll.scroll_to_item(at, "center"); this.scrollTo = null; }
@@ -760,20 +844,27 @@ export default class Files extends View {
     if (this.hits && this.index && !this.index.full) more.push(`Search covers the first ${String(INDEX_PATHS).replace(/\B(?=(\d{3})+(?!\d))/g, ",")} paths`);
     return root
       .child(this.summary(t))
-      .child(h_flex().flex_none().mx(8).mt(8).mb(4).h(28).px(8).gap(6).items_center().rounded(7).bg(t.canvas ?? t.surface)
+      .child(h_flex().id("rf-search").flex_none().mx(8).mt(8).mb(4).h(28).px(8).gap(6).items_center().rounded(7).bg(t.canvas ?? t.surface)
+        .on_size_change((size) => { this.fieldHeight = size.height; })
         .border_1().border_color(this.typing ? t.accent : t.border).cursor_text()
         .child(svg(ICON("search")).size(13).flex_none().text_color(t.dim))
         .child(Input.new(this.input).flex_1().h_full().text_size(12).text_color(t.foreground))
         .when(Boolean(this.query), (el) => el.child(div().id("rf-clear").flex_none().text_size(13).text_color(t.dim).cursor_pointer()
           .hover((s) => s.text_color(t.foreground)).on_click((_e, cx) => this.clearSearch(cx)).child("×")))
-        .when(this.view === "all" && this.git.repo, (el) => el.child(this.sourceToggle(t))))
-      .child(div().flex_1().min_h(0).relative().px(4).pb(4)
+        .when(this.view === "all" && this.git.repo, (el) => el.child(this.sourceToggle(t)))
+        // Before the list was measured, the keyboard menu hangs below the search field.
+        .when(Boolean(this.kmenu) && !pin, (el) => el.relative().child(this.keyMenuPin(t, { top: 28, left: 8 }))))
+      .child(div().id("rf-list").flex_1().min_h(0).relative().px(4).pb(4)
+        // Scrolling would take the keyboard menu's row away from under it.
+        .on_scroll_wheel((_e, cx) => { if (this.kmenu) { this.closeKeyMenu(); cx.notify(); } })
+        .on_size_change((size, cx) => { if (Math.abs(size.height - (this.listHeight ?? 0)) > 1) { this.listHeight = size.height; cx.notify(); } })
         .child(v_virtual_list("rf-rows", rows.length, ROW, (i) => rows[i]?.rel ?? String(i), (range) =>
           rows.slice(range.start, range.end).map((r) => this.row(r, t))).track_scroll(this.scroll).size_full()
           .on_item_click((rel, cx) => { this.handle.focus(); this.activate(this.shown.find((r) => r.rel === rel), cx); cx.notify(); })
           .on_item_secondary_click((rel, _e, cx) => { const r = this.shown.find((x) => x.rel === rel); if (!r) return; this.cursor = rel; this.openMenu(r); cx.notify(); }))
         .child(Scrollbar.vertical("rf-rows").viewport_from_layout().absolute().inset_0())
-        .when(Boolean(note), (el) => el.child(div().absolute().top(6).left(0).right(0).px(12).text_size(12).text_color(t.dim).child(note))))
+        .when(Boolean(note), (el) => el.child(div().absolute().top(6).left(0).right(0).px(12).text_size(12).text_color(t.dim).child(note)))
+        .when(Boolean(pin), (el) => el.child(this.keyMenuPin(t, pin))))
       .when(more.length > 0, (el) => el.child(div().flex_none().px(12).py(4).border_t(1).border_color(t.border).text_size(11).text_color(t.dim).child(more.join(" · "))));
   }
 }
