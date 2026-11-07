@@ -42,9 +42,12 @@ export function copy(cx, text) {
   notify({ title: "Copied", body: text, level: "info", timeout: 2000 });
 }
 
-// Types "@path " into the agent of the shown tab: through the clipboard, which is put back
-// a moment later (text only). The agent's pane takes the keyboard so a question can follow.
-// The path is relative to the agent's folder when it lies inside it.
+// Types "@path " into the agent of the shown tab: through the clipboard (terminal.paste is
+// the only way to type into a terminal), which is put back a moment later when it still
+// holds the path: what the user copied meanwhile stays. Only text can be put back; other
+// content (an image) is gone, and the clipboard is emptied rather than left with the path.
+// The agent's pane takes the keyboard so a question can follow. The path is relative to the
+// agent's folder when it lies inside it.
 export function sendToAgent(cx, abs) {
   const f = focused(), fp = f?.pane ? panes().find((p) => p.pane === f.pane) : null;
   const inTab = agents().filter((a) => a.tab === f?.tab);
@@ -57,5 +60,5 @@ export function sendToAgent(cx, abs) {
   cx.write_to_clipboard(text);
   run("pane.focus", { terminal: address });
   run("terminal.paste");
-  cx.timer.after(600, (cx) => { if (before !== undefined) cx.write_to_clipboard(before); });
+  cx.timer.after(600, (cx) => { if (cx.read_from_clipboard() === text) cx.write_to_clipboard(before ?? ""); });
 }

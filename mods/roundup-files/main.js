@@ -507,15 +507,17 @@ export default class Files extends View {
   }
 
   // Search matches as a tree: each match under its folders, all open. Git still lists a file
-  // deleted but not yet committed; it shows struck through, as in Changed.
+  // deleted but not yet committed; it shows struck through, as in Changed. A path with
+  // matches below it is a folder even when the index's folders (capped at INDEX_DIRS) lack it.
   hitRows() {
     const out = [], keep = new Set(), kids = new Map(), dirs = this.index?.dirs ?? new Set();
     for (const h of this.hits) { keep.add(h); for (const a of ancestors(h)) keep.add(a); }
     for (const rel of keep) { const p = dirOf(rel); if (!kids.has(p)) kids.set(p, []); kids.get(p).push(rel); }
+    const isDir = (rel) => dirs.has(rel) || kids.has(rel);
     const walk = (p, depth) => {
-      const list = (kids.get(p) ?? []).sort((a, b) => Number(dirs.has(b)) - Number(dirs.has(a)) || compare(baseOf(a), baseOf(b)));
+      const list = (kids.get(p) ?? []).sort((a, b) => Number(isDir(b)) - Number(isDir(a)) || compare(baseOf(a), baseOf(b)));
       for (const rel of list) {
-        out.push({ rel, name: baseOf(rel), dir: dirs.has(rel), depth, open: kids.has(rel), gone: this.git.gone.has(rel), disk: false });
+        out.push({ rel, name: baseOf(rel), dir: isDir(rel), depth, open: kids.has(rel), gone: this.git.gone.has(rel), disk: false });
         if (kids.has(rel)) walk(rel, depth + 1);
       }
     };

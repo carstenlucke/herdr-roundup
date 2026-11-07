@@ -253,8 +253,9 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   path, Copy absolute path / Send @path to agent. Send types `@path ` into
   the agent of the shown tab (the focused pane's if it is an agent, else the
   tab's focused or first agent), relative to that agent's folder, focuses
-  it, and puts the clipboard back after 600ms; without an agent it says "No
-  agent in this tab". On another machine the menu leaves out Open and
+  it, and puts the clipboard back after 600ms when it still holds the path
+  (text only: other content is gone, and the clipboard is emptied); without
+  an agent it says "No agent in this tab". On another machine the menu leaves out Open and
   Reveal; for a deleted file, Preview, Open and Reveal.
 - **Preview:** read-only, highlighted by extension, the first 400,000
   characters; binary files say so. Esc, ← or the back arrow go back.
