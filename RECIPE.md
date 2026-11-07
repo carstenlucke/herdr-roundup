@@ -387,7 +387,12 @@ index; `actions.js`
 opens, reveals, copies and sends; `icon.js` picks an icon from `icons.js`.
 The tree is a `v_virtual_list` (rows report clicks through `on_item_click`
 and `on_item_secondary_click`) with a `Scrollbar` and a
-`VirtualListScrollHandle`. Git runs through `exec` on the folder's machine:
+`VirtualListScrollHandle`. Git runs through `exec` on the folder's machine.
+When `git` doesn't start on this Windows machine (installed after Herdr App
+started: the app keeps the PATH of its start), it tries `C:\Program
+Files\Git\cmd\git.exe` and `~\AppData\Local\Programs\Git\cmd\git.exe`, and
+keeps the one that starts. When none starts, the panel says "Git not found",
+not "Not a git repository":
 
 - `git --no-optional-locks -c core.fsmonitor=false -c
   diff.autoRefreshIndex=false rev-parse --show-toplevel --show-prefix`,

@@ -4,7 +4,7 @@
 // The parsing is adapted from cybertron288/herdr-mods `filetree` (MIT, (c) 2026
 // cybertron288), itself a port of claude-code-filetree (MIT, (c) 2026 Kurt Buhler).
 // See THIRD_PARTY_NOTICES.md.
-import { exec } from "herdr";
+import { exec, home, window } from "herdr";
 import { kinds } from "./disk.js";
 
 // Reads write nothing under .git (no index refresh or lock, no fsmonitor cookie): the folder
@@ -16,6 +16,27 @@ const RANK = { "?": 1, A: 2, C: 2, R: 3, T: 3, M: 3, D: 4, U: 5 };
 const IGNORED = 5000;
 // change: 0 new (untracked or added), 1 modified, 2 deleted.
 export const NEW = 0, MODIFIED = 1, DELETED = 2;
+
+// Where Git for Windows installs git when the app's PATH lacks it (git installed after the app
+// started: a process keeps the PATH of its start). The one that starts is kept per machine.
+const WINDOWS_GITS = () => ["C:\\Program Files\\Git\\cmd\\git.exe", `${home()}\\AppData\\Local\\Programs\\Git\\cmd\\git.exe`];
+const gits = new Map();
+// Runs git; rejects when no git starts (not installed, or the folder is gone).
+export async function runGit(args, root, on) {
+  const key = on ?? "";
+  const known = gits.get(key);
+  if (known) return exec(known, [...READ, ...args], { cwd: root, on });
+  const tries = ["git", ...(!on && window()?.platform === "windows" ? WINDOWS_GITS() : [])];
+  let error;
+  for (const cmd of tries) {
+    try {
+      const r = await exec(cmd, [...READ, ...args], { cwd: root, on });
+      gits.set(key, cmd);
+      return r;
+    } catch (e) { error ??= e; }
+  }
+  throw error;
+}
 
 export const dirOf = (rel) => (rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "");
 export function ancestors(rel) {
@@ -34,9 +55,9 @@ export function within(set, rel) {
 // looked up, or whose lookup failed, counts as there: a missing file then says so when opened.
 const UNSURE = 2000;
 
-// repo: inside a work tree; known: git has answered (or there is none).
+// repo: inside a work tree; known: git has answered (or there is none); missing: no git started.
 export const emptyGit = (known = false) => ({
-  repo: false, known, top: "", prefix: "", branch: null,
+  repo: false, known, missing: false, top: "", prefix: "", branch: null,
   status: new Map(), // rel (file or folder) → letter: ? A M R T D U
   files: new Map(), // rel → change, for every path git status lists (files and untracked folders)
   untracked: new Set(), // untracked folders git lists as a whole ("dir/")
@@ -153,16 +174,16 @@ export function parseNumstat(stdout, git) {
 // `base`: { top, prefix } from an earlier read of root, which skips rev-parse; the caller drops
 // it when `.git` in root comes or goes. If status fails with it, root is read again without.
 export async function readGit(root, on, base) {
-  const g = (args) => exec("git", [...READ, ...args], { cwd: root, on });
-  const git = emptyGit(true);
+  const g = (args) => runGit(args, root, on);
+  const out = emptyGit(true);
   let where = base, failed = false;
   if (!where) {
-    const top = await g(["rev-parse", "--show-toplevel", "--show-prefix"]).catch(() => null);
-    if (top?.code !== 0) return git;
+    const top = await g(["rev-parse", "--show-toplevel", "--show-prefix"]).catch(() => { out.missing = true; return null; });
+    if (top?.code !== 0) return out;
     const [dir, prefix = ""] = top.stdout.split("\n");
     where = { top: dir.trim(), prefix: prefix.trim() };
   }
-  git.repo = true; git.top = where.top; git.prefix = where.prefix;
+  out.repo = true; out.top = where.top; out.prefix = where.prefix;
   // Status, the ignored paths, the tracked ones an ignore rule matches and whether root is
   // ignored (then the disk for status's unsure paths, all batches at once) beside numstat;
   // without a commit yet, diff HEAD fails and there are no lines to count. In an ignored root
@@ -174,28 +195,28 @@ export async function readGit(root, on, base) {
     ignoresRoot(root, on),
   ])
     .then(async ([r, ignoredList, forcedList, ignored]) => {
-      if (ignored) git.rootIgnored = true;
-      else if (ignoredList?.code === 0) parseIgnored(ignoredList.stdout, git);
-      if (forcedList?.code === 0) parseForced(forcedList.stdout, git);
+      if (ignored) out.rootIgnored = true;
+      else if (ignoredList?.code === 0) parseIgnored(ignoredList.stdout, out);
+      if (forcedList?.code === 0) parseForced(forcedList.stdout, out);
       if (r?.code !== 0) { failed = true; return; }
-      parseStatus(r.stdout, git);
-      const unsure = [...git.unsure].slice(0, UNSURE);
+      parseStatus(r.stdout, out);
+      const unsure = [...out.unsure].slice(0, UNSURE);
       if (!unsure.length) return;
       const found = await kinds(root, unsure, on).catch(() => null);
-      if (found) for (const rel of unsure) if (!found.has(rel)) git.gone.add(rel);
+      if (found) for (const rel of unsure) if (!found.has(rel)) out.gone.add(rel);
     });
   const [, numstat] = await Promise.all([status, g(["diff", "HEAD", "--numstat", "-z", "--no-renames", "--", "."]).catch(() => null)]);
   // The repo found with `base` is gone or moved: find it again.
   if (failed && base) return readGit(root, on);
-  if (numstat?.code === 0) parseNumstat(numstat.stdout, git);
-  return git;
+  if (numstat?.code === 0) parseNumstat(numstat.stdout, out);
+  return out;
 }
 
 // Whether git ignores root: root is ignored or lies in an ignored folder, also when that
 // folder holds a tracked file (status lists the file then and doesn't name the folder). The
 // one test for it: readGit's rootIgnored and listFiles both use it. Null when git can't tell.
 export async function ignoresRoot(root, on) {
-  const r = await exec("git", [...READ, "check-ignore", "-q", "--no-index", "--", "./"], { cwd: root, on }).catch(() => null);
+  const r = await runGit(["check-ignore", "-q", "--no-index", "--", "./"], root, on).catch(() => null);
   return r?.code === 0 ? true : r?.code === 1 ? false : null;
 }
 
@@ -211,7 +232,7 @@ export async function listFiles(root, on, limit, paths, ignored) {
   // 160000, a folder), new ones as their bare path.
   try {
     [r, skip] = await Promise.all([
-      exec("git", [...READ, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "-s", "--abbrev=4", "--", ...specs], { cwd: root, on }),
+      runGit(["ls-files", "-z", "--cached", "--others", "--exclude-standard", "-s", "--abbrev=4", "--", ...specs], root, on),
       paths || ignored !== undefined ? ignored : ignoresRoot(root, on),
     ]);
   } catch { return null; }

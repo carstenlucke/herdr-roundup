@@ -45,6 +45,8 @@ const REQUEST = `${NAME}.request`;
 const baseOf = (rel) => rel.slice(rel.lastIndexOf("/") + 1);
 const join = (root, rel) => (rel ? (/[\\/]$/.test(root) ? root + rel : `${root}/${rel}`) : root);
 const message = (e) => String(e?.message ?? e);
+// Why a folder has no repo: git found none, or no git started there.
+const noRepo = (g) => (g.missing ? "Git not found" : "Not a git repository");
 // Git's colors: new green and deleted red, as in Herdr's `files` and `changes`; modified
 // yellow (ansi3) rather than their `blocked`, which many themes draw close to red.
 const statusColor = (t, s) => (!s ? null : s === "D" || s === "U" ? t.ansi1 : s === "?" || s === "A" || s === "C" ? t.ansi2 : s === "R" ? t.ansi4 : t.ansi3);
@@ -490,7 +492,7 @@ export default class Files extends View {
   // Why git's files can't serve a search here, once git has answered.
   gitReason() {
     const g = this.git;
-    return !g.known ? "" : g.rootIgnored ? "Git ignores this folder" : g.repo ? "Git can't list this folder" : "Not a git repository";
+    return !g.known ? "" : g.rootIgnored ? "Git ignores this folder" : g.repo ? "Git can't list this folder" : noRepo(g);
   }
 
   clearSearch(cx) {
@@ -832,7 +834,7 @@ export default class Files extends View {
     const box = v_flex().h(46).flex_none().px(12).gap(7).justify_center().border_b(1).border_color(t.border).text_size(12);
     const none = div().h(4);
     if (!g.known) return box.child(div().text_color(t.dim).child(this.root ? "Reading git…" : "")).child(none);
-    if (!g.repo) return box.child(h_flex().gap(6).items_center().text_color(t.dim).child(svg(ICON("branch")).size(12).flex_none()).child("Not a git repository")).child(none);
+    if (!g.repo) return box.child(h_flex().gap(6).items_center().text_color(t.dim).child(svg(ICON("branch")).size(12).flex_none()).child(noRepo(g))).child(none);
     const c = g.counts.get("") ?? [0, 0, 0], total = c[0] + c[1] + c[2], lines = g.diff.get("") ?? [0, 0], colors = changeColors(t);
     const parts = [MODIFIED, NEW, DELETED].filter((i) => c[i] > 0);
     const legend = 26 * parts.length, room = Math.max(40, this.width - 26 - legend - 2 * parts.length);
@@ -896,7 +898,7 @@ export default class Files extends View {
     if (!this.root) return "No folder";
     if (this.view === "changed") {
       if (!g.known) return "Reading git…";
-      if (!g.repo) return "Not a git repository";
+      if (!g.repo) return noRepo(g);
       return rows.length ? null : this.query.trim() ? "No matching changes" : g.rootUntracked ? "This whole folder is new to git" : g.rootIgnored ? "Git ignores this whole folder" : "No changes";
     }
     if (this.searching && !rows.length) return "Searching…";
