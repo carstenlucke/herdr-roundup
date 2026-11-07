@@ -185,7 +185,7 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   installed, it shows the new version without a restart.
 - **Files panel follows the focused pane's folder** (a mod pane: the first
   terminal of its tab), on its machine. Each folder keeps its open folders,
-  selection and preview while another one shows. The files show at once;
+  selection and preview while another one shows (the last 50 folders). The files show at once;
   git fills in its marks without moving a row, so unlike the spaces panel
   nothing waits for it. A local folder refreshes
   when anything under it changes (`watchFolder`), any folder every 10s.
@@ -236,7 +236,9 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   index a limit cut short, a new path can't be added and counts like a
   changed file. When a file it knows changes (it may be
   deleted), it is read again once it is 30 seconds old, also without typing:
-  at most one read per 30 s while an agent keeps writing. In Changed, the search filters git's paths. `×` or Esc clears it.
+  at most one read per 30 s while an agent keeps writing. When a folder it
+  knows changes (or too many paths to list), once it is 3 seconds old: at
+  most one read per 3 s while a build keeps making folders. In Changed, the search filters git's paths. `×` or Esc clears it.
 - **Click** a folder to open or close it, a file to preview it. **Keys**,
   once the panel has the keyboard (a click on it, or `pane.go`): ↑ ↓ select,
   PgUp PgDn Home End jump, → opens a folder or steps into an open one, ←

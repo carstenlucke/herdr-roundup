@@ -24,8 +24,13 @@ const INDEX_AGE = 300000;
 // After a file the index knows changed (it may be gone), the index is read again once it is
 // this old: at most one rebuild per 30 s while files keep changing.
 const DIRTY_AGE = 30000;
+// After a folder changed (or too many paths to list), the index is read again once it is this
+// old: at most one rebuild per 3 s while a build keeps making folders.
+const STALE_AGE = 3000;
 // More new paths than this in one batch read the index again instead of checking each.
 const CHECK_PATHS = 100;
+// How many folders keep their open folders, cursor and preview while another one shows.
+const SAVED = 50;
 const LANG = { ts: "js", tsx: "js", mts: "js", cts: "js", jsx: "js", mjs: "js", cjs: "js", toml: "yaml", yml: "yaml", jsonc: "json", svelte: "html", vue: "html", htm: "html", sh: "bash", zsh: "bash" };
 const VIEWS = [["all", "All"], ["changed", "Changed"]];
 // The menu's height: 28 per entry, 9 per divider, 5 of padding above and below.
@@ -102,8 +107,9 @@ export default class Files extends View {
     this.reset(null, null);
     cx.timer.every(10000, (cx) => {
       this.refresh(cx);
-      // A known file changed while no other change came after it: the hits may still list it.
-      if (this.index?.dirty && this.outdated(this.index)) this.searchAgain(cx);
+      // A known file or folder changed while no other change came after it: the hits may still
+      // list it (a folder's hold normally reads it again before this).
+      if (this.index && (this.index.dirty || this.index.stale) && this.outdated(this.index)) this.searchAgain(cx);
     });
     // Commands (keys.json: "roundup-files.<command>"). "focus" also comes from Herdr: pane.go
     // moved onto this panel (mod.json "focusable"), or a popup over it closed.
@@ -146,9 +152,14 @@ export default class Files extends View {
   }
 
   // ── the folder shown ─────────────────────────────────────────────────────────────────
-  // Each folder keeps its open folders, cursor and preview while another one shows.
+  // Each folder keeps its open folders, cursor and preview while another one shows: the last
+  // SAVED of them (the Map's order is the order they were left in).
   reset(root, on) {
-    if (this.ctx?.root) this.saved.set(this.ctx.key, { folders: this.folders, shut: this.shut, cursor: this.cursor, file: this.file });
+    if (this.ctx?.root) {
+      this.saved.delete(this.ctx.key);
+      this.saved.set(this.ctx.key, { folders: this.folders, shut: this.shut, cursor: this.cursor, file: this.file });
+      if (this.saved.size > SAVED) this.saved.delete(this.saved.keys().next().value);
+    }
     const key = JSON.stringify([root, on]), s = this.saved.get(key);
     // noDisk: buildIndex can't read the disk here (Windows; found out later: no sh).
     // base: where the repo is (readGit); drops: how often a `.git` change dropped it.
@@ -237,7 +248,8 @@ export default class Files extends View {
   // took in that way, is checked on its own (recheck), so a save through a temporary file
   // doesn't read the whole index again; one it can't place this way reads it again. A file
   // it knows may have been deleted: the index is read again once it is DIRTY_AGE old, not on
-  // every save. Paths the index never holds don't count: .git and, from the disk, the pruned
+  // every save; after a folder changed, once it is STALE_AGE old (reindex), not on every
+  // batch a build sends. Paths the index never holds don't count: .git and, from the disk, the pruned
   // folders, from git, what it ignores. From git, a changed .gitignore counts.
   // A change during an index build may be missing from it: that index comes out dirty.
   changed(paths, cx) {
@@ -267,8 +279,17 @@ export default class Files extends View {
       if (check.length > CHECK_PATHS) index.stale = true;
       else this.recheck(index, check, cx);
     }
-    if (index && this.outdated(index)) this.searchAgain(cx);
+    if (index) this.reindex(index, cx);
     if (shown) this.refresh(cx);
+  }
+
+  // Reads the index again when it is due. A stale one younger than STALE_AGE is read once
+  // that has passed (one hold per index), so a build making folders costs one read per 3 s.
+  reindex(index, cx) {
+    if (this.outdated(index)) { this.searchAgain(cx); return; }
+    if (!index.stale || index.held) return;
+    index.held = true;
+    cx.timer.after(STALE_AGE - (Date.now() - index.at), (cx) => { if (this.index === index && this.outdated(index)) this.searchAgain(cx); });
   }
 
   // Whether a change at rel leaves the tree and git's marks as they are, so it needn't
@@ -315,7 +336,9 @@ export default class Files extends View {
           else if (r === "moved") moved = true;
         }
       } finally { index.checking = false; index.pending.clear(); }
-      if ((moved || index.stale) && this.current(ctx) && this.index === index) this.searchAgain(cx);
+      if (!this.current(ctx) || this.index !== index) return;
+      if (index.stale) this.reindex(index, cx);
+      else if (moved) this.searchAgain(cx);
     });
   }
 
@@ -366,7 +389,7 @@ export default class Files extends View {
   // Whether the next search reads the index again.
   outdated(i) {
     const age = Date.now() - i.at;
-    return i.stale || age >= INDEX_AGE || (i.dirty && age >= DIRTY_AGE);
+    return (i.stale && age >= STALE_AGE) || age >= INDEX_AGE || (i.dirty && age >= DIRTY_AGE);
   }
 
   // A search rerun in the background: the list keeps its scroll unless the cursor's row went.
@@ -464,7 +487,7 @@ export default class Files extends View {
             if (!built) throw new Error(this.current(ctx) && this.gitReason() ? `${this.gitReason()} · ${e.message}` : e.message);
           }
         }
-        const index = { dirs: built.dirs, all: built.all, full: built.full, source: ctx.noDisk ? "git" : source, from: fromGit ? "git" : "disk", known: new Set(built.all), added: new Set(), pending: new Set(), checking: false, at: Date.now(), stale: false, dirty: Boolean(job.changed) };
+        const index = { dirs: built.dirs, all: built.all, full: built.full, source: ctx.noDisk ? "git" : source, from: fromGit ? "git" : "disk", known: new Set(built.all), added: new Set(), pending: new Set(), checking: false, at: Date.now(), stale: false, held: false, dirty: Boolean(job.changed) };
         if (this.current(ctx) && this.searchSource() === index.source) this.index = index;
         return index;
       })().finally(() => { if (this.current(ctx) && this.indexing === job) this.indexing = null; });
