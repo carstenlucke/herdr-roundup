@@ -142,6 +142,19 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
     entries", "First 200 matches", "Changed shows the first 2,000 paths",
     "Search covers the first 40,000 files"
     (or "the first 20,000 folders", whichever limit cut the index short).
+- **Preview tab** (`roundup-preview`, opened from a file in `roundup-files`):
+  a tab named after the file with one pane on `background`, 13px text. A
+  42px header with a 1px `border` line under it: ← (only after following a
+  link to another file), the file name in semibold, its folder and size in
+  12px `dim`, the viewer's own controls on the right, then ⋯. Below it the
+  file, by its extension: Markdown rendered in a column up to 920px (local
+  images drawn inline, a ToC column of 240px, Preview | Raw); PDF pages on
+  `canvas` with ‹ N / M ›, Go to and − Fit +; images fitted on `canvas`
+  with their pixel size and − Fit +; CSV and TSV as a table with a fixed
+  header, row numbers and Table | Raw; JSON as a tree (keys `ansi4`,
+  strings `ansi2`, numbers `ansi1`, true/false/null `ansi6`) with Tree |
+  Raw; anything else as read-only code. "Loading…" in `dim` while it
+  loads, an error in `ansi1`.
 - **Status bar** (28px): Herdr's shipped `workspace-status`.
 
 ## How it behaves
@@ -315,18 +328,24 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   at most one read per 30 s while an agent keeps writing. When a folder it
   knows changes (or too many paths to list), once it is 3 seconds old: at
   most one read per 3 s while a build keeps making folders. In Changed, the search filters git's paths. `×` or Esc clears it.
-- **Click** a folder to open or close it, a file to preview it. **Keys**,
-  once the panel has the keyboard (a click on it, or `pane.go`): ↑ ↓ select,
-  PgUp PgDn Home End jump, → opens a folder or steps into an open one, ←
-  closes it or goes to its parent, Enter or Space previews a file or toggles
-  a folder, `/` goes to the search field, Esc leaves the preview or clears
-  the search; in the field ↑ ↓ move the selection and Enter acts on it. In
+- **Click** a folder to open or close it, a file to select it. A
+  **double-click** on a file shows it in the floating preview (below), a
+  **triple click** in a preview tab, closing the floating one; a file
+  already open in a tab brings that tab to the front. While the floating
+  preview is open it follows the selection (click, ↑ ↓). The tree keeps
+  showing the terminal's folder while the preview tab is shown.
+  **Keys**, once the panel has the keyboard (a click on it, or `pane.go`):
+  ↑ ↓ select, PgUp PgDn Home End jump, → opens a folder or steps into an
+  open one, ← closes it or goes to its parent, Space opens or closes the
+  floating preview of a file, Enter opens a file in the preview tab, both
+  toggle a folder, `/` goes to the search field, Esc closes the floating
+  preview, leaves the panel's own preview or clears the search; in the field ↑ ↓ move the selection and Enter acts on it. In
   search results, Enter on a folder shows it in the tree with the search
   cleared.
 - **Right-click** a row (or the Menu key, Shift-F10, the `menu` command:
   then the menu opens below the selected row, ↑ ↓ Home End pick, Enter
   runs, Esc or ← closes, and it opens above the row where it doesn't fit
-  below): Preview, Open with
+  below): Quick look, Open in tab, Preview in panel, Open with
   default app, Reveal in Finder ("Show in folder" elsewhere) / Copy relative
   path, Copy absolute path / Send @path to agent. Send types `@path ` into
   the agent of the shown tab (the focused pane's if it is an agent, else the
@@ -334,9 +353,27 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   it, and puts the clipboard back after 600ms when it still holds the path
   (text only: other content is gone, and the clipboard is emptied); without
   an agent it says "No agent in this tab". On another machine the menu leaves out Open and
-  Reveal; for a deleted file, Preview, Open and Reveal.
-- **Preview:** read-only, highlighted by extension, the first 400,000
-  characters; binary files say so. Esc, ← or the back arrow go back.
+  Reveal; for a deleted file, Quick look, Open in tab, Preview in panel, Open and Reveal.
+- **Floating preview:** the preview tab's view (below) in a window over the
+  layout, 60% × 75% of the window, centered the first time, then where it was
+  dropped. Its header drags it; the controls and the file don't. Beside ⋯:
+  Open in tab (the tab, or the one already showing the file, then the window
+  closes) and Close. Esc closes it once it has the keyboard (a click in it).
+  The name and folder don't copy there: they are part of what drags.
+- **Preview in panel:** the file inside the panel, read-only, highlighted
+  by extension, the first 400,000 characters; binary files say so. Esc, ←
+  or the back arrow go back.
+- **Preview tab:** read-only; it reloads when the file changes on disk,
+  keeping Raw, zoom and open JSON rows. A click on the name copies the file
+  name, on the folder the full path. ⋯: Open in editor (`$VISUAL` or
+  `$EDITOR` without `--wait`/`-w`, else the default app), Open with default
+  app, Reveal in Finder, Copy path, Copy relative path. Markdown: web and
+  mail links open in the system, a local file opens in the same tab (←
+  returns), `#heading` shows the document from that heading, web images
+  load only after "Load them". PDF: ‹ › and Go to jump, pages render 6 at a
+  time, up to 500. Zoom steps 25 to 400%, the middle returns to Fit. JSON:
+  a click opens or closes a row, alt-click the whole branch. Files from
+  another machine show in the text viewers only.
 
 ## Built from
 
@@ -491,6 +528,22 @@ the dialog keeps which one is chosen (Cancel in `init`), moves it on Tab and
 Shift-Tab, focuses its handle and draws the ring on it. Herdr's own questions ("Close space?") still use
 the shipped `confirm`.
 
+**`roundup-preview`** (`place: "none"`, title "Preview"), from
+gsydler/herdr-cria's `file-preview` (the `cria-file-preview` mod) at
+`82ce1eb`, renamed throughout; its own brief is that repo's
+`file-preview/RECIPE.md`. `main.js` draws `preview.js` or, with
+`props().part == "menu"`, the ⋯ popup (`menu.js`, `openOverlay({mod:
+"roundup-preview", kind: "popup", width: 240})`). Viewers in `viewers/`
+(`{id, load, start?, toolbar?, render, release?}`), picked by extension
+in `kinds.js`. `image()` reads only from the Herdr home, so pictures are
+copied and PDF pages rendered into `data/roundup-preview/`, named by a
+hash of the path and its modification time, pruned after 14 days. Live
+reload through `watchFolder` on the file's folder. Programs on macOS:
+`sh` (`wc -c`, `head -c`, `stat`, `cp`), `sips` (sizes), `osascript -l
+JavaScript` with PDFKit (pages, 1600px wide), `curl` and `file` (web
+images, after the click), `find`/`mv`/`rm` in its cache only, `git
+rev-parse`, the login shell for `$EDITOR`, `open`.
+
 **`roundup-files`** (clone of `files` 0.1.13, `place: "none"`, title
 "Files", `focusable: true`). `main.js` draws the panel and, opened with
 `props().menu`, the context menu; `disk.js` lists folders (`sh` here and on
@@ -530,8 +583,32 @@ not "Not a git repository":
   --exclude-standard -- .` (an untracked repo inside comes as `dir/`: one
   folder); when it fails (no repo, no git), search reads the disk
 
-Previews use `readTextFile` and a read-only `EditorState` + `Editor`. The
-right-click menu is `openOverlay({mod: "roundup-files", kind: "popup", width: 228,
+A triple click, Enter or the menu's Open in tab on a file runs `tab.new {name, mod:
+"roundup-preview", props: {file, on}}` (`open-file.js`'s `openCommand`).
+`run()` names nothing it made, so the panel takes the `roundup-preview`
+pane that wasn't in `panes()` before (again after 300ms if not there yet)
+and records it in shared `roundup-preview.open` (`"<on>:<file>"` → pane).
+The next click on the file runs `pane.focus` on it while it is alive and
+`roundup-preview.moved` doesn't say it followed a link elsewhere
+(`shownIn`). `open-file.js` is a copy of `roundup-preview`'s; `sync.sh`
+refuses to install when the two differ. The click count comes from
+`on_mouse_down("left")` on the list's box (`click_count`), since
+`on_item_click` gives none; the row's click then reads it. A double-click,
+Space or Quick look runs `openOverlay(floatSpec({file, on, token}))`
+(`open-file.js`: `kind: "window"`, `key: "roundup-preview"`, so opening again
+replaces it in place) and writes shared `roundup-preview.float` (`{id, file,
+on, token}`). The window's copy (`props().float` = the token) clears that key
+in `close()` only while it still holds its token, since a replaced window
+closes after the new one wrote it. The panel clears the key on start: a
+window doesn't survive a restart or a layout switch, the key does.
+In the window a press drags it unless stopped, so `preview.js` stops
+`mouse_down` on its controls and its body (and focuses its handle there, for
+Esc). A mod pane has no folder, so the
+panel remembers the last terminal folder per space (with its machine) and
+shows it while a tab without a terminal is focused; before one was seen,
+the first terminal of the space with a folder, else `space.folder`.
+Previews in the panel use `readTextFile` and a read-only `EditorState` +
+`Editor`. The right-click menu is `openOverlay({mod: "roundup-files", kind: "popup", width: 228,
 props: {menu}})`, 28px per item and 9px per divider; its Preview, Open,
 Reveal and Send write shared `roundup-files.request` (`{n, action, from,
 root, on, rel}`), which the panel runs (see "A popup's tasks end with it").
@@ -577,8 +654,19 @@ global `tab.close` and `pane.close`.
   folder, on remote machines too, and runs `hc`. `roundup-workspace-chrome`
   reads the layout's file outside its own folder, and once a day sends a
   GET to `api.github.com` (generic User-Agent, nothing but the IP);
-  "Only when I ask" stops that. Nothing else reaches the network
-  (`machine add` connects to a machine you already had).
+  "Only when I ask" stops that. `roundup-preview` runs `sh`, `sips`,
+  `osascript`, `git`, the login shell and the editor (Built from), reads
+  the file it shows and the local images a Markdown file names, anywhere,
+  and writes only to `data/roundup-preview/`; it fetches a Markdown file's
+  web images (https, 5 MB, 10 s) only after "Load them". Nothing else
+  reaches the network (`machine add` connects to a machine you already
+  had).
+- **A mod pane has no folder:** `panes()` gives a mod pane `cwd: null`, and
+  `space.folder` is where the space's first shell started. Without the
+  remembered folder, a click on a file would send `roundup-files`' tree to
+  the space's starting folder as soon as the preview tab shows.
+- **`run()` returns null:** a command names nothing it made, hence the
+  before/after look at `panes()` to find the new preview pane.
 - **GitHub's API:** 60 unauthenticated requests per hour per IP, shared with
   everything else on that IP; over it the answer is 403 or 429. Without a
   release (tags alone don't count) `releases/latest` answers 404, so every
@@ -780,10 +868,17 @@ global `tab.close` and `pane.close`.
   themes (`package.json`, `Dockerfile`, `style.css`, `index.html`, `src/`,
   `.github/`).
 - Typing the name of a file in a folder that was never opened finds it;
-  `node_modules` stays out. Enter previews a file; Esc goes back. In a repo,
+  `node_modules` stays out. Enter opens a file in a preview tab. In a repo,
   an ignored `.env` is found only after the switch in the field goes to the
   disk; a folder outside a repo is searched with the switch hidden.
 - ↑ ↓ → ← Enter and Esc work as described; right-clicking a file shows the
-  menu, and Copy relative path puts the path on the clipboard.
+  menu, Preview in panel shows it in the panel and Esc goes back, and Copy
+  relative path puts the path on the clipboard.
+- A click on a `.md`, `.pdf`, `.png`, `.csv` and `.json` file opens a tab
+  named after it with the Markdown rendered (its local SVG drawn inline),
+  the PDF's pages, the picture with its size, a table with a fixed header,
+  and a JSON tree. A second click on the same file brings that tab back
+  instead of a new one. With the terminal `cd`'d into a subfolder, the tree
+  still shows that subfolder while the preview tab is in front.
 - A folder without git shows "Not a git repository" and its files; a folder
   with more than 500 entries says so in the footer.

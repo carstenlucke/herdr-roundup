@@ -1,7 +1,9 @@
 // roundup-files: the side panel's file browser. The focused pane's folder as a tree with
 // Symbols icons and git state (each path's status, folders' counts, +/− lines, a branch
 // row), a switch between all files and the changed ones, search across folders not yet
-// opened, keyboard navigation, a context menu, and bounded read-only previews.
+// opened, keyboard navigation, a context menu, and bounded read-only previews. A click on a
+// file selects it, a double-click shows it in roundup-preview's floating window, a triple
+// click (or Enter) in a tab of its own; Space opens and closes the window.
 //
 // Modified from Herdr's shipped `files` mod 0.1.13 (Apache-2.0). Parts follow
 // cybertron288/herdr-mods `filetree` (MIT, (c) 2026 cybertron288), itself a port of
@@ -9,13 +11,17 @@
 // keys, the context menu as a popup of this mod. See THIRD_PARTY_NOTICES.md.
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, InputState, Input, Scrollbar, Popup, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
-import { spaces, panes, focused, readTextFile, watchFolder, theme, settings, window, props, notify, openOverlay, closeOverlay, shared, setShared, nextCommand } from "herdr";
+import { spaces, panes, focused, readTextFile, watchFolder, theme, settings, window, props, notify, openOverlay, closeOverlay, shared, setShared, nextCommand, run } from "herdr";
 import { iconFor, rootIcon } from "./icon.js";
 import { listDir, buildIndex, diskSearch, kinds, indexDepth, compare, prunedName, prunedAbove, realPath, PER_FOLDER, INDEX_DIRS, INDEX_PATHS } from "./disk.js";
 import { readGit, listFiles, emptyGit, ancestors, dirOf, within, NEW, MODIFIED, DELETED } from "./git.js";
 import { openExternal, revealExternal, copy, sendToAgent, relTo } from "./actions.js";
+// A copy of roundup-preview's: how it opens and which pane already shows a file. sync.sh
+// checks that the two copies match.
+import { OPEN, MOVED, FLOAT, previewId, shownIn, openCommand, floatSpec } from "./open-file.js";
 
 const NAME = "roundup-files";
+const PREVIEW = "roundup-preview";
 const ICON = (name) => `mods/${NAME}/${name}.svg`;
 const ROW = 26;
 const FIND_LIMIT = 200;
@@ -69,20 +75,32 @@ const GIT_FAILED = "Git can't read this folder";
 const statusColor = (t, s) => (!s ? null : s === "D" || s === "U" ? t.ansi1 : s === "?" || s === "A" || s === "C" ? t.ansi2 : s === "R" ? t.ansi4 : t.ansi3);
 const changeColors = (t) => [t.ansi2, t.ansi3, t.ansi1]; // NEW, MODIFIED, DELETED
 
-// The focused pane's folder; when the focused pane is a mod, the first terminal of its tab.
+// The last terminal folder shown per space, with its machine: for a tab of mod panes only
+// (a preview tab), which has no folder. space.folder is only where the space's first shell
+// started, so without this a click on a file would send the tree to another folder.
+const lastRoot = new Map();
+
+// The focused pane's folder; when the focused pane is a mod, the first terminal of its tab;
+// in a tab without one, the folder last shown in this space.
 function location() {
   const space = spaces().find((s) => s.active), f = focused();
   let pane = f?.pane ? panes().find((p) => p.pane === f.pane) : null;
   if (pane && !pane.terminal) pane = panes().find((p) => p.tab === pane.tab && p.terminal && p.cwd) ?? null;
   const on = f?.pane === null ? (f.terminal?.includes("/") ? f.terminal.split("/")[0] : null) : space?.machine ?? null;
-  return { cwd: pane?.cwd || f?.cwd || space?.folder || null, on };
+  const cwd = pane?.cwd || f?.cwd;
+  if (cwd) { if (space) lastRoot.set(space.id, { cwd, on }); return { cwd, on }; }
+  if (!space) return { cwd: null, on };
+  const tabs = new Set(space.tabs.map((t) => t.id));
+  return lastRoot.get(space.id) ?? { cwd: panes().find((p) => p.terminal && p.cwd && tabs.has(p.tab))?.cwd || space.folder || null, on };
 }
 
 // The context menu's entries for one path, in groups. `local`: on this computer.
 function menuItems(m) {
   const mac = window()?.platform === "macos";
   return [
-    [!m.dir && !m.gone && ["preview", "Preview"],
+    [!m.dir && !m.gone && ["float", "Quick look"],
+      !m.dir && !m.gone && ["tab", "Open in tab"],
+      !m.dir && !m.gone && ["preview", "Preview in panel"],
       m.local && !m.dir && !m.gone && ["open", "Open with default app"],
       m.local && !m.gone && ["reveal", mac ? "Reveal in Finder" : "Show in folder"]],
     [["copy-rel", "Copy relative path"], ["copy-abs", "Copy absolute path"]],
@@ -103,6 +121,8 @@ export default class Files extends View {
     this.saved = new Map();
     this.width = 368; this.measuredWidth = null; this.query = ""; this.hits = null; this.searchSeq = 0; this.shown = [];
     this.seenRequest = shared(REQUEST)?.n ?? 0;
+    // A floating window doesn't outlive a restart or a layout switch, but FLOAT is saved.
+    if (shared(FLOAT)) setShared(FLOAT, null);
     this.uid = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
     this.input = InputState.new({ placeholder: "Search files" });
     // Only a change of the text searches: reset() empties the field while drawing, where
@@ -705,13 +725,72 @@ export default class Files extends View {
     if (!inRender) cx.notify();
   }
 
-  // Enter, a click: a file previews, a folder opens or closes; neither when it is gone.
+  // A click on a row, `n` the presses in a row. A folder opens or closes on the first; a file
+  // gets the cursor (and the floating window, when it is open, follows), the second shows it in
+  // the floating window, the third in a tab, closing the window.
+  click(r, n, cx) {
+    if (!r) return;
+    this.cursor = r.rel;
+    if (r.dir || r.gone) { if (n === 1) this.activate(r, cx); return; }
+    if (n === 1) this.follow();
+    else if (n === 2) this.openFloat(r.rel);
+    else if (n === 3) { this.closeFloat(); this.openPreview(r.rel, cx); }
+  }
+
+  // ── floating preview ─────────────────────────────────────────────────────────────────
+  // One window for the whole app (one key): opening it again replaces it where it was. FLOAT
+  // names it; the window's own copy clears FLOAT when it closes (× , Esc, Open in tab).
+  openFloat(rel) {
+    const file = join(this.root, rel), on = this.on ?? null;
+    const token = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    const id = openOverlay(floatSpec({ file, on, token }));
+    setShared(FLOAT, { id, file, on, token });
+  }
+
+  closeFloat() {
+    const f = shared(FLOAT);
+    if (!f) return;
+    setShared(FLOAT, null);
+    try { closeOverlay(f.id); } catch {}
+  }
+
+  // The window shows `rel` of this folder now.
+  floats(rel) {
+    const f = shared(FLOAT);
+    return Boolean(f) && f.file === join(this.root, rel) && (f.on ?? null) === (this.on ?? null);
+  }
+
+  // While the window is open it follows the cursor, as Quick Look follows the selection.
+  follow() {
+    const r = this.shown.find((x) => x.rel === this.cursor);
+    if (shared(FLOAT) && r && !r.dir && !r.gone && !this.floats(r.rel)) this.openFloat(r.rel);
+  }
+
+  // Enter, a click on a folder: a file opens in roundup-preview's tab, a folder opens or closes;
+  // neither when it is gone.
   activate(r, cx) {
     if (!r) return;
     this.cursor = r.rel;
     if (r.gone) notify({ title: r.dir ? "Deleted folder" : "Deleted file", body: `${r.rel} is no longer on disk`, level: "info", timeout: 2500 });
     else if (r.dir) this.toggle(r, cx);
-    else this.show(r.rel, cx);
+    else this.openPreview(r.rel, cx);
+  }
+
+  // A file in roundup-preview: the pane already showing it comes to the front, else a new tab.
+  // run() names nothing it made, so the new pane is the preview pane that wasn't there before;
+  // it is recorded (shared OPEN) so the next click on the file finds it.
+  openPreview(rel, cx) {
+    const file = join(this.root, rel), on = this.on ?? null;
+    const shown = shownIn(shared(OPEN), shared(MOVED), file, on, new Set(panes().map((p) => p.pane)));
+    if (shown) { run("pane.focus", { pane: shown }); return; }
+    const before = new Set(panes().map((p) => p.pane));
+    run(...openCommand({ file, on }));
+    const record = () => {
+      const made = panes().find((p) => !before.has(p.pane) && p.mod === PREVIEW);
+      if (made) setShared(OPEN, { ...(shared(OPEN) ?? {}), [previewId(file, on)]: made.pane });
+      return Boolean(made);
+    };
+    if (!record()) cx.timer.after(300, () => { record(); });
   }
 
   // ── context menu ─────────────────────────────────────────────────────────────────────
@@ -798,6 +877,8 @@ export default class Files extends View {
   request(req, cx) {
     const abs = join(this.root, req.rel);
     if (req.action === "preview") { this.cursor = req.rel; this.show(req.rel, cx, true); return; }
+    if (req.action === "float") { this.cursor = req.rel; this.openFloat(req.rel); return; }
+    if (req.action === "tab") { this.cursor = req.rel; cx.spawn(async (cx) => this.openPreview(req.rel, cx)); return; }
     cx.spawn(async (cx) => {
       try {
         if (req.action === "open") await openExternal(abs);
@@ -827,6 +908,7 @@ export default class Files extends View {
     const next = Math.max(0, Math.min(rows.length - 1, from + delta));
     this.cursor = rows[next].rel;
     this.scroll.scroll_to_item(next);
+    this.follow();
   }
 
   key(e, cx) {
@@ -860,6 +942,7 @@ export default class Files extends View {
     else if (k === "home") this.move(rows, -rows.length);
     else if (k === "end") this.move(rows, rows.length);
     else if (k === "/") this.input.focus();
+    else if (k === "escape" && shared(FLOAT)) this.closeFloat();
     else if (k === "escape" && this.query) this.clearSearch(cx);
     else if (!cur) return;
     else if (k === "right") { if (cur.dir && !cur.open) this.toggle(cur, cx); else if (cur.dir) this.move(rows, 1); }
@@ -867,6 +950,7 @@ export default class Files extends View {
       if (cur.dir && cur.open && !this.hits && !(this.view === "changed" && this.query.trim())) this.toggle(cur, cx);
       else { const at = rows.findIndex((r) => r.rel === dirOf(cur.rel)); if (dirOf(cur.rel) && at >= 0) { this.cursor = rows[at].rel; this.scroll.scroll_to_item(at); } }
     }
+    else if (k === "space" && !cur.dir && !cur.gone) { if (this.floats(cur.rel)) this.closeFloat(); else this.openFloat(cur.rel); }
     else if (k === "enter" || k === "space") this.activate(cur, cx);
     else if (k === "menu" || (k === "f10" && e.modifiers?.shift)) this.openKeyMenu(cur);
     else return;
@@ -1024,12 +1108,14 @@ export default class Files extends View {
         // Before the list was measured, the keyboard menu hangs below the search field.
         .when(Boolean(this.kmenu) && !pin, (el) => el.relative().child(this.keyMenuPin(t, { top: 28, left: 8 }))))
       .child(div().id("rf-list").flex_1().min_h(0).relative().px(4).pb(4)
+        // How many presses in a row: a row's click (on_item_click) doesn't say.
+        .on_mouse_down("left", (e) => { this.clicks = e.click_count ?? 1; })
         // Scrolling would take the keyboard menu's row away from under it.
         .on_scroll_wheel((_e, cx) => { if (this.kmenu) { this.closeKeyMenu(); cx.notify(); } })
         .on_size_change((size, cx) => { if (Math.abs(size.height - (this.listHeight ?? 0)) > 1) { this.listHeight = size.height; cx.notify(); } })
         .child(v_virtual_list("rf-rows", rows.length, ROW, (i) => rows[i]?.rel ?? String(i), (range) =>
           rows.slice(range.start, range.end).map((r) => this.row(r, t))).track_scroll(this.scroll).size_full()
-          .on_item_click((rel, cx) => { this.handle.focus(); this.activate(this.shown.find((r) => r.rel === rel), cx); cx.notify(); })
+          .on_item_click((rel, cx) => { const n = this.clicks ?? 1; this.clicks = 1; this.handle.focus(); this.click(this.shown.find((r) => r.rel === rel), n, cx); cx.notify(); })
           .on_item_secondary_click((rel, _e, cx) => { const r = this.shown.find((x) => x.rel === rel); if (!r) return; this.cursor = rel; this.openMenu(r); cx.notify(); }))
         .child(Scrollbar.vertical("rf-rows").viewport_from_layout().absolute().inset_0())
         .when(Boolean(note), (el) => el.child(div().absolute().top(6).left(0).right(0).px(12).text_size(12).text_color(t.dim).child(note)))

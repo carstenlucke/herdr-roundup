@@ -13,7 +13,7 @@ The layout is called `Herdr-Roundup`: Herdr's Settings show a layout by its file
 | Path | What |
 | --- | --- |
 | `layouts/Herdr-Roundup.json` | The window: its tree of rows, columns, stacks and blocks, and its look |
-| `mods/roundup-*/` | The layout's own mods. Until a mod is cloned here, the layout uses Herdr's shipped ones (`agents`, `changes`, `workspace-status`). The side panel's file list is `roundup-files`, in place of Herdr's `files` |
+| `mods/roundup-*/` | The layout's own mods. Until a mod is cloned here, the layout uses Herdr's shipped ones (`agents`, `changes`, `workspace-status`). The side panel's file list is `roundup-files`, in place of Herdr's `files`; a click on a file opens it in a tab of `roundup-preview` (Markdown, PDF, images, CSV/TSV, JSON, code) |
 | `themes/` | Themes. One named `Herdr-Roundup.json` is the layout's own: Settings offers it only there |
 | `keys.json` | The `layout:Herdr-Roundup` section: keys that apply only while this layout shows |
 | `assets/` | Files for this README, such as the logo |
