@@ -387,7 +387,9 @@ and `on_item_secondary_click`) with a `Scrollbar` and a
 `VirtualListScrollHandle`. Git runs through `exec` on the folder's machine:
 
 - `git --no-optional-locks -c core.fsmonitor=false -c
-  diff.autoRefreshIndex=false rev-parse --show-toplevel --show-prefix`
+  diff.autoRefreshIndex=false rev-parse --show-toplevel --show-prefix`,
+  once per folder shown inside a repo: again when `.git` in it comes or
+  goes, or status fails
 - the same options, `status --porcelain=v2 -z --branch --no-renames
   --untracked-files=normal --ignored=no -- .`: each path's `XY` and the
   branch (`# branch.head`, `# branch.upstream`, `# branch.ab`)

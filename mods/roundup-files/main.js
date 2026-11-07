@@ -151,7 +151,8 @@ export default class Files extends View {
     if (this.ctx?.root) this.saved.set(this.ctx.key, { folders: this.folders, shut: this.shut, cursor: this.cursor, file: this.file });
     const key = JSON.stringify([root, on]), s = this.saved.get(key);
     // noDisk: buildIndex can't read the disk here (Windows; found out later: no sh).
-    this.ctx = { key, root, on, noDisk: !diskSearch(on) }; this.root = root; this.on = on;
+    // base: where the repo is (readGit); drops: how often a `.git` change dropped it.
+    this.ctx = { key, root, on, noDisk: !diskSearch(on), base: null, drops: 0 }; this.root = root; this.on = on;
     this.kmenu = null;
     this.entries = new Map(); this.folders = new Set(s?.folders); this.shut = new Set(s?.shut); this.pending = new Set();
     this.cursor = s?.cursor ?? ""; this.git = emptyGit(); this.index = null; this.indexing = null; this.hits = null; this.searchError = null;
@@ -177,6 +178,8 @@ export default class Files extends View {
     if (this.loading) { this.again = true; return; }
     const ctx = this.ctx;
     this.loading = true;
+    // A `.git` change during this read (changed() counts them) leaves its repo unremembered.
+    const drops = ctx.drops;
     cx.spawn(async (cx) => {
       try {
         // The open folders and git at once; a folder that fails closes, the root fails all.
@@ -186,9 +189,11 @@ export default class Files extends View {
             if (this.current(ctx)) { this.folders.delete(path); this.entries.delete(path); }
             return false;
           }))),
-          readGit(ctx.root, ctx.on),
+          readGit(ctx.root, ctx.on, ctx.base),
         ]);
         if (!this.current(ctx)) return;
+        // Where the repo is: rev-parse runs once per folder shown (readGit's `base`).
+        if (ctx.drops === drops) ctx.base = git.repo ? { top: git.top, prefix: git.prefix } : null;
         const limited = more.some(Boolean);
         this.git = git; this.limited = limited; this.error = null;
         this.watch(cx);
@@ -243,6 +248,7 @@ export default class Files extends View {
     for (const abs of paths) {
       const rel = relTo(this.root, abs);
       if (rel === null) { shown = true; continue; }
+      if (rel === ".git") { this.ctx.base = null; this.ctx.drops++; } // a repo made or removed here: rev-parse again
       if (!shown && !this.unseen(rel)) shown = true;
       if (job && (baseOf(rel) === ".gitignore" || !this.unindexed(rel, job.source === "git"))) job.changed = true;
       if (!index) continue;

@@ -30,9 +30,9 @@ export function within(set, rel) {
   for (let r = rel; r; r = dirOf(r)) if (set.has(r)) return true;
   return false;
 }
-// At most this many unsure paths are looked up on disk per read, 500 per lookup. One not looked
-// up, or whose lookup failed, counts as there: a missing file then says so when it is opened.
-const UNSURE = 2000, BATCH = 500;
+// At most this many unsure paths are looked up on disk per read, in one kinds() call. One not
+// looked up, or whose lookup failed, counts as there: a missing file then says so when opened.
+const UNSURE = 2000;
 
 // repo: inside a work tree; known: git has answered (or there is none).
 export const emptyGit = (known = false) => ({
@@ -150,13 +150,19 @@ export function parseNumstat(stdout, git) {
 }
 
 // Everything git says about root (here or on `on`). Outside a repo: { repo: false, known: true }.
-export async function readGit(root, on) {
+// `base`: { top, prefix } from an earlier read of root, which skips rev-parse; the caller drops
+// it when `.git` in root comes or goes. If status fails with it, root is read again without.
+export async function readGit(root, on, base) {
   const g = (args) => exec("git", [...READ, ...args], { cwd: root, on });
   const git = emptyGit(true);
-  const top = await g(["rev-parse", "--show-toplevel", "--show-prefix"]).catch(() => null);
-  if (top?.code !== 0) return git;
-  const [dir, prefix = ""] = top.stdout.split("\n");
-  git.repo = true; git.top = dir.trim(); git.prefix = prefix.trim();
+  let where = base, failed = false;
+  if (!where) {
+    const top = await g(["rev-parse", "--show-toplevel", "--show-prefix"]).catch(() => null);
+    if (top?.code !== 0) return git;
+    const [dir, prefix = ""] = top.stdout.split("\n");
+    where = { top: dir.trim(), prefix: prefix.trim() };
+  }
+  git.repo = true; git.top = where.top; git.prefix = where.prefix;
   // Status, the ignored paths, the tracked ones an ignore rule matches and whether root is
   // ignored (then the disk for status's unsure paths, all batches at once) beside numstat;
   // without a commit yet, diff HEAD fails and there are no lines to count. In an ignored root
@@ -167,20 +173,20 @@ export async function readGit(root, on) {
     g(["ls-files", "-z", "--cached", "--ignored", "--exclude-standard", "--", "."]).catch(() => null),
     ignoresRoot(root, on),
   ])
-    .then(([r, ignoredList, forcedList, ignored]) => {
+    .then(async ([r, ignoredList, forcedList, ignored]) => {
       if (ignored) git.rootIgnored = true;
       else if (ignoredList?.code === 0) parseIgnored(ignoredList.stdout, git);
       if (forcedList?.code === 0) parseForced(forcedList.stdout, git);
-      if (r?.code !== 0) return;
+      if (r?.code !== 0) { failed = true; return; }
       parseStatus(r.stdout, git);
-      const unsure = [...git.unsure].slice(0, UNSURE), batches = [];
-      for (let i = 0; i < unsure.length; i += BATCH) batches.push(unsure.slice(i, i + BATCH));
-      return Promise.all(batches.map(async (batch) => {
-        const found = await kinds(root, batch, on).catch(() => null);
-        if (found) for (const rel of batch) if (!found.has(rel)) git.gone.add(rel);
-      }));
+      const unsure = [...git.unsure].slice(0, UNSURE);
+      if (!unsure.length) return;
+      const found = await kinds(root, unsure, on).catch(() => null);
+      if (found) for (const rel of unsure) if (!found.has(rel)) git.gone.add(rel);
     });
   const [, numstat] = await Promise.all([status, g(["diff", "HEAD", "--numstat", "-z", "--no-renames", "--", "."]).catch(() => null)]);
+  // The repo found with `base` is gone or moved: find it again.
+  if (failed && base) return readGit(root, on);
   if (numstat?.code === 0) parseNumstat(numstat.stdout, git);
   return git;
 }
@@ -228,8 +234,8 @@ export async function listFiles(root, on, limit, paths, ignored) {
   }
   // A tracked link to a folder is a folder, as in the tree (git doesn't follow it, nor does
   // this). Untracked links stay files: checking every new path costs too much.
-  for (let i = 0; i < links.length; i += BATCH) {
-    const found = await kinds(root, links.slice(i, i + BATCH), on).catch(() => new Map());
+  if (links.length) {
+    const found = await kinds(root, links, on).catch(() => new Map());
     for (const [rel, kind] of found) if (kind === "d" && files.delete(rel)) addDir(rel);
   }
   return { dirs, files, all: [...dirs, ...files], full };
