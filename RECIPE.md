@@ -433,9 +433,7 @@ Copy uses `cx.write_to_clipboard` and `notify`. Send uses `focused()`,
 Reveal run `open` / `open -R` (PowerShell `Invoke-Item` / `explorer.exe
 /select` on Windows, `xdg-open` elsewhere). Its key commands (none bound):
 `focus`, `search`, `view:all`, `view:changed`, `source:git`,
-`source:disk`, `menu`. `localStorage` keeps the view and the search's source. `this.highlights` (path → `{color, at}`, a theme color name) tints
-a row and colors its name; nothing fills it yet, so a later source (an
-agent's reads and writes) can light up paths without changing the tree. Its
+`source:disk`, `menu`. `localStorage` keeps the view and the search's source. Its
 own art: Symbols 0.0.26 by Miguel Solorio in `icons/` (245 SVGs, with
 `icons/LICENSE`) and `icons.js`, all written by `scripts/build-icons.mjs`
 (`docs/adr/0002-file-icon-set.md`);

@@ -45,12 +45,6 @@ const REQUEST = `${NAME}.request`;
 const baseOf = (rel) => rel.slice(rel.lastIndexOf("/") + 1);
 const join = (root, rel) => (rel ? (/[\\/]$/.test(root) ? root + rel : `${root}/${rel}`) : root);
 const message = (e) => String(e?.message ?? e);
-// A theme color with some transparency, for a highlighted row. Null unless the color is hex.
-const alpha = (c, a) => {
-  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})([0-9a-f]{2})?$/i.exec(c ?? "");
-  if (!m) return null;
-  return `#${m[1].length === 3 ? [...m[1]].map((d) => d + d).join("") : m[1]}${a}`;
-};
 // Git's colors: new green and deleted red, as in Herdr's `files` and `changes`; modified
 // yellow (ansi3) rather than their `blocked`, which many themes draw close to red.
 const statusColor = (t, s) => (!s ? null : s === "D" || s === "U" ? t.ansi1 : s === "?" || s === "A" || s === "C" ? t.ansi2 : s === "R" ? t.ansi4 : t.ansi3);
@@ -88,9 +82,6 @@ export default class Files extends View {
     this.view = VIEWS.some(([v]) => v === prefs.view) ? prefs.view : "all";
     this.source = SOURCES.includes(prefs.source) ? prefs.source : "git";
     this.saved = new Map();
-    // Per-path highlights, for a later source (an agent's reads and writes, say):
-    // rel → { color: a theme color name, at: ms }. Rows tint from it; nothing writes it yet.
-    this.highlights = new Map();
     this.width = 368; this.measuredWidth = null; this.query = ""; this.hits = null; this.searchSeq = 0; this.shown = [];
     this.seenRequest = shared(REQUEST)?.n ?? 0;
     this.uid = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
@@ -608,11 +599,6 @@ export default class Files extends View {
 
   underUntracked(rel) { return this.git.rootUntracked || within(this.git.untracked, rel); }
 
-  highlightOf(rel, t) {
-    const h = this.highlights.get(rel);
-    return h ? { color: t[h.color] ?? null, at: h.at } : null;
-  }
-
   // ── preview ──────────────────────────────────────────────────────────────────────────
   closePreview() {
     this.code?.release();
@@ -821,15 +807,14 @@ export default class Files extends View {
     const g = this.git, rel = r.rel;
     const status = g.status.get(rel) ?? (this.underUntracked(rel) ? "?" : null);
     const ignored = !status && this.isIgnored(rel);
-    const color = statusColor(t, status), hl = this.highlightOf(rel, t);
+    const color = statusColor(t, status);
     const lines = g.diff.get(rel), counts = r.dir ? g.counts.get(rel) : null, selected = rel === this.cursor;
     const showLines = Boolean(lines?.[0] || lines?.[1]) && (!r.dir || this.width >= 360);
     return h_flex().id(`rf-row-${rel}`).h(ROW).flex_none().pl(8 + r.depth * 14).pr(10).gap(6).items_center().rounded(6).cursor_pointer()
       .when(selected, (el) => el.bg(t.selected)).when(!selected, (el) => el.hover((s) => s.bg(t.hover)))
-      .when(Boolean(hl?.color) && !selected, (el) => el.bg(alpha(hl.color, "22") ?? t.hover))
       .child(r.dir ? svg(ICON(`chevron-${r.open ? "down" : "right"}`)).size(12).flex_none().text_color(t.dim) : div().w(12).flex_none())
       .child(image(iconFor(rel, r.dir, r.open)).size(16).flex_none().when(ignored || r.gone, (el) => el.opacity(0.5)))
-      .child(div().flex_1().min_w(0).truncate().text_color(hl?.color ?? (ignored ? t.dim : color ?? t.foreground))
+      .child(div().flex_1().min_w(0).truncate().text_color(ignored ? t.dim : color ?? t.foreground)
         .when(r.gone, (el) => el.line_through()).child(r.name))
       .when(Boolean(counts), (el) => el.children(counts.map((n, i) => n
         ? h_flex().flex_none().gap(3).items_center().text_size(11).text_color(changeColors(t)[i]).child(div().size(6).rounded(3).bg(changeColors(t)[i])).child(String(n))
