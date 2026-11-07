@@ -20,7 +20,8 @@ A Herdr App layout, cloned from Herdr's `main` (0.1.13). See README.md for the l
 
 ## Before a release
 
-- Raise `"version"` on the root of `layouts/Herdr-Roundup.json`. It is the layout's only version: `roundup-workspace-chrome` reads it from the file (`layout()` leaves out fields Herdr doesn't know) and shows it on hover over the icon and name at the top left.
+- Raise `"version"` on the root of `layouts/Herdr-Roundup.json`. It is the layout's only version: `roundup-workspace-chrome` reads it from the file (`layout()` leaves out fields Herdr doesn't know) and shows it under the name at the top left and in its details.
+- Every release gets a tag `v<version>` matching that root `"version"`, plus a GitHub release with notes written for the person who updates (`gh release create v<version> --notes-file …`). Only a release, not a tag, reaches the update check (`releases/latest`), and the updating agent reads its notes before changing anything.
 
 - Decide whether the layout needs a new preview picture: does it look different from what Settings shows (a plain frame, or the last `layouts/Herdr-Roundup.svg`)? If so, draw `layouts/Herdr-Roundup.svg` and set `"preview": "layouts/Herdr-Roundup.svg"` on the layout root. `scripts/sync.sh` already copies it.
 
@@ -31,3 +32,5 @@ A Herdr App layout, cloned from Herdr's `main` (0.1.13). See README.md for the l
 - Mods can't import from another mod's folder: shared code is copied into each mod.
 - `watchFolder()` can't be cancelled: a watch on a folder no longer shown waits until its next change there. At most one per folder, and Herdr shares it between mods.
 - A popup overlay is a copy of its mod that ends when it closes, timers and tasks included: work that must outlive it runs in the copy that stays.
+- In a `window_drag` block a drag still ends in `on_click`; tell them apart by the pointer's moves (RECIPE "Click or drag"), or stop `mouse_down` and lose the drag there.
+- A `HoverCard` draws above popups: empty its content while a popup it would cover is open.

@@ -25,12 +25,30 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
 
 - **Brand row** (46px, drags the window). On macOS, 76px of space on the
   left for the traffic lights, then a 20px logo (three black sheep on a light
-  ground, corners rounded 5px) and **Herdr Roundup** in semibold `foreground`
-  at 13.5px. Hovering the logo or name shows a tooltip such as
-  `Herdr Roundup 0.4.0 · based on Herdr 0.1.13`. On the right, two 26px icon
-  buttons in `muted`: search (opens the space picker) and sidebar toggle. On
-  the rail the logo, name and search go away; on the macOS rail the toggle
-  goes too.
+  ground, corners rounded 5px) and two lines beside it: **Herdr Roundup** in
+  semibold `foreground` at 13px (16px line), and under it at 11px (14px
+  line) the installed version (`0.7.0`) in `dim`. When a newer release is
+  out and not skipped, the second line reads `0.8.0 available` in `accent`
+  and a 10px `accent` point with a 2px `chrome` ring sits on the logo's top
+  right corner (3px out). During a check the line reads `0.7.0 · checking…`.
+  Before the layout's file is read there is no second line. Logo and name
+  sit on a 36px area, rounded 8px, that turns `hover` under the pointer and
+  shows a hand. On the right, two 26px icon buttons in `muted`: search
+  (opens the space picker) and sidebar toggle. On the rail the logo, name and
+  search go away; on the macOS rail the toggle goes too.
+- **Details card** (on hover over logo or name, after 500ms): 236px wide,
+  12px padding, `popover` background, 1px `border`, radius 10, a large shadow,
+  4px under the row. "Herdr Roundup" in semibold 13px, then four lines at
+  12px with the label in `dim` on the left and the value in `foreground` on
+  the right: Installed `0.7.0`, Based on `Herdr 0.1.13`, Latest `0.8.0` (in
+  `accent` when it is newer; `0.8.0 · skipped` when skipped; `–` before the
+  first answer), Checked `today 09:12` / `yesterday 18:40` / `Nov 3 09:12`
+  (`–` before the first answer). Under them, only when it has something to
+  say, a status line at 11.5px with a 12px icon: a turning spinner and
+  "Checking for updates…" in `muted`, or a circle with `!` and "Couldn't
+  check: <reason>" in `working` (it wraps). Last, under a 1px `border` line,
+  "Click the Roundup title for update options" at 11.5px in `dim`, in `accent` when an update
+  is available.
 - **Spaces** (half of the remaining height, at least 90px):
   - Header row 31px: "Spaces" in `dim` at 11.5px and a `+` button that makes
     a new space.
@@ -185,8 +203,49 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   when it opens (a 2px `accent` ring around it): Enter cancels, so a second
   `cmd-w` or Enter too many closes nothing. Tab and Shift-Tab move between
   the two, Enter or Space presses the one with the ring, Esc cancels.
-- **Version tooltip:** follows the layout file. After a new release is
-  installed, it shows the new version without a restart.
+- **Version:** follows the layout file. After a new release is installed,
+  the second line and the details show the new version without a restart.
+- **Update check:** once a day the brand row asks GitHub for the layout's
+  latest release (at start, and every hour it looks whether a day has
+  passed). A request counts as made before it is sent, so failures,
+  restarts and reloads still ask at most once a day. The automatic check is
+  quiet: no toast on errors, and for a new version exactly one toast, never
+  for a skipped one: "Herdr Roundup 0.8.0 is out" / "You have 0.7.0 · Click
+  to update with an agent" (`info`). Clicking it starts the update.
+- **Click on logo or name** opens the menu (a popup at the pointer, 260px,
+  as the tab menus: `popover`, 5px padding, 12.8px). A press that moves the
+  window is a drag, not a click, and a double-click maximizes the window as
+  anywhere in the row. While the menu is open, or right after the click,
+  the details card stays away. The menu, top to bottom:
+  - The details as in the card (without the hint), then a divider.
+  - **Check for updates** (refresh icon): asks at once, whatever the day and
+    the choice below, and always answers with a toast: the new-version
+    toast (also for a skipped version, which it un-skips), "Herdr Roundup
+    is up to date" / "0.7.0 is the latest release" (`success`), or
+    "Couldn't check for updates" / the reason (`warning`). Reasons: no
+    connection to api.github.com, GitHub's rate limit, no release on GitHub
+    yet (404), a tag that isn't `v1.2.3`.
+  - Only with an update available and not skipped: **Update to 0.8.0 with
+    an agent…** (bot icon, in `accent`), **Release notes 0.8.0** (opens the
+    release page in the browser), **Skip 0.8.0** (the point, the second
+    line and the toast stay away until a newer version).
+  - Under a divider and the heading "Check for updates" in `dim` 11px:
+    **Daily** and **Only when I ask**, the chosen one with an `accent` check.
+    Only when I ask stops the automatic check.
+  - Under a divider: **Show details on hover** with a check when on (the
+    default). Off, hovering shows nothing but the lit area.
+  - ↑/↓ move, Enter runs, Esc closes; a choice closes the menu.
+- **Updating with an agent:** a new tab "Update Herdr Roundup" in the shown
+  space, in `~/.config/herdr-app` (one folder, so an agent that asks whether
+  to trust a folder asks once), with the first installed agent (most picked
+  first) and this brief as its first message: update from v0.7.0 to v0.8.0,
+  read AGENTS.md, clone the repo at the tag into a new empty folder, read
+  the release notes and README, then tell what changes, whether keys the
+  person changed in the `layout:Herdr-Roundup` section would be replaced and
+  whether the installed `roundup-*` mods differ from the installed tag; only
+  after a yes run the clone's `scripts/sync.sh` and check `herdr-app
+  status`. The mod never writes the install itself. Without an installed
+  agent a `warning` toast says what to tell one's own agent.
 - **Files panel follows the focused pane's folder** (a mod pane: the first
   terminal of its tab), on its machine. Each folder keeps its open folders,
   selection and preview while another one shows (the last 50 folders). The files show at once;
@@ -276,7 +335,7 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
 ## Built from
 
 **Layout** `layouts/Herdr-Roundup.json`, cloned from Herdr's `main` 0.1.13
-(`cloned_from`) with a root `"version"` (`0.6.0`). Root `row` (`titlebar:
+(`cloned_from`) with a root `"version"` (`0.7.0`). Root `row` (`titlebar:
 "none"`, `traffic_lights: [12, 16]`, `background: "canvas"`,
 `terminal_padding: [14, 12]`, `terminal_menu: "roundup-pane"`, divider 1px
 `border`):
@@ -312,9 +371,43 @@ the file when `watchFolder(appHome() + "/layouts")` reports that file (it
 ignores `layouts/.state/`). Search runs `mod.open {name: "picker"}`. The
 toggle stores the width in shared `sidebar.width`, sets
 `sidebar.collapsed`, and runs `layout.resize {id: "sidebar", px}`. Footer:
-`app.settings`, `mod.open {name: "machine-add"}`, `updates().app.ready`. Its
-own art: `logo.png` (160×160, three black sheep), `search.svg`,
-`sidebar.svg`, `settings.svg`, `plus.svg`.
+`app.settings`, `mod.open {name: "machine-add"}`, `updates().app.ready`.
+
+The update check lives in `update.js` and only the brand copy runs it.
+`latest()` is a `fetch` GET of
+`https://api.github.com/repos/carstenlucke/herdr-roundup/releases/latest`
+with `Accept: application/vnd.github+json` and `User-Agent: herdr-roundup`
+(no token, nothing about the person); the version is `tag_name` without its
+`v`, the link `html_url`. Versions compare numerically by major, minor,
+patch. State is shared under `roundup-workspace-chrome.update.`:
+`lastCheck` (ms, set before the request), `checked` (ms of the last answer),
+`latest` (`{version, url}`), `dismissed`, `notified`, `auto` (false: only
+when asked), `error` (the last reason, null after an answer). The automatic
+check runs from the file-reading loop and `cx.timer.every(3600000)`. The
+brand copy takes the commands `roundup-workspace-chrome.check`, `.update`
+and `.notes` through `nextCommand()`; the toast's `action` and the menu send
+them. `.update` calls `knownAgents()` and runs `tab.new {name, folder:
+appHome(), argv: agent.run, task}`; `.notes` runs `open` (macOS),
+`xdg-open` (Linux) or `cmd /c start "" <url>` (Windows) by
+`window().platform`. Toasts are `notify()` (drawn by the shipped `toast`).
+
+The card is gpui-base's `HoverCard` (anchor `top_left`, open delay 500, close
+delay 150) around logo and name, its content `info.js`. The menu is the mod
+again as a popup, `openOverlay({mod: "roundup-workspace-chrome", kind:
+"popup", width: 260, height, props: {menu: {installed, herdr}}})`, drawn by
+`menu.js` after roundup-tabs' `menu.js`. Its height is summed from fixed
+line heights (`menuHeight`, `infoHeight`). The popup sets shared
+`roundup-workspace-chrome.menu` while it is open (its `close()` clears it,
+the brand copy clears it at start); shared
+`roundup-workspace-chrome.details` false turns the card off. Skip, Daily,
+Only when I ask and Show details on hover write shared state from the popup;
+Check, Update and Release notes go to the brand copy as commands.
+
+Its own art: `logo.png` (160×160, three black sheep), `search.svg`,
+`sidebar.svg`, `settings.svg`, `plus.svg`, and Lucide icons `refresh.svg`,
+`bot.svg`, `notes.svg`, `skip.svg`, `check.svg`, `circle-alert.svg`,
+`circle-check.svg`, `circle-arrow-up.svg`, plus `spinner.svg` (a copy of
+`workspace-chrome`'s).
 
 **`roundup-pane`** (clone of `pane` 0.1.13, `place: "none"`, title "Pane
 header"). One copy per pane, with `props()` `{pane, terminal}`; it finds its
@@ -472,8 +565,38 @@ global `tab.close` and `pane.close`.
 - **Block ids** must stay unique; a duplicate crashes Herdr App.
 - **Programs and files:** `roundup-spaces` runs `git` in every space's
   folder, on remote machines too, and runs `hc`. `roundup-workspace-chrome`
-  reads the layout's file outside its own folder. Neither reaches the
-  network itself (`machine add` connects to a machine you already had).
+  reads the layout's file outside its own folder, and once a day sends a
+  GET to `api.github.com` (generic User-Agent, nothing but the IP);
+  "Only when I ask" stops that. Nothing else reaches the network
+  (`machine add` connects to a machine you already had).
+- **GitHub's API:** 60 unauthenticated requests per hour per IP, shared with
+  everything else on that IP; over it the answer is 403 or 429. Without a
+  release (tags alone don't count) `releases/latest` answers 404, so every
+  release needs a GitHub release whose tag is `v` + the root `"version"`.
+- **Click or drag:** in a `window_drag` block a press on logo and name moves
+  the window and its release still arrives as `on_click`. Stopping
+  `mouse_down` would cost the drag there, so the mod measures instead: a
+  click doesn't move the pointer, a drag does (3px or more, or 10 moves).
+  The window trails the pointer by only a few px, so the distance at release
+  alone isn't enough; the moves count too. `click_count` 2 is the
+  double-click that maximizes.
+- **The HoverCard's layer is above popups:** a card left open draws over the
+  menu. Its content is empty right after a click until the pointer leaves,
+  and while the shared `roundup-workspace-chrome.menu` says the menu is
+  open (the pointer can come back to the name over an open menu).
+- **`line_height(16)` is 16 times the font size**, not 16px, and pushes the
+  text out of the 46px row: write `"16px"`.
+- **A text in an `h_flex` doesn't wrap** without `min_w(0)`; the reason in
+  the card ran past its edge.
+- **268px:** at the default width on macOS "Herdr Roundup" (92px) leaves
+  2px beside the search button, so nothing can go beside the name; the
+  version goes under it. The lit area's padding hangs into the row's margin
+  and gap (`pl(6).ml(-6).pr(4).mr(-4)`) so it takes no width.
+- **Only shown copies get commands:** with the sidebar hidden
+  (`ctrl-shift-b`) the brand row isn't shown, and the toast's action finds
+  no one; the rail still shows it but without logo, name or point.
+- **The popup ends when it closes**, timers and tasks included: what must
+  outlive it is a command to the brand copy.
 - **`git status` must not write under `.git`**: without
   `--no-optional-locks` and `core.fsmonitor=false`, each status touches the
   index or an fsmonitor cookie, which wakes the watch, which runs status
@@ -576,8 +699,27 @@ global `tab.close` and `pane.close`.
 - `herdr-app check` passes for every `roundup-` mod, `herdr-app status`
   shows no errors, and `layout.switch {"name": "Herdr-Roundup"}` shows the
   window.
-- The top left shows the sheep logo and "Herdr Roundup", and hovering it
-  shows `Herdr Roundup <version> · based on Herdr 0.1.13`.
+- The top left shows the sheep logo, "Herdr Roundup" and under it the
+  version; at 268px nothing truncates the name, and the window drags from
+  the name too without opening the menu.
+- Hovering logo or name shows the card with Installed, Based on `Herdr
+  0.1.13`, Latest and Checked; clicking opens the menu with the same facts
+  on top, and no card shows over the open menu.
+- With a release on GitHub newer than the installed version, the logo has
+  the point, the second line says `<version> available`, and exactly one
+  toast came; a reload or restart brings no second one. A copy at the
+  latest version shows neither.
+- Check for updates answers with "up to date", "<version> is out" or
+  "Couldn't check for updates" (before the first release: "No release on
+  GitHub yet"); the automatic check stays quiet on that.
+- The toast and "Update to <version> with an agent…" open a tab "Update
+  Herdr Roundup" in `~/.config/herdr-app` with an installed agent and the
+  brief, versions filled in.
+- Skip <version> keeps point, line and toast away until a newer version.
+- `lastCheck` changes at most once a day across reloads and restarts;
+  with Only when I ask it doesn't change at all.
+- Show details on hover off: hovering shows no card; the menu still shows
+  the facts.
 - A space in a repo whose name differs from the space, on branch `feat/x`,
   shows `repo · feat/x` under its name in a 44px row. A space named after its
   repo, clean on `main`, is a single 32px row.

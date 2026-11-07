@@ -37,6 +37,12 @@ herdr-app do layout.switch '{"name":"Herdr-Roundup"}'
 
 `sync.sh` copies the layout, the `roundup-*` mods and the themes, and replaces only the `layout:Herdr-Roundup` section of your `keys.json`. Sizes, hidden columns and theme picks you change by clicking stay in `layouts/.state/`.
 
+## Updates
+
+The version you have is under the name at the top left. Once a day the layout asks GitHub whether there is a newer release: a plain `GET` to `api.github.com` with a generic User-Agent, so GitHub sees nothing but your IP. A new version shows as a point on the logo, `0.8.0 available` under the name and one notification.
+
+Click the logo or the name for the menu: check now, update, read the release notes, skip a version, or choose "Only when I ask" to stop the daily check. Updating opens a tab with your agent and a brief: it reads the release, tells you what would change (keys or mods you edited yourself included) and asks before it installs anything.
+
 ## Working on it
 
 - Herdr reloads a mod or layout on every save. After editing, run `scripts/sync.sh`.
