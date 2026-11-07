@@ -100,7 +100,9 @@ export default class Files extends View {
     this.seenRequest = shared(REQUEST)?.n ?? 0;
     this.uid = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
     this.input = InputState.new({ placeholder: "Search files" });
-    this.input.on("change", (_e, cx) => this.search(this.input.value(), cx));
+    // Only a change of the text searches: reset() empties the field while drawing, where
+    // search's notify would be refused, and has emptied this.query already.
+    this.input.on("change", (_e, cx) => { const v = this.input.value(); if (v !== this.query) this.search(v, cx); });
     this.input.on("submit", (_e, cx) => {
       const r = this.shown.find((x) => x.rel === this.cursor) ?? this.shown[0];
       // A preview hides the input: the keys (Esc, Left) go to the panel then.
