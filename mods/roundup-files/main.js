@@ -365,7 +365,7 @@ export default class Files extends View {
     } catch { return "stale"; }
     if (!this.current(ctx) || this.index !== index || index.stale) return "same";
     let moved = false;
-    const take = (rel) => { if (index.known.has(rel)) return; index.all.push(rel); index.known.add(rel); index.added.add(rel); moved = true; };
+    const take = (rel) => { if (index.known.has(rel)) return; index.all.push(rel); index.lower.push(rel.toLowerCase()); index.known.add(rel); index.added.add(rel); moved = true; };
     for (const d of dirs) if (!index.dirs.has(d)) { index.dirs.add(d); take(d); }
     for (const f of files) take(f);
     // What it took in and is gone now, with what it took in below it.
@@ -374,6 +374,7 @@ export default class Files extends View {
     const out = (p) => index.added.has(p) && !here.has(p) && gone.some((g) => p === g || p.startsWith(`${g}/`));
     if (gone.length) {
       const drop = new Set([...index.added].filter(out));
+      index.lower = index.lower.filter((_, i) => !drop.has(index.all[i]));
       index.all = index.all.filter((p) => !drop.has(p));
       for (const p of drop) { index.added.delete(p); index.known.delete(p); index.dirs.delete(p); }
       moved = true;
@@ -455,8 +456,14 @@ export default class Files extends View {
       try {
         const index = await this.ensureIndex(ctx);
         if (seq !== this.searchSeq || !this.current(ctx)) return;
-        const matches = index.all.filter((rel) => rel.toLowerCase().includes(q));
-        const named = matches.filter((rel) => baseOf(rel).toLowerCase().includes(q));
+        // index.lower: index.all in lower case, made once per index, not per keystroke.
+        const matches = [], named = [];
+        index.all.forEach((rel, i) => {
+          const low = index.lower[i];
+          if (!low.includes(q)) return;
+          matches.push(rel);
+          if (baseOf(low).includes(q)) named.push(rel);
+        });
         this.hits = [...new Set([...named, ...matches])].slice(0, FIND_LIMIT);
         // The cursor stays on a hit or on a folder above one: both are rows of the hit tree.
         const before = this.cursor, kept = Boolean(before) && this.hits.some((h) => h === before || h.startsWith(`${before}/`));
@@ -491,7 +498,7 @@ export default class Files extends View {
             if (!built) throw new Error(this.current(ctx) && this.gitReason() ? `${this.gitReason()} · ${e.message}` : e.message);
           }
         }
-        const index = { dirs: built.dirs, all: built.all, full: built.full, source: ctx.noDisk ? "git" : source, from: fromGit ? "git" : "disk", known: new Set(built.all), added: new Set(), pending: new Set(), checking: false, at: Date.now(), stale: false, held: false, dirty: Boolean(fromGit ? job.changedGit : job.changedDisk) };
+        const index = { dirs: built.dirs, all: built.all, lower: built.all.map((rel) => rel.toLowerCase()), full: built.full, source: ctx.noDisk ? "git" : source, from: fromGit ? "git" : "disk", known: new Set(built.all), added: new Set(), pending: new Set(), checking: false, at: Date.now(), stale: false, held: false, dirty: Boolean(fromGit ? job.changedGit : job.changedDisk) };
         if (this.current(ctx) && this.searchSource() === index.source) this.index = index;
         return index;
       })().finally(() => { if (this.current(ctx) && this.indexing === job) this.indexing = null; });
