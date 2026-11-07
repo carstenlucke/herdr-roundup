@@ -58,6 +58,7 @@ const thousands = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 const limits = (cut = []) => cut.map((c) => (c === "dirs" ? `the first ${thousands(INDEX_DIRS)} folders` : `the first ${thousands(INDEX_PATHS)} files`)).join(" and ") || "part of this folder";
 // Why a folder has no repo: git found none, or no git started there.
 const noRepo = (g) => (g.missing ? "Git not found" : "Not a git repository");
+const GIT_FAILED = "Git can't read this folder";
 // Git's colors: new green and deleted red, as in Herdr's `files` and `changes`; modified
 // yellow (ansi3) rather than their `blocked`, which many themes draw close to red.
 const statusColor = (t, s) => (!s ? null : s === "D" || s === "U" ? t.ansi1 : s === "?" || s === "A" || s === "C" ? t.ansi2 : s === "R" ? t.ansi4 : t.ansi3);
@@ -212,7 +213,8 @@ export default class Files extends View {
         ]);
         if (!this.current(ctx)) return;
         // Where the repo is: rev-parse runs once per folder shown (readGit's `base`).
-        if (ctx.drops === drops) ctx.base = git.repo ? { top: git.top, prefix: git.prefix } : null;
+        // Not after a failed status: the next read asks rev-parse again, rather than status twice.
+        if (ctx.drops === drops) ctx.base = git.repo && !git.failed ? { top: git.top, prefix: git.prefix } : null;
         const limited = more.some(Boolean);
         this.git = git; this.limited = limited; this.error = null;
         this.watch(cx);
@@ -283,7 +285,7 @@ export default class Files extends View {
       if (this.unindexed(rel, fromGit)) continue;
       // From the disk, a new path named like a pruned folder (a build's `dist`, say): recheck
       // tells a file from a folder. One recheck can't place is most likely the folder.
-      if (!fromGit && !index.known.has(rel) && prunedName(this.root, rel) && !this.placeable(index, rel)) continue;
+      if (!fromGit && !index.known.has(rel) && prunedName(this.root, rel, this.on) && !this.placeable(index, rel)) continue;
       if (rel === "" || index.dirs.has(rel)) index.stale = true;
       else if (index.added.has(rel) || (!index.known.has(rel) && this.placeable(index, rel))) check.push(rel);
       // A capped index can't place it, and reading it again would be cut short as well.
@@ -368,7 +370,7 @@ export default class Files extends View {
         files = [...r.files]; dirs = [...r.dirs];
       } else {
         for (const [rel, kind] of await kinds(ctx.root, rels, ctx.on)) {
-          if (kind === "d" && prunedName(ctx.root, rel)) continue;
+          if (kind === "d" && prunedName(ctx.root, rel, ctx.on)) continue;
           if (kind === "d") return "stale";
           files.push(rel);
         }
@@ -399,7 +401,7 @@ export default class Files extends View {
   unindexed(rel, fromGit) {
     if (!rel) return false;
     if (rel.split("/").includes(".git")) return true;
-    return fromGit ? this.isIgnored(rel) : prunedAbove(this.root, rel) || rel.split("/").length > indexDepth(this.root);
+    return fromGit ? this.isIgnored(rel) : prunedAbove(this.root, rel, this.on) || rel.split("/").length > indexDepth(this.root, this.on);
   }
 
   // Whether the next search reads the index again.
@@ -869,7 +871,7 @@ export default class Files extends View {
     const box = v_flex().h(46).flex_none().px(12).gap(7).justify_center().border_b(1).border_color(t.border).text_size(12);
     const none = div().h(4);
     if (!g.known) return box.child(div().text_color(t.dim).child(this.root ? "Reading git…" : "")).child(none);
-    if (!g.repo) return box.child(h_flex().gap(6).items_center().text_color(t.dim).child(svg(ICON("branch")).size(12).flex_none()).child(noRepo(g))).child(none);
+    if (!g.repo || g.failed) return box.child(h_flex().gap(6).items_center().text_color(t.dim).child(svg(ICON("branch")).size(12).flex_none()).child(g.failed ? GIT_FAILED : noRepo(g))).child(none);
     const c = g.counts.get("") ?? [0, 0, 0], total = c[0] + c[1] + c[2], lines = g.diff.get("") ?? [0, 0], colors = changeColors(t);
     const parts = [MODIFIED, NEW, DELETED].filter((i) => c[i] > 0);
     const legend = 26 * parts.length, room = Math.max(40, this.width - 26 - legend - 2 * parts.length);
@@ -934,6 +936,7 @@ export default class Files extends View {
     if (this.view === "changed") {
       if (!g.known) return "Reading git…";
       if (!g.repo) return noRepo(g);
+      if (g.failed) return GIT_FAILED;
       return rows.length ? null : this.query.trim() ? "No matching changes" : g.rootUntracked ? "This whole folder is new to git" : g.rootIgnored ? "Git ignores this whole folder" : "No changes";
     }
     if (this.searching && !rows.length) return "Searching…";

@@ -55,9 +55,10 @@ export function within(set, rel) {
 // looked up, or whose lookup failed, counts as there: a missing file then says so when opened.
 const UNSURE = 2000;
 
-// repo: inside a work tree; known: git has answered (or there is none); missing: no git started.
+// repo: inside a work tree; known: git has answered (or there is none); missing: no git started;
+// failed: in a repo, but status failed (too large or slow, a broken index): nothing below is known.
 export const emptyGit = (known = false) => ({
-  repo: false, known, missing: false, top: "", prefix: "", branch: null,
+  repo: false, known, missing: false, failed: false, top: "", prefix: "", branch: null,
   status: new Map(), // rel (file or folder) → letter: ? A M R T D U
   files: new Map(), // rel → change, for every path git status lists (files and untracked folders)
   untracked: new Set(), // untracked folders git lists as a whole ("dir/")
@@ -119,10 +120,13 @@ export function parseForced(stdout, git) {
 //   ? <path> (untracked; a folder ends in /)
 // <sub> starts with S for a submodule. <mW>, the working tree's mode, is 000000 where the path
 // isn't there for git: also after `git rm --cached`, but then git lists the file as new too.
+// Answers how many paths lay outside git.prefix: status runs on "." alone, so any means the
+// prefix is wrong (a repo made between root and the one it was read in).
 export function parseStatus(stdout, git) {
   const map = (p) => (p.startsWith(git.prefix) ? p.slice(git.prefix.length).replace(/\/$/, "") : null);
   const up = (rel, fn) => { for (const d of [...ancestors(rel), ""]) fn(d); };
   const absent = new Set(), present = new Set();
+  let outside = 0;
   for (const rec of stdout.split("\0")) {
     if (rec.startsWith("# ")) { parseHeader(rec, git); continue; }
     const kind = rec[0];
@@ -135,6 +139,7 @@ export function parseStatus(stdout, git) {
       sub = fields[2]; worktree = fields[kind === "1" ? 5 : 6];
     } else continue;
     const rel = map(raw);
+    if (rel === null) { outside++; continue; }
     // The shown folder itself untracked ("? sub/" run from sub): everything below is new.
     if (rel === "" && xy === "??") { git.rootUntracked = true; git.records++; git.counts.set("", [1, 0, 0]); continue; }
     if (!rel) continue;
@@ -158,6 +163,7 @@ export function parseStatus(stdout, git) {
     if (git.rootUntracked || git.rootIgnored || within(git.untracked, rel) || within(git.ignored, rel)) git.unsure.add(rel);
     else git.gone.add(rel);
   }
+  return outside;
 }
 
 // git diff HEAD --numstat -z --no-renames: "added\tdeleted\tpath\0"; binary files say "-".
@@ -172,7 +178,8 @@ export function parseNumstat(stdout, git) {
 
 // Everything git says about root (here or on `on`). Outside a repo: { repo: false, known: true }.
 // `base`: { top, prefix } from an earlier read of root, which skips rev-parse; the caller drops
-// it when `.git` in root comes or goes. If status fails with it, root is read again without.
+// it when `.git` in root comes or goes, or when this says `failed`. If status fails with it,
+// or lists paths outside its prefix, root is read again without.
 export async function readGit(root, on, base) {
   const g = (args) => runGit(args, root, on);
   const out = emptyGit(true);
@@ -180,8 +187,9 @@ export async function readGit(root, on, base) {
   if (!where) {
     const top = await g(["rev-parse", "--show-toplevel", "--show-prefix"]).catch(() => { out.missing = true; return null; });
     if (top?.code !== 0) return out;
-    const [dir, prefix = ""] = top.stdout.split("\n");
-    where = { top: dir.trim(), prefix: prefix.trim() };
+    // Only the line ends go: a folder's name may begin or end with a space.
+    const [dir, prefix = ""] = top.stdout.split(/\r?\n/);
+    where = { top: dir, prefix };
   }
   out.repo = true; out.top = where.top; out.prefix = where.prefix;
   // Status, the ignored paths, the tracked ones an ignore rule matches and whether root is
@@ -199,7 +207,7 @@ export async function readGit(root, on, base) {
       else if (ignoredList?.code === 0) parseIgnored(ignoredList.stdout, out);
       if (forcedList?.code === 0) parseForced(forcedList.stdout, out);
       if (r?.code !== 0) { failed = true; return; }
-      parseStatus(r.stdout, out);
+      if (parseStatus(r.stdout, out) && base) { failed = true; return; }
       const unsure = [...out.unsure].slice(0, UNSURE);
       if (!unsure.length) return;
       const found = await kinds(root, unsure, on).catch(() => null);
@@ -208,6 +216,8 @@ export async function readGit(root, on, base) {
   const [, numstat] = await Promise.all([status, g(["diff", "HEAD", "--numstat", "-z", "--no-renames", "--", "."]).catch(() => null)]);
   // The repo found with `base` is gone or moved: find it again.
   if (failed && base) return readGit(root, on);
+  // Status failed in the repo just found: not "clean", but unknown.
+  if (failed) { out.failed = true; return out; }
   if (numstat?.code === 0) parseNumstat(numstat.stdout, out);
   return out;
 }

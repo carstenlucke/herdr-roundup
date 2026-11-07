@@ -101,7 +101,9 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
     `−N` in `ansi1`); under it a 4px bar of modified (`ansi3`), new (`ansi2`)
     and deleted (`ansi1`) paths, sized by their counts, with the counts at
     its right; when clean, no bar, only its space. Outside a repo: "Not a git
-    repository"; before git answers: "Reading git…".
+    repository"; when status fails (too large or slow, a broken index): "Git
+    can't read this folder", in Changed too; before git answers: "Reading
+    git…".
   - **Search field** (28px, `canvas`, `border`, `accent` while typing):
     "Search files". In All, inside a repo, not in a folder git ignores and
     where search can read the disk, a 20px switch at its right end, the
@@ -224,7 +226,7 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
     ignored files included (`.env`, local settings), and at home `Library`,
     `AppData` and `.Trash` at its top level (a project's `Library` is
     searched; at `/` they are skipped at any depth), 12 levels deep (5 at
-    home or `/`), at most 20,000 folders and 40,000 other paths. Not on
+    home or `/`; home is that of the folder's machine, read once per machine), at most 20,000 folders and 40,000 other paths. Not on
     Windows yet, nor on a machine without `sh`: there search reads git's
     files whatever the switch said, and where git has none it says why
     ("Not a git repository · Search can't read the disk on Windows yet").
@@ -390,7 +392,7 @@ the shipped `confirm`.
 "Files", `focusable: true`). `main.js` draws the panel and, opened with
 `props().menu`, the context menu; `disk.js` lists folders (`sh` here and on
 other machines, PowerShell on Windows, as `files` does; 500 entries per
-folder) and builds the disk's search index with `find` (none on Windows
+folder, of at most 10,000 read and sorted) and builds the disk's search index with `find` (none on Windows
 yet, issue #10); `git.js` reads git and git's search
 index; `actions.js`
 opens, reveals, copies and sends; `icon.js` picks an icon from `icons.js`.
@@ -406,7 +408,8 @@ not "Not a git repository":
 - `git --no-optional-locks -c core.fsmonitor=false -c
   diff.autoRefreshIndex=false rev-parse --show-toplevel --show-prefix`,
   once per folder shown inside a repo: again when `.git` in it comes or
-  goes, or status fails
+  goes, status fails, or status lists a path outside the prefix (a repo
+  made between the folder and the one it was read in)
 - the same options, `status --porcelain=v2 -z --branch --no-renames
   --untracked-files=normal --ignored=no -- .`: each path's `XY` and the
   branch (`# branch.head`, `# branch.upstream`, `# branch.ab`)
@@ -561,7 +564,8 @@ global `tab.close` and `pane.close`.
 - **Search limits:** from the disk the index stops at 20,000 folders and
   40,000 other paths and at 12 levels, from git at 40,000 files; a deeper or
   larger folder is searched only in part, and the footer says so. Folders
-  show their first 500 entries.
+  show their first 500 entries: of the first 10,000 read, so in a larger
+  folder a few that sort early (folders, dotfiles) may be missing.
 - **No search from the disk on Windows yet** (issue #10): `Get-ChildItem
   -Recurse` walks into `node_modules` and the other pruned folders before
   it drops them, so it needs a walk of its own. Until then search reads

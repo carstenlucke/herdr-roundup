@@ -30,7 +30,9 @@ export async function revealExternal(abs) {
   if (platform === "windows") {
     const r = await exec("powershell", ["-NoProfile", "-Command", `if (-not (Test-Path -LiteralPath ${psQuote(abs)})) { exit 1 }`]);
     if (r.code !== 0) throw new Error("Cannot show this file: it is gone");
-    await exec("explorer.exe", [`/select,${abs.replace(/\//g, "\\")}`]);
+    // "/select," and the path as two arguments: as one, the quotes exec puts around a path
+    // with a space enclose the switch too, and Explorer opens its default folder instead.
+    await exec("explorer.exe", ["/select,", abs.replace(/\//g, "\\")]);
     return;
   }
   const r = platform === "macos" ? await exec("open", ["-R", "--", abs]) : await exec("xdg-open", [abs.replace(/\/[^/]*$/, "") || "/"]);
