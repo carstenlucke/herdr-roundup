@@ -13,7 +13,7 @@ import { dirname, native, localPath, samePath, changedFile } from "./paths.js";
 import { VIEWERS } from "./viewers/index.js";
 import { openMenu } from "./menu.js";
 import { iconButton } from "./viewers/controls.js";
-import { previewId, MOVED, OPEN, FLOAT, shownIn, remember, openCommand } from "./open-file.js";
+import { previewId, MOVED, FLOAT, openTab, timerOf } from "./open-file.js";
 import { formatSize } from "./size.js";
 import { programs } from "./programs.js";
 import { systemOf } from "./platform.js";
@@ -112,19 +112,7 @@ export class Preview {
   toTab(cx) {
     const file = this.file, on = this.on, overlay = props()?.overlay;
     if (!file) return;
-    const shown = shownIn(shared(OPEN), shared(MOVED), file, on, new Set(panes().map((p) => p.pane)));
-    if (shown) { run("pane.focus", { pane: shown }); closeOverlay(overlay); return; }
-    const before = new Set(panes().map((p) => p.pane));
-    run(...openCommand({ file, on }));
-    const record = () => {
-      const made = panes().find((p) => !before.has(p.pane) && p.mod === "roundup-preview");
-      if (!made) return false;
-      const next = remember(shared(OPEN), shared(MOVED), file, on, made.pane, new Set(panes().map((p) => p.pane)));
-      setShared(OPEN, next.open); setShared(MOVED, next.moved);
-      return true;
-    };
-    if (record()) closeOverlay(overlay);
-    else cx.timer.after(300, () => { record(); closeOverlay(overlay); });
+    openTab({ panes, run, shared, setShared }, file, on, timerOf(cx), () => closeOverlay(overlay));
   }
 
   // The name or the folder, which a click copies: the name, or the file's full path.

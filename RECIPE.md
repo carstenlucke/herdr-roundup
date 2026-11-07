@@ -330,9 +330,11 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   most one read per 3 s while a build keeps making folders. In Changed, the search filters git's paths. `×` or Esc clears it.
 - **Click** a folder to open or close it, a file to select it. A
   **double-click** on a file shows it in the floating preview (below), a
-  **triple click** in a preview tab, closing the floating one; a file
-  already open in a tab brings that tab to the front. While the floating
-  preview is open it follows the selection (click, ↑ ↓). The tree keeps
+  **Cmd-double-click** (Ctrl on Windows and Linux) in a preview tab, closing
+  the floating one if it shows that file; a file already open in a tab
+  brings that tab to the front. While the floating preview is open it
+  follows the selection: at once on a click, after 150ms of rest on ↑ ↓, so
+  holding a key opens it once where it stops. The tree keeps
   showing the terminal's folder while the preview tab is shown.
   **Keys**, once the panel has the keyboard (a click on it, or `pane.go`):
   ↑ ↓ select, PgUp PgDn Home End jump, → opens a folder or steps into an
@@ -583,17 +585,24 @@ not "Not a git repository":
   --exclude-standard -- .` (an untracked repo inside comes as `dir/`: one
   folder); when it fails (no repo, no git), search reads the disk
 
-A triple click, Enter or the menu's Open in tab on a file runs `tab.new {name, mod:
-"roundup-preview", props: {file, on}}` (`open-file.js`'s `openCommand`).
-`run()` names nothing it made, so the panel takes the `roundup-preview`
-pane that wasn't in `panes()` before (again after 300ms if not there yet)
-and records it in shared `roundup-preview.open` (`"<on>:<file>"` → pane).
+A Cmd-double-click, Enter or the menu's Open in tab on a file runs `tab.new {name, mod:
+"roundup-preview", props: {file, on}}` (`open-file.js`'s `openTab` and
+`openCommand`; the window's Open in tab runs the same). `run()` names
+nothing it made and a mod pane doesn't learn its own id (issue #17), so the
+opener takes the one `roundup-preview` pane that wasn't in `panes()` before
+(looking again every 200ms, five times) and records it in shared
+`roundup-preview.open` (`"<on>:<file>"` → pane). Opens in flight sit in
+shared `roundup-preview.opening` (token → `{since, until}`): when another
+open overlapped this one in time, or two new panes came, it records none, so
+the next click opens another tab rather than focusing a wrong one.
 The next click on the file runs `pane.focus` on it while it is alive and
 `roundup-preview.moved` doesn't say it followed a link elsewhere
 (`shownIn`). `open-file.js` is a copy of `roundup-preview`'s; `sync.sh`
 refuses to install when the two differ. The click count comes from
 `on_mouse_down("left")` on the list's box (`click_count`), since
-`on_item_click` gives none; the row's click then reads it. A double-click,
+`on_item_click` gives none; the row's click then reads it, and Cmd from
+the same event's `modifiers.platform` on macOS, `modifiers.control`
+elsewhere (`platform` is the Windows key there). A double-click,
 Space or Quick look runs `openOverlay(floatSpec({file, on, token}))`
 (`open-file.js`: `kind: "window"`, `key: "roundup-preview"`, so opening again
 replaces it in place) and writes shared `roundup-preview.float` (`{id, file,
