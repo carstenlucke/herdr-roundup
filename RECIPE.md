@@ -490,9 +490,12 @@ global `tab.close` and `pane.close`.
   lists as a whole, or an ignored one, does it not: `roundup-files` asks the
   disk for those (at most 2,000; one it didn't ask counts as there). A submodule is one path with `S` in `<sub>`, not a file.
 - **`roundup-files` watches its whole folder:** on macOS that includes
-  `.git` and ignored folders, so a build in `node_modules` refreshes it
-  often. A refresh while one runs only marks another one due, so they never
-  pile up. Its git reads write nothing under `.git` (see above), or each
+  `.git` and ignored folders. A batch that touches only what git ignores (a
+  build in `node_modules` or `target`), outside the open folders, doesn't
+  refresh; the 10s timer still does. A refresh while one runs only marks
+  another one due, so they never pile up. Status reads ignored files with
+  `--ignored=matching`: `traditional` walks every ignored folder in full on
+  each refresh. Its git reads write nothing under `.git` (see above), or each
   refresh would wake the watch again.
 - **A virtual list's rows can't hold handlers:** `on_click` inside the row
   renderer throws. Clicks come from `on_item_click(key)` and

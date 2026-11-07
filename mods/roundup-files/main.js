@@ -12,7 +12,7 @@ import { v_flex, h_flex, Editor, EditorState, InputState, Input, Scrollbar, Popu
 import { spaces, panes, focused, readTextFile, watchFolder, theme, settings, window, props, notify, openOverlay, closeOverlay, shared, setShared, nextCommand } from "herdr";
 import { iconFor, rootIcon } from "./icon.js";
 import { listDir, buildIndex, kinds, indexDepth, compare, prunedName, prunedAbove, PER_FOLDER, INDEX_PATHS } from "./disk.js";
-import { readGit, listFiles, emptyGit, ancestors, dirOf, NEW, MODIFIED, DELETED } from "./git.js";
+import { readGit, listFiles, emptyGit, ancestors, dirOf, within, NEW, MODIFIED, DELETED } from "./git.js";
 import { openExternal, revealExternal, copy, sendToAgent, relTo } from "./actions.js";
 
 const NAME = "roundup-files";
@@ -40,12 +40,6 @@ const REQUEST = `${NAME}.request`;
 const baseOf = (rel) => rel.slice(rel.lastIndexOf("/") + 1);
 const join = (root, rel) => (rel ? (/[\\/]$/.test(root) ? root + rel : `${root}/${rel}`) : root);
 const message = (e) => String(e?.message ?? e);
-// Whether rel or one of its folders is in set.
-const selfOrAbove = (set, rel) => {
-  if (!set.size) return false;
-  for (let r = rel; r; r = dirOf(r)) if (set.has(r)) return true;
-  return false;
-};
 // A theme color with some transparency, for a highlighted row. Null unless the color is hex.
 const alpha = (c, a) => {
   const m = /^#([0-9a-f]{3}|[0-9a-f]{6})([0-9a-f]{2})?$/i.exec(c ?? "");
@@ -243,9 +237,12 @@ export default class Files extends View {
   changed(paths, cx) {
     const index = this.index, job = this.indexing, fromGit = index?.from === "git";
     const check = [];
+    // A path it can't place, or none at all, refreshes as well: it can't tell.
+    let shown = !paths.length;
     for (const abs of paths) {
       const rel = relTo(this.root, abs);
-      if (rel === null) continue;
+      if (rel === null) { shown = true; continue; }
+      if (!shown && !this.unseen(rel)) shown = true;
       if (job && (baseOf(rel) === ".gitignore" || !this.unindexed(rel, job.source === "git"))) job.changed = true;
       if (!index) continue;
       if (fromGit && baseOf(rel) === ".gitignore") { index.stale = true; continue; }
@@ -264,7 +261,19 @@ export default class Files extends View {
       else this.recheck(index, check, cx);
     }
     if (index && this.outdated(index)) this.searchAgain(cx);
-    this.refresh(cx);
+    if (shown) this.refresh(cx);
+  }
+
+  // Whether a change at rel leaves the tree and git's marks as they are, so it needn't
+  // refresh: its folder isn't open, and git ignores it (a build in node_modules or target) or
+  // there is no repo. .git isn't ignored: a commit or `git add` refreshes. The 10s timer still
+  // catches what this misses (a tracked file inside an ignored folder that starts to differ).
+  unseen(rel) {
+    const g = this.git;
+    if (!rel || !g.known) return false;
+    const dir = dirOf(rel);
+    if (!dir || this.folders.has(dir)) return false;
+    return !g.repo || (this.isIgnored(rel) && !g.status.has(rel));
   }
 
   // Whether recheck can take rel into the index: not into one a limit cut short; from the
@@ -537,9 +546,9 @@ export default class Files extends View {
     return out;
   }
 
-  isIgnored(rel) { return selfOrAbove(this.git.ignored, rel); }
+  isIgnored(rel) { return this.git.rootIgnored || within(this.git.ignored, rel); }
 
-  underUntracked(rel) { return this.git.rootUntracked || selfOrAbove(this.git.untracked, rel); }
+  underUntracked(rel) { return this.git.rootUntracked || within(this.git.untracked, rel); }
 
   highlightOf(rel, t) {
     const h = this.highlights.get(rel);
@@ -844,7 +853,7 @@ export default class Files extends View {
     if (this.view === "changed") {
       if (!g.known) return "Reading git…";
       if (!g.repo) return "Not a git repository";
-      return rows.length ? null : this.query.trim() ? "No matching changes" : g.rootUntracked ? "This whole folder is new to git" : "No changes";
+      return rows.length ? null : this.query.trim() ? "No matching changes" : g.rootUntracked ? "This whole folder is new to git" : g.rootIgnored ? "Git ignores this whole folder" : "No changes";
     }
     if (this.searching && !rows.length) return "Searching…";
     if (this.hits && this.searchError) return this.searchError;

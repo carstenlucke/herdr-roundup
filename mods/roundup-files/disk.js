@@ -11,6 +11,9 @@ export const PER_FOLDER = 500;
 const PRUNE = [".git", "node_modules", "target", ".venv", "venv", "__pycache__", "dist", "build", ".next", ".nuxt", ".cache", ".gradle", ".idea", "vendor", "Pods", ".tox", ".mypy_cache", ".pytest_cache", "coverage"];
 const HOME_PRUNE = ["Library", "AppData", ".Trash"];
 export const INDEX_DIRS = 20000, INDEX_PATHS = 40000;
+// The paths kinds() puts on one PowerShell command line: room left for the script, the root
+// and the quoting Windows adds.
+const WINDOWS_LINE = 24000;
 
 const windows = (on) => !on && window()?.platform === "windows";
 export const psQuote = (s) => "'" + s.replace(/['‘’‚‛]/g, "$&$&") + "'";
@@ -116,10 +119,20 @@ export const indexDepth = (root) => (atHomeOf(root) ? 5 : 12);
 // left out.
 export async function kinds(root, rels, on) {
   const found = new Map();
+  // Windows takes a command line of at most 32,767 characters: the paths go in pieces of at
+  // most WINDOWS_LINE, one after another.
   const windowsKinds = async () => {
-    const r = await exec("powershell", ["-NoProfile", "-Command", `[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); & { param($b) foreach ($r in @(${rels.map(psQuote).join(",")})) { $f = Join-Path $b $r; if (Test-Path -LiteralPath $f -PathType Container) { 'd' + $r } elseif (Test-Path -LiteralPath $f) { 'f' + $r } } } ${psQuote(root)}`], { on });
-    if (r.code !== 0) throw new Error(r.stderr || "Cannot open this folder");
-    for (const line of r.stdout.split(/\r?\n/)) if (line.length > 1) found.set(line.slice(1), line[0]);
+    let piece = [], length = 0;
+    const pieces = [piece];
+    for (const q of rels.map(psQuote)) {
+      if (length + q.length + 1 > WINDOWS_LINE && piece.length) { pieces.push((piece = [])); length = 0; }
+      piece.push(q); length += q.length + 1;
+    }
+    for (const piece of pieces) {
+      const r = await exec("powershell", ["-NoProfile", "-Command", `[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); & { param($b) foreach ($r in @(${piece.join(",")})) { $f = Join-Path $b $r; if (Test-Path -LiteralPath $f -PathType Container) { 'd' + $r } elseif (Test-Path -LiteralPath $f) { 'f' + $r } } } ${psQuote(root)}`], { on });
+      if (r.code !== 0) throw new Error(r.stderr || "Cannot open this folder");
+      for (const line of r.stdout.split(/\r?\n/)) if (line.length > 1) found.set(line.slice(1), line[0]);
+    }
     return found;
   };
   if (windows(on)) return windowsKinds();

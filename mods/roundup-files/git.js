@@ -8,8 +8,9 @@ import { exec } from "herdr";
 import { kinds } from "./disk.js";
 
 // Reads write nothing under .git (no index refresh or lock, no fsmonitor cookie): the folder
-// watch would see it, and every refresh would start the next one.
-const READ = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "diff.autoRefreshIndex=false"];
+// watch would see it, and every refresh would start the next one. diff.relative=false: numstat's
+// paths stay relative to the repo, whatever the user's config says.
+const READ = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "diff.autoRefreshIndex=false", "-c", "diff.relative=false"];
 // Which status a folder shows when its files differ: the most urgent.
 const RANK = { "?": 1, A: 2, C: 2, R: 3, T: 3, M: 3, D: 4, U: 5 };
 const IGNORED = 5000;
@@ -23,10 +24,15 @@ export function ancestors(rel) {
   return out;
 }
 const stronger = (a, b) => (!a ? b : (RANK[b] ?? 0) > (RANK[a] ?? 0) ? b : a);
-const within = (set, rel) => [rel, ...ancestors(rel)].some((d) => set.has(d));
+// Whether rel or one of its folders is in set.
+export function within(set, rel) {
+  if (!set.size) return false;
+  for (let r = rel; r; r = dirOf(r)) if (set.has(r)) return true;
+  return false;
+}
 // At most this many unsure paths are looked up on disk per read, 500 per lookup. One not looked
 // up, or whose lookup failed, counts as there: a missing file then says so when it is opened.
-const UNSURE = 2000;
+const UNSURE = 2000, BATCH = 500;
 
 // repo: inside a work tree; known: git has answered (or there is none).
 export const emptyGit = (known = false) => ({
@@ -39,6 +45,7 @@ export const emptyGit = (known = false) => ({
   unsure: new Set(), // ones git can't place: below an untracked or ignored folder; gone if the disk agrees
   rootUntracked: false, // the shown folder is itself one of them
   ignored: new Set(), // ignored files and folders (at most IGNORED)
+  rootIgnored: false, // the shown folder is ignored, or lies in an ignored folder
   diff: new Map(), // rel (file or folder, "" the whole) → [added, deleted] lines against HEAD
   counts: new Map(), // folder ("" the whole) → [new, modified, deleted]
   records: 0, // lines of git status, without the branch line
@@ -56,12 +63,15 @@ function parseHeader(rec, git) {
   else if (key === "branch.ab") { const m = /^\+(\d+) -(\d+)$/.exec(value); b.ahead = Number(m?.[1] ?? 0); b.behind = Number(m?.[2] ?? 0); b.gone = false; }
 }
 
-// git status --porcelain=v2 -z --branch --no-renames --ignored=traditional. Entries:
+// git status --porcelain=v2 -z --branch --no-renames --ignored=matching. Entries:
 //   1 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <path>          (changed; "." in XY: unchanged)
 //   u <XY> <sub> <m1> <m2> <m3> <mW> <h1> <h2> <h3> <path> (unmerged)
 //   ? <path> (untracked; a folder ends in /)   ! <path> (ignored)
 // <sub> starts with S for a submodule. <mW>, the working tree's mode, is 000000 where the path
 // isn't there for git: also after `git rm --cached`, but then git lists the file as new too.
+// "matching" lists an ignored folder without walking it ("traditional" walks all of it, every
+// node_modules and target, on every refresh), and the ignored files of a folder that isn't
+// ignored itself one by one ("traditional" lists that folder when all it holds is ignored).
 export function parseStatus(stdout, git) {
   const map = (p) => (p.startsWith(git.prefix) ? p.slice(git.prefix.length).replace(/\/$/, "") : null);
   const up = (rel, fn) => { for (const d of [...ancestors(rel), ""]) fn(d); };
@@ -77,6 +87,8 @@ export function parseStatus(stdout, git) {
       xy = fields[1].replace(/\./g, " "); raw = fields.slice(n).join(" ");
       sub = fields[2]; worktree = fields[kind === "1" ? 5 : 6];
     } else continue;
+    // The shown folder ignored, or inside an ignored folder: git names only that folder.
+    if (xy === "!!" && raw.endsWith("/") && git.prefix.startsWith(raw)) { git.rootIgnored = true; continue; }
     const rel = map(raw);
     // The shown folder itself untracked ("? sub/" run from sub): everything below is new.
     if (rel === "" && xy === "??") { git.rootUntracked = true; git.records++; git.counts.set("", [1, 0, 0]); continue; }
@@ -99,7 +111,7 @@ export function parseStatus(stdout, git) {
   // above as a whole or leaves it out as ignored: then only the disk can tell.
   for (const rel of absent) {
     if (present.has(rel)) continue;
-    if (git.rootUntracked || within(git.untracked, rel) || within(git.ignored, rel)) git.unsure.add(rel);
+    if (git.rootUntracked || git.rootIgnored || within(git.untracked, rel) || within(git.ignored, rel)) git.unsure.add(rel);
     else git.gone.add(rel);
   }
 }
@@ -122,17 +134,21 @@ export async function readGit(root, on) {
   if (top?.code !== 0) return git;
   const [dir, prefix = ""] = top.stdout.split("\n");
   git.repo = true; git.top = dir.trim(); git.prefix = prefix.trim();
-  // Both at once; without a commit yet, diff HEAD fails and there are no lines to count.
-  const [status, numstat] = await Promise.all([
-    g(["status", "--porcelain=v2", "-z", "--branch", "--no-renames", "--untracked-files=normal", "--ignored=traditional", "--", "."]).catch(() => null),
-    g(["diff", "HEAD", "--numstat", "-z", "--no-renames", "--", "."]).catch(() => null),
-  ]);
-  if (status?.code === 0) parseStatus(status.stdout, git);
-  const unsure = [...git.unsure].slice(0, UNSURE);
-  for (let i = 0; i < unsure.length; i += 500) {
-    const batch = unsure.slice(i, i + 500), found = await kinds(root, batch, on).catch(() => null);
-    if (found) for (const rel of batch) if (!found.has(rel)) git.gone.add(rel);
-  }
+  // Status (and then the disk for its unsure paths, all batches at once) beside numstat;
+  // without a commit yet, diff HEAD fails and there are no lines to count.
+  const status = g(["status", "--porcelain=v2", "-z", "--branch", "--no-renames", "--untracked-files=normal", "--ignored=matching", "--", "."])
+    .catch(() => null)
+    .then((r) => {
+      if (r?.code !== 0) return;
+      parseStatus(r.stdout, git);
+      const unsure = [...git.unsure].slice(0, UNSURE), batches = [];
+      for (let i = 0; i < unsure.length; i += BATCH) batches.push(unsure.slice(i, i + BATCH));
+      return Promise.all(batches.map(async (batch) => {
+        const found = await kinds(root, batch, on).catch(() => null);
+        if (found) for (const rel of batch) if (!found.has(rel)) git.gone.add(rel);
+      }));
+    });
+  const [, numstat] = await Promise.all([status, g(["diff", "HEAD", "--numstat", "-z", "--no-renames", "--", "."]).catch(() => null)]);
   if (numstat?.code === 0) parseNumstat(numstat.stdout, git);
   return git;
 }
@@ -167,8 +183,8 @@ export async function listFiles(root, on, limit, paths) {
   }
   // A tracked link to a folder is a folder, as in the tree (git doesn't follow it, nor does
   // this). Untracked links stay files: checking every new path costs too much.
-  for (let i = 0; i < links.length; i += 500) {
-    const found = await kinds(root, links.slice(i, i + 500), on).catch(() => new Map());
+  for (let i = 0; i < links.length; i += BATCH) {
+    const found = await kinds(root, links.slice(i, i + BATCH), on).catch(() => new Map());
     for (const [rel, kind] of found) if (kind === "d" && files.delete(rel)) addDir(rel);
   }
   return { dirs, files, all: [...dirs, ...files], full };
