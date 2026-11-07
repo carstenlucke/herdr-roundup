@@ -6,6 +6,8 @@
 // "<on>:<file>" -> what that preview shows now, once it followed a link.
 export const OPEN = "roundup-preview.open", MOVED = "roundup-preview.moved";
 export const previewId = (file, on) => `${on ?? ""}:${file}`;
+/** A token unique enough to tell one open, window or panel copy from another. */
+export const newToken = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 
 /** The pane already showing `file`, or null. `open`, `moved`: the shared maps; `alive`: pane ids that exist. */
 export function shownIn(open, moved, file, on, alive) {
@@ -60,7 +62,7 @@ export function openTab(api, file, on, wait, done = () => {}) {
   const { panes, run, shared, setShared } = api, ids = () => new Set(panes().map((p) => p.pane));
   const shown = shownIn(shared(OPEN), shared(MOVED), file, on, ids());
   if (shown) { run("pane.focus", { pane: shown }); done(); return; }
-  const token = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`, since = Date.now(), before = ids();
+  const token = newToken(), since = Date.now(), before = ids();
   setShared(OPENING, marked(shared(OPENING), token, { since, until: null }, since));
   run(...openCommand({ file, on }));
   const attempt = (tries, wait) => {

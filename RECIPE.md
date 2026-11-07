@@ -609,7 +609,11 @@ replaces it in place) and writes shared `roundup-preview.float` (`{id, file,
 on, token}`). The window's copy (`props().float` = the token) clears that key
 in `close()` only while it still holds its token, since a replaced window
 closes after the new one wrote it. The panel clears the key on start: a
-window doesn't survive a restart or a layout switch, the key does.
+window doesn't survive a restart or a layout switch, the key does. When the
+window follows a link or goes Back, it writes the file it shows into the
+key's `file`, again only while it holds its token; the panel compares that
+with a row's path by `samePath` (`paths.js`, a copy of `roundup-preview`'s
+that `sync.sh` checks too), since a link's path comes with `/` on Windows.
 In the window a press drags it unless stopped, so `preview.js` stops
 `mouse_down` on its controls and its body (and focuses its handle there, for
 Esc). A mod pane has no folder, so the
@@ -800,6 +804,21 @@ global `tab.close` and `pane.close`.
   -Recurse` walks into `node_modules` and the other pruned folders before
   it drops them, so it needs a walk of its own. Until then search reads
   git's files there, and outside a repo it says it can't.
+- **An overlap stops recording for a while:** an open that overlapped
+  another and never saw its pane keeps `until: null`, so every later open
+  within 10 s overlaps it and records none either: while files are opened
+  less than 10 s apart, a second Cmd-double-click opens another tab. Ending
+  it once any new pane comes is wrong: two overlapping opens can both see
+  the first one's pane, and a later open then takes the late second pane as
+  its own. Counting the panes of the whole overlapping group works only
+  with an observer that outlives each open's five looks; until `run()`
+  names the pane it made (issue #17), this stays.
+- **One file, two spellings, two previews:** `roundup-preview.open` and
+  `.moved` are keyed by `"<on>:<file>"` as the path was written, and
+  `.moved` by the file a tab opened with rather than by the tab. A tab
+  opened as `C:\repo\b.md` isn't found for `C:/repo/b.md` (the window's
+  Open in tab after a link), and a second unrecorded tab of the same file
+  can overwrite the recorded one's `.moved` entry.
 
 ## Done when
 
@@ -883,11 +902,13 @@ global `tab.close` and `pane.close`.
 - ↑ ↓ → ← Enter and Esc work as described; right-clicking a file shows the
   menu, Preview in panel shows it in the panel and Esc goes back, and Copy
   relative path puts the path on the clipboard.
-- A click on a `.md`, `.pdf`, `.png`, `.csv` and `.json` file opens a tab
+- A click on a file selects it; a double-click shows it in the floating
+  preview, which then follows the selection. A Cmd-double-click (Enter
+  too) on a `.md`, `.pdf`, `.png`, `.csv` and `.json` file opens a tab
   named after it with the Markdown rendered (its local SVG drawn inline),
   the PDF's pages, the picture with its size, a table with a fixed header,
-  and a JSON tree. A second click on the same file brings that tab back
-  instead of a new one. With the terminal `cd`'d into a subfolder, the tree
-  still shows that subfolder while the preview tab is in front.
+  and a JSON tree. Another Cmd-double-click on the same file brings that
+  tab back instead of a new one. With the terminal `cd`'d into a subfolder,
+  the tree still shows that subfolder while the preview tab is in front.
 - A folder without git shows "Not a git repository" and its files; a folder
   with more than 500 entries says so in the footer.

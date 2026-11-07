@@ -18,7 +18,9 @@ import { readGit, listFiles, emptyGit, ancestors, dirOf, within, NEW, MODIFIED, 
 import { openExternal, revealExternal, copy, sendToAgent, relTo } from "./actions.js";
 // A copy of roundup-preview's: how it opens and which pane already shows a file. sync.sh
 // checks that the two copies match.
-import { FLOAT, openTab, timerOf, floatSpec } from "./open-file.js";
+import { FLOAT, openTab, timerOf, floatSpec, newToken } from "./open-file.js";
+// Also roundup-preview's: the window writes a followed link's path in its own form (/ on Windows).
+import { samePath } from "./paths.js";
 
 const NAME = "roundup-files";
 const ICON = (name) => `mods/${NAME}/${name}.svg`;
@@ -124,7 +126,7 @@ export default class Files extends View {
     this.seenRequest = shared(REQUEST)?.n ?? 0;
     // A floating window doesn't outlive a restart or a layout switch, but FLOAT is saved.
     if (shared(FLOAT)) setShared(FLOAT, null);
-    this.uid = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    this.uid = newToken();
     this.input = InputState.new({ placeholder: "Search files" });
     // Only a change of the text searches: reset() empties the field while drawing, where
     // search's notify would be refused, and has emptied this.query already.
@@ -745,8 +747,7 @@ export default class Files extends View {
   openFloat(rel) {
     this.stopFollow();
     const file = join(this.root, rel), on = this.on ?? null;
-    const token = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-    const id = openOverlay(floatSpec({ file, on, token }));
+    const token = newToken(), id = openOverlay(floatSpec({ file, on, token }));
     setShared(FLOAT, { id, file, on, token });
   }
 
@@ -761,7 +762,7 @@ export default class Files extends View {
   // The window shows `rel` of this folder now.
   floats(rel) {
     const f = shared(FLOAT);
-    return Boolean(f) && f.file === join(this.root, rel) && (f.on ?? null) === (this.on ?? null);
+    return Boolean(f?.file) && samePath(f.file, join(this.root, rel)) && (f.on ?? null) === (this.on ?? null);
   }
 
   // While the window is open it follows the cursor, as Quick Look follows the selection. From

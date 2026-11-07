@@ -12,9 +12,12 @@ for f in close.js menu.js; do
   cmp -s "$src/mods/roundup-tabs/$f" "$src/mods/roundup-pane/$f" ||
     { echo "mods/roundup-tabs/$f and mods/roundup-pane/$f differ: copy one over the other" >&2; exit 1; }
 done
-# How roundup-files opens roundup-preview: the mod name, its props and its shared keys.
-cmp -s "$src/mods/roundup-preview/open-file.js" "$src/mods/roundup-files/open-file.js" ||
-  { echo "mods/roundup-preview/open-file.js and mods/roundup-files/open-file.js differ: copy one over the other" >&2; exit 1; }
+# How roundup-files opens roundup-preview (the mod name, its props and its shared keys), and
+# how both tell two spellings of one path apart.
+for f in open-file.js paths.js; do
+  cmp -s "$src/mods/roundup-preview/$f" "$src/mods/roundup-files/$f" ||
+    { echo "mods/roundup-preview/$f and mods/roundup-files/$f differ: copy one over the other" >&2; exit 1; }
+done
 
 mkdir -p "$app/layouts" "$app/mods" "$app/themes"
 

@@ -87,11 +87,16 @@ export class Preview {
   }
 
   // Tells roundup-files what this preview shows now, so it isn't reused for the file it opened with.
-  // Not the floating window: it is in no OPEN entry, and its file's key is a tab's.
+  // The floating window is in no OPEN entry (its file's key is a tab's): it updates FLOAT's file
+  // instead, while FLOAT still names it, so the panel's floats() sees what it shows.
   moved() {
-    if (this.float) return;
-    const opened = props()?.file, id = previewId(opened, this.on);
-    setShared(MOVED, { ...(shared(MOVED) ?? {}), [id]: samePath(this.file, opened) ? opened : this.file });
+    const opened = props()?.file, now = samePath(this.file, opened) ? opened : this.file;
+    if (this.float) {
+      const f = shared(FLOAT);
+      if (f?.token === this.float) setShared(FLOAT, { ...f, file: now });
+      return;
+    }
+    setShared(MOVED, { ...(shared(MOVED) ?? {}), [previewId(opened, this.on)]: now });
   }
 
   release() {
@@ -146,6 +151,8 @@ export class Preview {
         if (e.keystroke === "escape") { closeOverlay(props()?.overlay); cx.stop_propagation(); }
       })).min_h(0).bg(t.background).text_color(t.foreground).text_size(13)
       .child(h_flex().h(42).flex_none().px(10).gap(8).items_center().border_b(1).border_color(t.border)
+        // A press on its free part drags the window and gives it the keyboard, for Esc.
+        .when(float, (el) => el.on_mouse_down("left", () => this.handle.focus()))
         .when(this.history.length > 0, (el) => el.child(still(control("roundup-preview-back", "←", `Back to ${basename(this.history.at(-1))}`, (_e, cx) => this.back(cx)))))
         .child(h_flex().flex_1().min_w(0).gap(8).items_center().pl(this.history.length ? 0 : 4)
           .child(label("roundup-preview-name", basename(this.file ?? ""), "name").flex_none().max_w(320).font_semibold())
