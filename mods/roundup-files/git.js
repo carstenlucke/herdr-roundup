@@ -46,6 +46,7 @@ export const emptyGit = (known = false) => ({
   rootUntracked: false, // the shown folder is itself one of them
   ignored: new Set(), // ignored files and folders (at most IGNORED)
   rootIgnored: false, // the shown folder is ignored, or lies in an ignored folder
+  forced: new Set(), // tracked files an ignore rule matches (added with -f), and their folders
   diff: new Map(), // rel (file or folder, "" the whole) → [added, deleted] lines against HEAD
   counts: new Map(), // folder ("" the whole) → [new, modified, deleted]
   records: 0, // lines of git status, without the branch line
@@ -76,6 +77,17 @@ export function parseIgnored(stdout, git) {
     if (!rel || within(git.ignored, dirOf(rel))) continue;
     if (git.ignored.size >= IGNORED) break;
     git.ignored.add(rel);
+  }
+}
+
+// git ls-files -z --cached --ignored --exclude-standard, run in root: the tracked files an
+// ignore rule matches (added with `git add -f`), relative to root. They and their folders
+// aren't ignored, though they lie in an ignored folder or the shown folder is one.
+export function parseForced(stdout, git) {
+  for (const rel of stdout.split("\0")) {
+    if (!rel) continue;
+    git.forced.add(rel);
+    for (const a of ancestors(rel)) { if (git.forced.has(a)) break; git.forced.add(a); }
   }
 }
 
@@ -145,17 +157,20 @@ export async function readGit(root, on) {
   if (top?.code !== 0) return git;
   const [dir, prefix = ""] = top.stdout.split("\n");
   git.repo = true; git.top = dir.trim(); git.prefix = prefix.trim();
-  // Status, the ignored paths and whether root is ignored (then the disk for status's unsure
-  // paths, all batches at once) beside numstat; without a commit yet, diff HEAD fails and there
-  // are no lines to count. In an ignored root every path is ignored: its list isn't needed.
+  // Status, the ignored paths, the tracked ones an ignore rule matches and whether root is
+  // ignored (then the disk for status's unsure paths, all batches at once) beside numstat;
+  // without a commit yet, diff HEAD fails and there are no lines to count. In an ignored root
+  // every untracked path is ignored: the list of ignored ones isn't needed.
   const status = Promise.all([
     g(["status", "--porcelain=v2", "-z", "--branch", "--no-renames", "--untracked-files=normal", "--ignored=no", "--", "."]).catch(() => null),
     g(["ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--directory", "--", "."]).catch(() => null),
+    g(["ls-files", "-z", "--cached", "--ignored", "--exclude-standard", "--", "."]).catch(() => null),
     ignoresRoot(root, on),
   ])
-    .then(([r, ignoredList, ignored]) => {
+    .then(([r, ignoredList, forcedList, ignored]) => {
       if (ignored) git.rootIgnored = true;
       else if (ignoredList?.code === 0) parseIgnored(ignoredList.stdout, git);
+      if (forcedList?.code === 0) parseForced(forcedList.stdout, git);
       if (r?.code !== 0) return;
       parseStatus(r.stdout, git);
       const unsure = [...git.unsure].slice(0, UNSURE), batches = [];

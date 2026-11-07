@@ -267,14 +267,16 @@ export default class Files extends View {
 
   // Whether a change at rel leaves the tree and git's marks as they are, so it needn't
   // refresh: its folder isn't open, and git ignores it (a build in node_modules or target) or
-  // there is no repo. .git isn't ignored: a commit or `git add` refreshes. The 10s timer still
-  // catches what this misses (a tracked file inside an ignored folder that starts to differ).
+  // there is no repo. .git isn't ignored: a commit or `git add` refreshes, and outside a repo
+  // a `git init` in the shown folder does. A tracked file an ignore rule matches isn't ignored
+  // either (isIgnored), so its edits show at once. The 10s timer still catches what this misses.
   unseen(rel) {
     const g = this.git;
     if (!rel || !g.known) return false;
     const dir = dirOf(rel);
     if (!dir || this.folders.has(dir)) return false;
-    return !g.repo || (this.isIgnored(rel) && !g.status.has(rel));
+    if (!g.repo) return !rel.startsWith(".git/");
+    return this.isIgnored(rel) && !g.status.has(rel);
   }
 
   // Whether recheck can take rel into the index: not into one a limit cut short; from the
@@ -567,7 +569,11 @@ export default class Files extends View {
     return out;
   }
 
-  isIgnored(rel) { return this.git.rootIgnored || within(this.git.ignored, rel); }
+  // A tracked file is never ignored, though a rule matches it (added with -f), nor its folders.
+  isIgnored(rel) {
+    const g = this.git;
+    return (g.rootIgnored || within(g.ignored, rel)) && !g.forced.has(rel);
+  }
 
   underUntracked(rel) { return this.git.rootUntracked || within(this.git.untracked, rel); }
 

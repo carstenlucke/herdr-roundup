@@ -394,8 +394,10 @@ and `on_item_secondary_click`) with a `Scrollbar` and a
 - alongside it, `ls-files -z --others --ignored --exclude-standard
   --directory -- .`: at most 5,000 ignored paths, a folder that is ignored
   or holds only ignored files as one path (what lies below it is left out),
-  and `check-ignore -q --no-index -- ./`: whether the shown folder is
-  ignored or lies in an ignored folder
+  `ls-files -z --cached --ignored --exclude-standard -- .`: the tracked
+  files an ignore rule matches (added with `git add -f`), which with their
+  folders don't count as ignored, and `check-ignore -q --no-index -- ./`:
+  whether the shown folder is ignored or lies in an ignored folder
 - alongside status, `diff HEAD --numstat -z --no-renames -- .` for the
   `+N −N` of files, summed up for folders (it fails before the first commit:
   no lines then)
@@ -502,7 +504,9 @@ global `tab.close` and `pane.close`.
 - **`roundup-files` watches its whole folder:** on macOS that includes
   `.git` and ignored folders. A batch that touches only what git ignores (a
   build in `node_modules` or `target`), outside the open folders, doesn't
-  refresh; the 10s timer still does. A refresh while one runs only marks
+  refresh, nor, outside a repo, one that touches only closed folders
+  (`.git` in the shown folder still does); the 10s timer still does. A
+  tracked file an ignore rule matches isn't ignored: its edits refresh. A refresh while one runs only marks
   another one due, so they never pile up. Ignored paths come from
   `ls-files --directory`, not from status: `--ignored=traditional` walks
   every ignored folder in full on each refresh (about four times as long
