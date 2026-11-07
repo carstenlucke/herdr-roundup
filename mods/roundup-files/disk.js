@@ -94,13 +94,16 @@ export async function buildIndex(root, on) {
   // A link to a folder: -type l and test -d (which follows it). One with a pruned name is in
   // neither list.
   const skip = `-type d \\( ${names} \\) -prune -o`, link = `-type l -exec test -d {} \\;`;
-  const script = `cd "$1" || exit 3; find . -maxdepth ${depth} ${skip} \\( -type d -o -type l ! \\( ${names} \\) -exec test -d {} \\; \\) -print 2>/dev/null | head -n ${INDEX_DIRS + 1}; echo //; find . -maxdepth ${depth} ${skip} ! -type d ! -name .git ! \\( ${link} \\) -print 2>/dev/null | head -n ${INDEX_PATHS + 1}`;
+  // NUL-separated, as a name may hold a newline. `cut` keeps the first N records and ends
+  // find early (head -z is GNU only): it swaps NUL and newline around head and back.
+  const cut = `cut() { tr '\\000\\n' '\\n\\000' | head -n "$1" | tr '\\n\\000' '\\000\\n'; }`;
+  const script = `${cut}; cd "$1" || exit 3; find . -maxdepth ${depth} ${skip} \\( -type d -o -type l ! \\( ${names} \\) -exec test -d {} \\; \\) -print0 2>/dev/null | cut ${INDEX_DIRS + 1}; printf '//\\0'; find . -maxdepth ${depth} ${skip} ! -type d ! -name .git ! \\( ${link} \\) -print0 2>/dev/null | cut ${INDEX_PATHS + 1}`;
   let r;
   try { r = await exec("sh", ["-c", script, "roundup-files", root], { on }); }
   catch (e) { if (noSh(e, on)) throw noIndex("Search can't read the disk without sh"); throw e; }
   if (r.code === 3) throw new Error("Cannot open this folder");
   let inDirs = true, nd = 0, nf = 0;
-  for (const line of r.stdout.split("\n")) {
+  for (const line of r.stdout.split("\0")) {
     if (line === "//") { inDirs = false; continue; }
     if (!line.startsWith("./")) continue;
     if (inDirs ? ++nd > INDEX_DIRS : ++nf > INDEX_PATHS) continue;
