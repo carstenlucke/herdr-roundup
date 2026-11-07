@@ -13,20 +13,24 @@ import ICONS from "./icons.js";
 
 const path = (id) => `mods/roundup-files/icons/${id}.svg`;
 
+// Only a table's own entries: a file named `constructor` or `__proto__` would otherwise
+// find what every object inherits.
+const own = (table, key) => (Object.prototype.hasOwnProperty.call(table, key) ? table[key] : undefined);
+
 // rel: the path below the shown folder, "/"-separated; dir: a folder; open: an open folder.
 export function iconFor(rel, dir, open) {
   const parts = String(rel).toLowerCase().split("/").filter(Boolean), name = parts[parts.length - 1] ?? "";
   const find = (table) => {
     let id;
-    for (let i = 0; !id && i < parts.length - 1; i++) id = table[parts.slice(i).join("/")];
-    return id ?? table[name];
+    for (let i = 0; !id && i < parts.length - 1; i++) id = own(table, parts.slice(i).join("/"));
+    return id ?? own(table, name);
   };
   if (dir) return path((open ? find(ICONS.folderNamesExpanded) : undefined) ?? find(ICONS.folderNames) ?? (open ? ICONS.folderExpanded : ICONS.folder));
   // Extensions, longest first: the whole name, then what follows each dot.
   const extensions = [name];
   for (let dot = name.indexOf("."); dot !== -1; dot = name.indexOf(".", dot + 1)) extensions.push(name.slice(dot + 1));
   let id = find(ICONS.fileNames);
-  for (const e of extensions) id ??= ICONS.fileExtensions[e];
+  for (const e of extensions) id ??= own(ICONS.fileExtensions, e);
   return path(id ?? ICONS.file);
 }
 
