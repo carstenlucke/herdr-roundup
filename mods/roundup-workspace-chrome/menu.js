@@ -16,16 +16,16 @@ export const MENU_OPEN = "roundup-workspace-chrome.menu";
 const icon = (name) => `mods/roundup-workspace-chrome/${name}.svg`;
 
 // Whether the update rows show is fixed when the menu opens (`m.release`), as the popup's height is. Their version
-// is the shared one: a check that finds a newer release while the menu is open changes the labels with it, so a
-// label always names what install() and openNotes() act on.
+// is the shared one: a check that finds a newer release while the menu is open changes the labels with it. The
+// command carries the version the label named (`update@0.8.0`), so a check ending after the click changes nothing.
 function rows(m) {
   const offered = "release" in m ? m.release : available(m.installed);
   const release = offered && (available(m.installed) ?? offered), auto = get("auto") !== false, details = shared(DETAILS) !== false;
   return [
     { label: "Check for updates", icon: "refresh", act: () => run("roundup-workspace-chrome.check") },
     ...(release ? [
-      { label: `Update to ${release.version} with an agent…`, icon: "bot", accent: true, act: () => run("roundup-workspace-chrome.update") },
-      { label: `Release notes ${release.version}`, icon: "notes", act: () => run("roundup-workspace-chrome.notes") },
+      { label: `Update to ${release.version} with an agent…`, icon: "bot", accent: true, act: () => run(`roundup-workspace-chrome.update@${release.version}`) },
+      { label: `Release notes ${release.version}`, icon: "notes", act: () => run(`roundup-workspace-chrome.notes@${release.version}`) },
       { label: `Skip ${release.version}`, icon: "skip", act: () => put("dismissed", release.version) },
     ] : []),
     { label: "Daily", check: auto, act: () => { put("auto", true); run("roundup-workspace-chrome.auto"); }, head: "Check for updates", sep: true },

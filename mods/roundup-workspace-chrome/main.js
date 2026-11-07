@@ -48,12 +48,13 @@ export default class WorkspaceChrome extends View {
     setShared(MENU_OPEN, false);
     cx.spawn(async (cx) => {
       for (;;) {
-        const command = await nextCommand();
+        // `update@0.8.0`, `notes@0.8.0`: the version the menu or toast named.
+        const [command, version] = (await nextCommand()).split("@");
         const installed = this.file?.version;
         if (command === "check" && installed) this.check(cx, installed, true);
         // Not awaited: a slow knownAgents() doesn't hold back the next command, and a failure doesn't end the loop.
-        else if (command === "update" && installed) install(installed).catch(() => null);
-        else if (command === "notes") openNotes();
+        else if (command === "update" && installed) install(installed, version).catch(() => null);
+        else if (command === "notes") openNotes(version);
         // Daily chosen again: check now if a day has passed, not at the next hourly tick.
         else if (command === "auto") this.autoCheck(cx);
       }

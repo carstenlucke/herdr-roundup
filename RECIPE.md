@@ -725,7 +725,10 @@ global `tab.close` and `pane.close`.
   brief, versions and the app's folder filled in; with a space on another
   machine shown, the tab opens in a space on this computer.
 - A check that finds a newer release while the menu is open changes the
-  version in its labels: the label names what the action installs.
+  version in its labels: the label names what the action installs. The
+  menu and the toast send that version with the command
+  (`update@<version>`, `notes@<version>`), so a check ending between the
+  click and the command doesn't change it.
 - Skip <version> keeps point, line and toast away until a newer version.
 - `lastCheck` changes at most once a day across reloads and restarts;
   with Only when I ask it doesn't change at all.

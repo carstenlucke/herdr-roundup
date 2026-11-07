@@ -56,7 +56,7 @@ export const due = () => get("auto") !== false && Date.now() - (get("lastCheck")
 function announce(installed, release) {
   notify({
     level: "info", title: `Herdr Roundup ${release.version} is out`, body: `You have ${installed} · Click to update with an agent`,
-    action: { name: "roundup-workspace-chrome.update" },
+    action: { name: `roundup-workspace-chrome.update@${release.version}` },
   });
   put("notified", release.version);
 }
@@ -85,6 +85,14 @@ export async function check(installed, manual) {
   return null;
 }
 
+// The release a command names (`update@0.8.0`, from the menu or the toast): what its label said, even if a check
+// found a newer one between the click and the command. Without a version (a key), the latest known one.
+function pick(version) {
+  const latest = get("latest");
+  if (!version || latest?.version === version) return latest;
+  return VERSION.test(version) ? { version, url: `${PAGE}/tag/v${version}` } : null;
+}
+
 // What the agent is told. It reads the release and checks for local changes before it touches anything.
 // `home` is the app's folder (appHome(), with HERDR_APP_HOME not the usual one): every path names it, and
 // sync.sh and `herdr-app status` get the variable, which the agent's shell may not have.
@@ -103,8 +111,8 @@ function brief(installed, release, home) {
 // stays on its space's machine, and the agents and the app's folder looked at here are this computer's. The shown
 // space if it is here, else the first one here, else a new one. In the app's own folder, so an agent that asks
 // whether to trust a folder asks once.
-export async function install(installed) {
-  const release = get("latest");
+export async function install(installed, version) {
+  const release = pick(version);
   if (!release || !newer(release.version, installed)) {
     notify({ level: "info", title: "Nothing to update", body: `Herdr Roundup ${installed} is the latest release known` });
     return;
@@ -130,8 +138,8 @@ export async function install(installed) {
 }
 
 // The release's page in the browser.
-export function openNotes() {
-  const url = get("latest")?.url ?? PAGE;
+export function openNotes(version) {
+  const url = pick(version)?.url ?? PAGE;
   const platform = window()?.platform;
   const [cmd, args] = platform === "macos" ? ["open", [url]] : platform === "windows" ? ["cmd", ["/c", "start", "", url]] : ["xdg-open", [url]];
   exec(cmd, args).catch(() => notify({ level: "warning", title: "Couldn't open the release notes", body: url }));
