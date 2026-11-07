@@ -488,7 +488,7 @@ global `tab.close` and `pane.close`.
   status says `D.` with working-tree mode `000000`, as for a file really
   gone, and lists the file as new (`?`) as well. Only below a folder git
   lists as a whole, or an ignored one, does it not: `roundup-files` asks the
-  disk for those. A submodule is one path with `S` in `<sub>`, not a file.
+  disk for those (at most 2,000; one it didn't ask counts as there). A submodule is one path with `S` in `<sub>`, not a file.
 - **`roundup-files` watches its whole folder:** on macOS that includes
   `.git` and ignored folders, so a build in `node_modules` refreshes it
   often. A refresh while one runs only marks another one due, so they never

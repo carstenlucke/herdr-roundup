@@ -24,8 +24,9 @@ export function ancestors(rel) {
 }
 const stronger = (a, b) => (!a ? b : (RANK[b] ?? 0) > (RANK[a] ?? 0) ? b : a);
 const within = (set, rel) => [rel, ...ancestors(rel)].some((d) => set.has(d));
-// At most this many unsure paths are looked up on disk per read; the rest count as gone.
-const UNSURE = 500;
+// At most this many unsure paths are looked up on disk per read, 500 per lookup. One not looked
+// up, or whose lookup failed, counts as there: a missing file then says so when it is opened.
+const UNSURE = 2000;
 
 // repo: inside a work tree; known: git has answered (or there is none).
 export const emptyGit = (known = false) => ({
@@ -35,7 +36,7 @@ export const emptyGit = (known = false) => ({
   untracked: new Set(), // untracked folders git lists as a whole ("dir/")
   links: new Set(), // submodules: folders, though git lists them as one path
   gone: new Set(), // listed paths not in the working tree (a deletion in the index alone isn't one)
-  unsure: new Set(), // gone ones git can't vouch for: below an untracked or ignored folder
+  unsure: new Set(), // ones git can't place: below an untracked or ignored folder; gone if the disk agrees
   rootUntracked: false, // the shown folder is itself one of them
   ignored: new Set(), // ignored files and folders (at most IGNORED)
   diff: new Map(), // rel (file or folder, "" the whole) → [added, deleted] lines against HEAD
@@ -98,8 +99,8 @@ export function parseStatus(stdout, git) {
   // above as a whole or leaves it out as ignored: then only the disk can tell.
   for (const rel of absent) {
     if (present.has(rel)) continue;
-    git.gone.add(rel);
     if (git.rootUntracked || within(git.untracked, rel) || within(git.ignored, rel)) git.unsure.add(rel);
+    else git.gone.add(rel);
   }
 }
 
@@ -127,9 +128,10 @@ export async function readGit(root, on) {
     g(["diff", "HEAD", "--numstat", "-z", "--no-renames", "--", "."]).catch(() => null),
   ]);
   if (status?.code === 0) parseStatus(status.stdout, git);
-  if (git.unsure.size) {
-    const found = await kinds(root, [...git.unsure].slice(0, UNSURE), on).catch(() => new Map());
-    for (const rel of found.keys()) git.gone.delete(rel);
+  const unsure = [...git.unsure].slice(0, UNSURE);
+  for (let i = 0; i < unsure.length; i += 500) {
+    const batch = unsure.slice(i, i + 500), found = await kinds(root, batch, on).catch(() => null);
+    if (found) for (const rel of batch) if (!found.has(rel)) git.gone.add(rel);
   }
   if (numstat?.code === 0) parseNumstat(numstat.stdout, git);
   return git;
