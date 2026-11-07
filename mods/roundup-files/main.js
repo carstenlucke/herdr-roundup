@@ -222,8 +222,9 @@ export default class Files extends View {
         // Where the repo is: rev-parse runs once per folder shown (readGit's `base`).
         // Not after a failed status: the next read asks rev-parse again, rather than status twice.
         if (ctx.drops === drops) ctx.base = git.repo && !git.failed ? { top: git.top, prefix: git.prefix } : null;
-        const limited = more.some(Boolean);
+        const limited = more.some(Boolean), prev = this.git;
         this.git = git; this.limited = limited; this.error = null;
+        if (git.known && (!prev.known || prev.repo !== git.repo || prev.rootIgnored !== git.rootIgnored)) this.regit(cx);
         this.watch(cx);
       } catch (e) { if (this.current(ctx)) { this.error = message(e); this.git = emptyGit(true); this.entries = new Map(); } }
       finally {
@@ -234,6 +235,17 @@ export default class Files extends View {
         cx.notify();
       }
     });
+  }
+
+  // Git's answer about the shown folder changed (a repo made or removed, the folder now ignored
+  // or no longer), or came for the first time: an index for search from git, or one being
+  // built, may have been read from the wrong source (git's files or the disk): it is read again.
+  // Not when its source differs from what git says (ensureIndex reads the disk where git can't
+  // list): that would read it again on every refresh.
+  regit(cx) {
+    if (this.indexing?.source === "git") this.indexing.regit = true;
+    const i = this.index;
+    if (i?.source === "git") { i.stale = true; i.at = 0; this.searchAgain(cx); }
   }
 
   // Lists one folder; answers whether it held more than PER_FOLDER.
@@ -534,6 +546,8 @@ export default class Files extends View {
           }
         }
         const index = { dirs: built.dirs, all: built.all, lower: built.all.map((rel) => rel.toLowerCase()), full: built.full, cut: built.cut, files: built.all.length - built.dirs.size, source: ctx.noDisk ? "git" : source, from: fromGit ? "git" : "disk", known: new Set(built.all), added: new Set(), pending: new Set(), checking: false, at: Date.now(), stale: false, held: false, dirty: Boolean(fromGit ? job.changedGit : job.changedDisk) };
+        // Git's answer changed during the build (regit): the next search, or the timer, reads it again.
+        if (job.regit) { index.stale = true; index.at = 0; }
         if (this.current(ctx) && this.searchSource() === index.source) this.index = index;
         return index;
       })()

@@ -224,7 +224,8 @@ export async function readGit(root, on, base) {
       if (!look.length) return;
       const found = await kinds(root, look, on).catch(() => null);
       if (!found) return;
-      for (const rel of unsure) if (!found.has(rel)) out.gone.add(rel);
+      // An unsure path that is a folder (an ignored link to one, out of the index) opens from disk.
+      for (const rel of unsure) { const k = found.get(rel); if (!k) out.gone.add(rel); else if (k === "d") out.links.add(rel); }
       for (const rel of maybe) if (found.get(rel) === "d") out.links.add(rel);
     });
   const [, numstat] = await Promise.all([status, g(["diff", "HEAD", "--numstat", "-z", "--no-renames", "--", "."]).catch(() => null)]);
