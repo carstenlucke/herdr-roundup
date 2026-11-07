@@ -155,16 +155,21 @@ export async function readGit(root, on) {
 
 // The files git counts as the project below root: tracked and new ones, without what
 // .gitignore leaves out, and the folders that hold them. At most `limit` files. Null outside
-// a repo or without git: the caller reads the disk then. `paths` (relative to root): only
-// those, and what is below them.
+// a repo, without git, or when root is ignored (git would list little or nothing there): the
+// caller reads the disk then. `paths` (relative to root): only those, and what is below them.
 export async function listFiles(root, on, limit, paths) {
-  let r;
+  let r, ignored;
   const specs = paths ? paths.map((p) => `:(literal)${p}`) : ["."];
   // -s: tracked entries come as "<mode> <object> <stage>\t<path>" (a submodule's mode is
-  // 160000, a folder), new ones as their bare path.
-  try { r = await exec("git", [...READ, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "-s", "--abbrev=4", "--", ...specs], { cwd: root, on }); }
-  catch { return null; }
-  if (r.code !== 0) return null;
+  // 160000, a folder), new ones as their bare path. check-ignore --no-index: root ignored,
+  // or inside an ignored folder, even when it holds a tracked file (status names it then).
+  try {
+    [r, ignored] = await Promise.all([
+      exec("git", [...READ, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "-s", "--abbrev=4", "--", ...specs], { cwd: root, on }),
+      paths ? null : exec("git", [...READ, "check-ignore", "-q", "--no-index", "--", "./"], { cwd: root, on }).catch(() => null),
+    ]);
+  } catch { return null; }
+  if (r.code !== 0 || ignored?.code === 0) return null;
   const dirs = new Set(), files = new Set();
   let full = true;
   const addDirs = (rel) => { for (const a of ancestors(rel)) { if (dirs.has(a)) break; dirs.add(a); } };

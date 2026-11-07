@@ -103,9 +103,9 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
     its right; when clean, no bar, only its space. Outside a repo: "Not a git
     repository"; before git answers: "Reading git…".
   - **Search field** (28px, `canvas`, `border`, `accent` while typing):
-    "Search files". In All and inside a repo, a 20px switch at its right
-    end, the branch glyph: lit (`accent` on `raised`) while search reads
-    git's files, `dim` while it reads the disk.
+    "Search files". In All, inside a repo and not in a folder git ignores,
+    a 20px switch at its right end, the branch glyph: lit (`accent` on
+    `raised`) while search reads git's files, `dim` while it reads the disk.
   - **Tree** (26px rows, 14px indent per level): a chevron for folders, a
     16px Symbols icon (one set for light and dark themes; an open folder
     keeps its icon, as in VS Code), the name, then the git marks. Names take their status
@@ -208,13 +208,16 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
     and new files, without what `.gitignore` leaves out, at most 40,000
     files, at any depth. A file deleted but not yet committed shows struck
     through. "No matches · ignored files left out" says where else to look.
-    Outside a repo, or where git can't run, search reads the disk instead.
+    Outside a repo, in a folder git ignores (or inside one), or where git
+    can't run, search reads the disk instead.
   - **The disk:** everything but the folders `.git`, `node_modules`, `target`,
     `.venv`, `venv`, `__pycache__`, `dist`, `build`, `.next`, `.nuxt`,
     `.cache`, `.gradle`, `.idea`, `vendor`, `Pods`, `.tox`, `.mypy_cache`,
     `.pytest_cache` and `coverage` (a file with such a name is searched),
     ignored files included (`.env`, local settings), 12 levels deep (5 at
-    home or `/`), at most 20,000 folders and 40,000 other paths.
+    home or `/`), at most 20,000 folders and 40,000 other paths. Not on
+    Windows yet: there search reads git's files only and says so outside
+    a repo.
 
   A link to a folder is a folder there, as in the tree, and search doesn't
   follow it; from git's files only a tracked one is, a new one stays a file.
@@ -372,8 +375,8 @@ the shipped `confirm`.
 "Files", `focusable: true`). `main.js` draws the panel and, opened with
 `props().menu`, the context menu; `disk.js` lists folders (`sh` here and on
 other machines, PowerShell on Windows, as `files` does; 500 entries per
-folder) and builds the disk's search index with `find` (PowerShell
-`Get-ChildItem -Recurse` on Windows); `git.js` reads git and git's search
+folder) and builds the disk's search index with `find` (none on Windows
+yet, issue #10); `git.js` reads git and git's search
 index; `actions.js`
 opens, reveals, copies and sends; `icon.js` picks an icon from `icons.js`.
 The tree is a `v_virtual_list` (rows report clicks through `on_item_click`
@@ -516,9 +519,10 @@ global `tab.close` and `pane.close`.
   40,000 other paths and at 12 levels, from git at 40,000 files; a deeper or
   larger folder is searched only in part, and the footer says so. Folders
   show their first 500 entries.
-- **Search from the disk on Windows is slow in big folders:** `Get-ChildItem
-  -Recurse` walks into `node_modules` and the other pruned folders and drops
-  them afterwards. Git's files, the default inside a repo, don't walk.
+- **No search from the disk on Windows yet** (issue #10): `Get-ChildItem
+  -Recurse` walks into `node_modules` and the other pruned folders before
+  it drops them, so it needs a walk of its own. Until then search reads
+  git's files there, and outside a repo it says it can't.
 
 ## Done when
 

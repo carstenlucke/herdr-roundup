@@ -1,5 +1,6 @@
 // What is on disk: one folder's entries (lazy, for the tree) and an index of every path
-// below the shown folder (for search). Here, on another machine (`on`), and on Windows.
+// below the shown folder (for search). Here, on another machine (`on`), and on Windows (the
+// index not yet).
 //
 // listDir is Herdr's `files` 0.1.13 `directory()` (Apache-2.0). buildIndex is adapted from
 // cybertron288/herdr-mods `filetree` (MIT, (c) 2026 cybertron288), itself a port of
@@ -11,6 +12,7 @@ export const PER_FOLDER = 500;
 const PRUNE = [".git", "node_modules", "target", ".venv", "venv", "__pycache__", "dist", "build", ".next", ".nuxt", ".cache", ".gradle", ".idea", "vendor", "Pods", ".tox", ".mypy_cache", ".pytest_cache", "coverage"];
 const HOME_PRUNE = ["Library", "AppData", ".Trash"];
 export const INDEX_DIRS = 20000, INDEX_PATHS = 40000;
+const NO_WINDOWS_INDEX = "On Windows, search reads git's files only, inside a repo";
 // The paths kinds() puts on one PowerShell command line: room left for the script, the root
 // and the quoting Windows adds.
 const WINDOWS_LINE = 24000;
@@ -72,7 +74,7 @@ export async function listDir(path, on) {
 
 // Every path below root, "/"-separated and relative: { dirs: Set, all: [], full }. `full`
 // is false when a limit cut it short. Skips PRUNE (and HOME_PRUNE at home), 12 levels deep
-// (5 at home or /).
+// (5 at home or /). Not on Windows yet (issue #10): there search reads git's files only.
 export async function buildIndex(root, on) {
   const atHome = atHomeOf(root);
   const depth = indexDepth(root);
@@ -81,16 +83,8 @@ export async function buildIndex(root, on) {
   // Matched against the part below root, so a root inside a pruned name still indexes. Only
   // folders are pruned: a file named `build` or `vendor` is indexed; `.git` never is (a
   // worktree's is a file). A link to a folder counts as a folder, as in the tree, and isn't
-  // followed. PowerShell's -Depth counts the levels below the root's own entries: depth - 1.
-  const windowsIndex = async () => {
-    const names = prune.map((n) => n.replace(/\./g, "\\.")).join("|");
-    const r = await exec("powershell", ["-NoProfile", "-Command", `[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); & { param($p) $b = (Resolve-Path -LiteralPath $p).ProviderPath.TrimEnd('\\'); Get-ChildItem -LiteralPath $b -Recurse -Force -Depth ${depth - 1} -ErrorAction SilentlyContinue | Where-Object { $r = $_.FullName.Substring($b.Length); $_.Name -ne '.git' -and $r -notmatch '[\\\\/](${names})[\\\\/]' -and -not ($_.PSIsContainer -and $r -match '[\\\\/](${names})$') } | Select-Object -First ${INDEX_PATHS + 1} | ForEach-Object { $(if ($_.PSIsContainer) {'d'} else {'f'}) + ($_.FullName.Substring($b.Length + 1) -replace '\\\\', '/') } } ${psQuote(root)}`], { on });
-    // Unreadable subfolders end PowerShell with 1 too; only a run that read nothing failed.
-    if (r.code !== 0 && !r.stdout.trim()) throw new Error("Cannot open this folder");
-    for (const line of r.stdout.split(/\r?\n/)) if (line.length > 1) { const rel = line.slice(1); all.push(rel); if (line[0] === "d") dirs.add(rel); }
-    return { dirs, all: all.slice(0, INDEX_PATHS), full: all.length <= INDEX_PATHS };
-  };
-  if (windows(on)) return windowsIndex();
+  // followed.
+  if (windows(on)) throw new Error(NO_WINDOWS_INDEX);
   const names = prune.map((n) => `-name '${n}'`).join(" -o ");
   // A link to a folder: -type l and test -d (which follows it). One with a pruned name is in
   // neither list.
@@ -98,7 +92,7 @@ export async function buildIndex(root, on) {
   const script = `cd "$1" || exit 3; find . -maxdepth ${depth} ${skip} \\( -type d -o -type l ! \\( ${names} \\) -exec test -d {} \\; \\) -print 2>/dev/null | head -n ${INDEX_DIRS + 1}; echo //; find . -maxdepth ${depth} ${skip} ! -type d ! -name .git ! \\( ${link} \\) -print 2>/dev/null | head -n ${INDEX_PATHS + 1}`;
   let r;
   try { r = await exec("sh", ["-c", script, "roundup-files", root], { on }); }
-  catch (e) { if (noSh(e, on)) return windowsIndex(); throw e; }
+  catch (e) { if (noSh(e, on)) throw new Error(NO_WINDOWS_INDEX); throw e; }
   if (r.code === 3) throw new Error("Cannot open this folder");
   let inDirs = true, nd = 0, nf = 0;
   for (const line of r.stdout.split("\n")) {

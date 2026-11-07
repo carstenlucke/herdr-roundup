@@ -30,8 +30,8 @@ const LANG = { ts: "js", tsx: "js", mts: "js", cts: "js", jsx: "js", mjs: "js", 
 const VIEWS = [["all", "All"], ["changed", "Changed"]];
 // The menu's height: 28 per entry, 9 per divider, 5 of padding above and below.
 const menuHeight = (groups) => groups.reduce((n, g) => n + g.length, 0) * 28 + (groups.length - 1) * 9 + 10;
-// What search in All reads: git's files (without ignored ones; the disk outside a repo) or
-// the disk (everything but the pruned folders).
+// What search in All reads: git's files (without ignored ones; the disk outside a repo and in
+// an ignored folder) or the disk (everything but the pruned folders).
 const SOURCES = ["git", "disk"];
 // Shared: what the context menu (a popup copy of this mod) asks the panel to do. `from` names
 // the panel copy that opened it: every shown copy reads the request, only that one runs it.
@@ -836,7 +836,8 @@ export default class Files extends View {
         .child(div().min_w(0).truncate().child(this.root?.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || this.root || "")));
   }
 
-  // In the search field, inside a repo: whether All searches git's files (lit) or the disk.
+  // In the search field, inside a repo and not in an ignored folder: whether All searches
+  // git's files (lit) or the disk.
   sourceToggle(t) {
     const git = this.source === "git";
     return div().id("rf-source").size(20).flex_none().flex().items_center().justify_center().rounded(5).cursor_pointer()
@@ -903,7 +904,7 @@ export default class Files extends View {
         .child(Input.new(this.input).flex_1().h_full().text_size(12).text_color(t.foreground))
         .when(Boolean(this.query), (el) => el.child(div().id("rf-clear").flex_none().text_size(13).text_color(t.dim).cursor_pointer()
           .hover((s) => s.text_color(t.foreground)).on_click((_e, cx) => this.clearSearch(cx)).child("×")))
-        .when(this.view === "all" && this.git.repo, (el) => el.child(this.sourceToggle(t)))
+        .when(this.view === "all" && this.git.repo && !this.git.rootIgnored, (el) => el.child(this.sourceToggle(t)))
         // Before the list was measured, the keyboard menu hangs below the search field.
         .when(Boolean(this.kmenu) && !pin, (el) => el.relative().child(this.keyMenuPin(t, { top: 28, left: 8 }))))
       .child(div().id("rf-list").flex_1().min_h(0).relative().px(4).pb(4)
