@@ -11,7 +11,7 @@ import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, InputState, Input, Scrollbar, Popup, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { spaces, panes, focused, readTextFile, watchFolder, theme, settings, window, props, notify, openOverlay, closeOverlay, shared, setShared, nextCommand } from "herdr";
 import { iconFor, rootIcon } from "./icon.js";
-import { listDir, buildIndex, kinds, indexDepth, compare, pruned, PER_FOLDER, INDEX_PATHS } from "./disk.js";
+import { listDir, buildIndex, kinds, indexDepth, compare, prunedName, prunedAbove, PER_FOLDER, INDEX_PATHS } from "./disk.js";
 import { readGit, listFiles, emptyGit, ancestors, dirOf, NEW, MODIFIED, DELETED } from "./git.js";
 import { openExternal, revealExternal, copy, sendToAgent, relTo } from "./actions.js";
 
@@ -92,7 +92,7 @@ export default class Files extends View {
     // Per-path highlights, for a later source (an agent's reads and writes, say):
     // rel → { color: a theme color name, at: ms }. Rows tint from it; nothing writes it yet.
     this.highlights = new Map();
-    this.width = 368; this.query = ""; this.hits = null; this.searchSeq = 0; this.shown = [];
+    this.width = 368; this.measuredWidth = null; this.query = ""; this.hits = null; this.searchSeq = 0; this.shown = [];
     this.seenRequest = shared(REQUEST)?.n ?? 0;
     this.uid = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
     this.input = InputState.new({ placeholder: "Search files" });
@@ -250,6 +250,9 @@ export default class Files extends View {
       if (!index) continue;
       if (fromGit && baseOf(rel) === ".gitignore") { index.stale = true; continue; }
       if (this.unindexed(rel, fromGit)) continue;
+      // From the disk, a new path named like a pruned folder (a build's `dist`, say): recheck
+      // tells a file from a folder. One recheck can't place is most likely the folder.
+      if (!fromGit && !index.known.has(rel) && prunedName(this.root, baseOf(rel)) && !this.placeable(index, rel)) continue;
       if (rel === "" || index.dirs.has(rel)) index.stale = true;
       else if (index.added.has(rel) || (!index.known.has(rel) && this.placeable(index, rel))) check.push(rel);
       // A capped index can't place it, and reading it again would be cut short as well.
@@ -275,7 +278,8 @@ export default class Files extends View {
 
   // Reads what rels are now and puts that into the index: a new file goes in (from git, with
   // what git lists below a new folder and the folders above), one it took in this way and
-  // that is gone comes out. A new folder from the disk, or a failed read, reads the index again.
+  // that is gone comes out. A new folder from the disk, or a failed read, reads the index again;
+  // a folder named like a pruned one is left out, as the index leaves it out.
   // One read at a time per index, so a later batch's answer never comes in before an earlier one's.
   recheck(index, rels, cx) {
     for (const rel of rels) index.pending.add(rel);
@@ -308,6 +312,7 @@ export default class Files extends View {
         files = [...r.files]; dirs = [...r.dirs];
       } else {
         for (const [rel, kind] of await kinds(ctx.root, rels, ctx.on)) {
+          if (kind === "d" && prunedName(ctx.root, baseOf(rel))) continue;
           if (kind === "d") return "stale";
           files.push(rel);
         }
@@ -331,11 +336,13 @@ export default class Files extends View {
     return moved ? "moved" : "same";
   }
 
-  // Whether an index never holds rel: .git and, from git, what it ignores; from the disk, the
-  // pruned folders and what lies deeper than it reads.
+  // Whether an index never holds rel: .git and, from git, what it ignores; from the disk, what
+  // lies inside a pruned folder or deeper than it reads. A path named like a pruned folder
+  // may be a file, which the disk index holds: changed() leaves that to recheck.
   unindexed(rel, fromGit) {
-    return Boolean(rel) && (fromGit ? rel.split("/").includes(".git") || this.isIgnored(rel)
-      : pruned(this.root, rel) || rel.split("/").length > indexDepth(this.root));
+    if (!rel) return false;
+    if (rel.split("/").includes(".git")) return true;
+    return fromGit ? this.isIgnored(rel) : prunedAbove(this.root, rel) || rel.split("/").length > indexDepth(this.root);
   }
 
   // Whether the next search reads the index again.
@@ -445,6 +452,7 @@ export default class Files extends View {
   // Every row: { rel, name, dir, depth, open, gone }. gone: a deleted file, not on disk.
   rows() {
     const out = [], q = this.query.trim().toLowerCase();
+    if (this.error) return out; // the folder failed to load: only the error shows
     if (this.view === "changed") return this.changedRows(q);
     if (this.hits) return this.hitRows();
     this.diskRows("", 0, out);
@@ -593,12 +601,8 @@ export default class Files extends View {
   // the row, so with the list's height its place is known: in the middle, or at the top or
   // bottom when the list can't scroll that far. Null before the list was measured.
   // (A virtual list's rows can't hold the menu: they take no click handlers.)
-  // on_size_change measures in the window's pixels, which Herdr's zoom makes larger than the
-  // mod's: settings() has the zoom; without it the search field, 28 of the mod's high and
-  // measured rounded, gives it roughly.
   keyMenuAt(n) {
-    const k = this.kmenu, set = Number(settings()?.zoom);
-    const zoom = set > 0 ? set : this.fieldHeight ? this.fieldHeight / 28 : 0;
+    const k = this.kmenu, zoom = this.zoom();
     if (!this.listHeight || !zoom) return null;
     const h = this.listHeight / zoom - 4; // the list, inside the box's bottom padding
     const offset = Math.max(0, Math.min(k.row * ROW + ROW / 2 - h / 2, n * ROW - h));
@@ -606,6 +610,14 @@ export default class Files extends View {
     // Where it wouldn't fit below its row, it opens above it.
     const tall = menuHeight(menuItems(k.m)) + 4; // with its 2px margin and 1px border
     return top + ROW + tall > h ? { top, left, up: true } : { top: top + ROW, left };
+  }
+
+  // on_size_change measures in the window's pixels, which Herdr's zoom makes larger than the
+  // mod's (Herdr's picker divides the same way): settings() has the zoom; without it the
+  // search field, 28 of the mod's high and measured rounded, gives it roughly. 0: unknown.
+  zoom() {
+    const set = Number(settings()?.zoom);
+    return set > 0 ? set : this.fieldHeight ? this.fieldHeight / 28 : 0;
   }
 
   // A 1px point the keyboard menu's surface hangs from.
@@ -827,9 +839,11 @@ export default class Files extends View {
       if (req.from === this.uid && req.root === this.root && (req.on ?? null) === (this.on ?? null)) this.request(req, cx);
     }
     const t = theme();
+    // The panel's width in the mod's pixels, for the rows' +N −N and the branch row's bar.
+    if (this.measuredWidth) this.width = this.measuredWidth / (this.zoom() || 1);
     const root = v_flex().id(NAME).size_full().min_h(0).rounded(10).overflow_hidden().bg(t.background).border_1().border_color(t.border).text_color(t.foreground).text_size(13)
       .track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx))
-      .on_size_change((size, cx) => { if (Math.abs(size.width - this.width) > 4) { this.width = size.width; cx.notify(); } })
+      .on_size_change((size, cx) => { if (Math.abs(size.width - (this.measuredWidth ?? 0)) > 4) { this.measuredWidth = size.width; cx.notify(); } })
       .child(this.header(t));
     if (this.file) {
       return root.child(this.code ? Editor.new(this.code).flex_1().min_h(0) : div().p(12).text_color(t.dim).child(this.fileError || "Loading file…"));

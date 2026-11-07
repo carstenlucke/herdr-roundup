@@ -5,6 +5,7 @@
 // cybertron288), itself a port of claude-code-filetree (MIT, (c) 2026 Kurt Buhler).
 // See THIRD_PARTY_NOTICES.md.
 import { exec } from "herdr";
+import { kinds } from "./disk.js";
 
 // Reads write nothing under .git (no index refresh or lock, no fsmonitor cookie): the folder
 // watch would see it, and every refresh would start the next one.
@@ -126,15 +127,23 @@ export async function listFiles(root, on, limit, paths) {
   let full = true;
   const addDirs = (rel) => { for (const a of ancestors(rel)) { if (dirs.has(a)) break; dirs.add(a); } };
   const addDir = (d) => { if (d && !dirs.has(d)) { dirs.add(d); addDirs(d); } };
+  const links = [];
   for (const rec of r.stdout.split("\0")) {
     const staged = /^(\d{6}) [0-9a-f]+ \d\t(.*)$/s.exec(rec), entry = staged ? staged[2] : rec;
     if (staged?.[1] === "160000") { addDir(entry); continue; }
+    if (staged?.[1] === "120000" && !files.has(entry)) links.push(entry);
     // An untracked repo inside this one comes as a whole folder ("nested/").
     if (entry.endsWith("/")) { addDir(entry.replace(/\/+$/, "")); continue; }
     if (!entry || files.has(entry)) continue; // a conflicted file is listed once per stage
     if (files.size >= limit) { full = false; break; }
     files.add(entry);
     addDirs(entry);
+  }
+  // A tracked link to a folder is a folder, as in the tree (git doesn't follow it, nor does
+  // this). Untracked links stay files: checking every new path costs too much.
+  for (let i = 0; i < links.length; i += 500) {
+    const found = await kinds(root, links.slice(i, i + 500), on).catch(() => new Map());
+    for (const [rel, kind] of found) if (kind === "d" && files.delete(rel)) addDir(rel);
   }
   return { dirs, files, all: [...dirs, ...files], full };
 }

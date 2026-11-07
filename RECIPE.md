@@ -205,12 +205,15 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
     files, at any depth. A file deleted but not yet committed shows struck
     through. "No matches · ignored files left out" says where else to look.
     Outside a repo, or where git can't run, search reads the disk instead.
-  - **The disk:** everything but `.git`, `node_modules`, `target`,
+  - **The disk:** everything but the folders `.git`, `node_modules`, `target`,
     `.venv`, `venv`, `__pycache__`, `dist`, `build`, `.next`, `.nuxt`,
     `.cache`, `.gradle`, `.idea`, `vendor`, `Pods`, `.tox`, `.mypy_cache`,
-    `.pytest_cache` and `coverage`, ignored files included (`.env`, local
-    settings), 12 levels deep (5 at home or `/`), at most 20,000 folders
-    and 40,000 other paths.
+    `.pytest_cache` and `coverage` (a file with such a name is searched),
+    ignored files included (`.env`, local settings), 12 levels deep (5 at
+    home or `/`), at most 20,000 folders and 40,000 other paths.
+
+  A link to a folder is a folder there, as in the tree, and search doesn't
+  follow it; from git's files only a tracked one is, a new one stays a file.
 
   The index is read on the first search and again when a folder changes, a
   `.gitignore` changes (git's files) or it is 5 minutes old. A new path is
@@ -218,8 +221,10 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   what is below a new folder; the disk: whether it is there, in a folder the
   index holds), and a path added that way that is gone again comes out, so
   saves through temporary files don't read the whole index. A new folder
-  from the disk, more than 100 new paths at once, an index a limit cut short
-  or a failed check read it again. When a file it knows changes (it may be
+  from the disk, more than 100 new paths at once or a failed check read it
+  again; a folder named like a skipped one (a build's `dist`) doesn't. In an
+  index a limit cut short, a new path can't be added and counts like a
+  changed file. When a file it knows changes (it may be
   deleted), it is read again once it is 30 seconds old, also without typing:
   at most one read per 30 s while an agent keeps writing. In Changed, the search filters git's paths. `×` or Esc clears it.
 - **Click** a folder to open or close it, a file to preview it. **Keys**,
@@ -399,7 +404,8 @@ throws, and the list draws nothing). Opening centres the row
 (`scroll_to_item(i, "center")`), so its place follows from the list's
 height, the row height and the row count; `on_size_change` reports the
 window's pixels, so the height is divided by `settings().zoom` (without it,
-the search field's measured height / 28). A wheel scroll, a press outside
+the search field's measured height / 28), as Herdr's `picker` does. The
+panel's width, for `+N −N` and the branch row's bar, is divided the same way. A wheel scroll, a press outside
 (`on_mouse_down_out`) or its row moving closes it.
 Copy uses `cx.write_to_clipboard` and `notify`. Send uses `focused()`,
 `panes()`, `agents()`, `pane.focus {terminal}` and `terminal.paste`. Open and
