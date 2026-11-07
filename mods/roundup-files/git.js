@@ -112,12 +112,14 @@ export async function readGit(root, on) {
 
 // The files git counts as the project below root: tracked and new ones, without what
 // .gitignore leaves out, and the folders that hold them. At most `limit` files. Null outside
-// a repo or without git: the caller reads the disk then.
-export async function listFiles(root, on, limit) {
+// a repo or without git: the caller reads the disk then. `paths` (relative to root): only
+// those, and what is below them.
+export async function listFiles(root, on, limit, paths) {
   let r;
+  const specs = paths ? paths.map((p) => `:(literal)${p}`) : ["."];
   // -s: tracked entries come as "<mode> <object> <stage>\t<path>" (a submodule's mode is
   // 160000, a folder), new ones as their bare path.
-  try { r = await exec("git", [...READ, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "-s", "--abbrev=4", "--", "."], { cwd: root, on }); }
+  try { r = await exec("git", [...READ, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "-s", "--abbrev=4", "--", ...specs], { cwd: root, on }); }
   catch { return null; }
   if (r.code !== 0) return null;
   const dirs = new Set(), files = new Set();
@@ -134,5 +136,5 @@ export async function listFiles(root, on, limit) {
     files.add(entry);
     addDirs(entry);
   }
-  return { dirs, all: [...dirs, ...files], full };
+  return { dirs, files, all: [...dirs, ...files], full };
 }

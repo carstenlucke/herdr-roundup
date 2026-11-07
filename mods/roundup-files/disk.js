@@ -73,7 +73,7 @@ export async function listDir(path, on) {
 // (5 at home or /).
 export async function buildIndex(root, on) {
   const atHome = atHomeOf(root);
-  const depth = atHome ? 5 : 12;
+  const depth = indexDepth(root);
   const dirs = new Set(), all = [];
   const prune = [...PRUNE, ...(atHome ? HOME_PRUNE : [])];
   // Matched against the part below root, so a root inside a pruned name still indexes.
@@ -102,4 +102,27 @@ export async function buildIndex(root, on) {
     if (inDirs) dirs.add(rel);
   }
   return { dirs, all, full: nd <= INDEX_DIRS && nf <= INDEX_PATHS };
+}
+
+// How many levels below root buildIndex reads.
+export const indexDepth = (root) => (atHomeOf(root) ? 5 : 12);
+
+// Which of rels (relative to root) exist: Map rel → "d" (a folder) or "f". Missing ones are
+// left out.
+export async function kinds(root, rels, on) {
+  const found = new Map();
+  const windowsKinds = async () => {
+    const r = await exec("powershell", ["-NoProfile", "-Command", `[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); & { param($b) foreach ($r in @(${rels.map(psQuote).join(",")})) { $f = Join-Path $b $r; if (Test-Path -LiteralPath $f -PathType Container) { 'd' + $r } elseif (Test-Path -LiteralPath $f) { 'f' + $r } } } ${psQuote(root)}`], { on });
+    if (r.code !== 0) throw new Error(r.stderr || "Cannot open this folder");
+    for (const line of r.stdout.split(/\r?\n/)) if (line.length > 1) found.set(line.slice(1), line[0]);
+    return found;
+  };
+  if (windows(on)) return windowsKinds();
+  const script = `cd "$1" || exit 3; shift; for p; do if [ -d "$p" ]; then printf 'd%s\\0' "$p"; elif [ -e "$p" ] || [ -L "$p" ]; then printf 'f%s\\0' "$p"; fi; done`;
+  let r;
+  try { r = await exec("sh", ["-c", script, "roundup-files", root, ...rels], { on }); }
+  catch (e) { if (noSh(e, on)) return windowsKinds(); throw e; }
+  if (r.code !== 0) throw new Error(r.stderr || "Cannot open this folder");
+  for (const rec of r.stdout.split("\0")) if (rec.length > 1) found.set(rec.slice(1), rec[0]);
+  return found;
 }

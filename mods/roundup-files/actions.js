@@ -25,8 +25,14 @@ export async function openExternal(abs) {
 // This computer only.
 export async function revealExternal(abs) {
   const platform = window()?.platform;
-  // Explorer ends with 1 even when it showed the file: only the others' code says anything.
-  if (platform === "windows") { await exec("explorer.exe", [`/select,${abs.replace(/\//g, "\\")}`]); return; }
+  // Explorer ends with 1 even when it showed the file: on Windows, a path that is gone is
+  // what can be told beforehand.
+  if (platform === "windows") {
+    const r = await exec("powershell", ["-NoProfile", "-Command", `if (-not (Test-Path -LiteralPath ${psQuote(abs)})) { exit 1 }`]);
+    if (r.code !== 0) throw new Error("Cannot show this file: it is gone");
+    await exec("explorer.exe", [`/select,${abs.replace(/\//g, "\\")}`]);
+    return;
+  }
   const r = platform === "macos" ? await exec("open", ["-R", "--", abs]) : await exec("xdg-open", [abs.replace(/\/[^/]*$/, "") || "/"]);
   if (r.code !== 0) throw new Error(r.stderr.trim() || "Cannot show this file");
 }
