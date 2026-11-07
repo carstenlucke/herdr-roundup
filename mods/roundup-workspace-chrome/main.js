@@ -1,7 +1,7 @@
 import { View, div, image, svg } from "gpui-kit";
 import { h_flex, v_flex, HoverCard } from "gpui-base";
 import { theme, run, props, window, shared, setShared, updates, layout, appHome, readTextFile, watchFolder, openOverlay, nextCommand } from "herdr";
-import { available, due, check, install, openNotes } from "./update.js";
+import { get, available, due, check, install, openNotes } from "./update.js";
 import { menuView, menuHeight, DETAILS, MENU_OPEN } from "./menu.js";
 import { info } from "./info.js";
 
@@ -51,8 +51,11 @@ export default class WorkspaceChrome extends View {
         const command = await nextCommand();
         const installed = this.file?.version;
         if (command === "check" && installed) this.check(cx, installed, true);
-        else if (command === "update" && installed) await install(installed);
+        // Not awaited: a slow knownAgents() doesn't hold back the next command, and a failure doesn't end the loop.
+        else if (command === "update" && installed) install(installed).catch(() => null);
         else if (command === "notes") openNotes();
+        // Daily chosen again: check now if a day has passed, not at the next hourly tick.
+        else if (command === "auto") this.autoCheck(cx);
       }
     });
     // The automatic check: at start once the version is read, then hourly to see whether a day has passed.
@@ -83,12 +86,18 @@ export default class WorkspaceChrome extends View {
     if (installed && due()) this.check(cx, installed, false);
   }
   check(cx, installed, manual) {
-    if (this.checking) return;
+    // A manual check asked for during another one runs after it, so it still answers with a toast.
+    if (this.checking) { if (manual) this.manualPending = true; return; }
     this.checking = true;
     cx.notify();
     cx.spawn(async (cx) => {
       await check(installed, manual).catch(() => null);
       this.checking = false;
+      if (this.manualPending) {
+        this.manualPending = false;
+        const now = this.file?.version;
+        if (now) return this.check(cx, now, true);
+      }
       cx.notify();
     });
   }
@@ -105,12 +114,15 @@ export default class WorkspaceChrome extends View {
     this.press = null;
     // A double-click maximizes the window, as in the rest of the row.
     if (!press || press.far >= 3 || press.moves >= 10 || e.click_count > 1) return;
+    // Without a version read there is no menu; the card on hover stays, showing "Installed –".
+    const installed = this.file?.version;
+    if (!installed) return;
     // The card stays away until the pointer leaves: its layer is above the popup, and the pointer is still on it.
     this.hot = false;
     this.quiet = true;
-    const installed = this.file?.version;
-    if (!installed) return;
-    const menu = { installed, herdr: herdrVersion(this.file) };
+    // What the popup's height is summed from, fixed while it is open: a check that ends meanwhile doesn't add
+    // rows or a status line the popup has no room for.
+    const menu = { installed, herdr: herdrVersion(this.file), release: available(installed), error: get("error") ?? null };
     openOverlay({ mod: "roundup-workspace-chrome", kind: "popup", width: 260, height: menuHeight(menu), props: { menu } });
   }
   // The menu's head as a card, with a hint that a click gives more.

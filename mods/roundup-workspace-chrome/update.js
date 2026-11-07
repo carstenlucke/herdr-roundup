@@ -14,9 +14,10 @@ const VERSION = /^v?(\d+)\.(\d+)\.(\d+)$/;
 export const get = (key) => shared(`roundup-workspace-chrome.update.${key}`);
 export const put = (key, value) => setShared(`roundup-workspace-chrome.update.${key}`, value);
 
-// a newer than b, both "major.minor.patch".
+// a newer than b, by their leading "major.minor.patch" (a suffix such as "-rc.1" doesn't hide an update).
+const LEADING = /^v?(\d+)\.(\d+)\.(\d+)/;
 export function newer(a, b) {
-  const x = VERSION.exec(a ?? ""), y = VERSION.exec(b ?? "");
+  const x = LEADING.exec(a ?? ""), y = LEADING.exec(b ?? "");
   if (!x || !y) return false;
   for (let i = 1; i <= 3; i++) if (Number(x[i]) !== Number(y[i])) return Number(x[i]) > Number(y[i]);
   return false;
@@ -108,7 +109,11 @@ export async function install(installed) {
       body: `Tell your agent: update Herdr Roundup to ${release.version} as its README says` });
     return;
   }
-  run("tab.new", { name: "Update Herdr Roundup", folder: appHome(), argv: agent.run, task: brief(installed, release) });
+  try {
+    run("tab.new", { name: "Update Herdr Roundup", folder: appHome(), argv: agent.run, task: brief(installed, release) });
+  } catch (e) {
+    notify({ level: "warning", title: "Couldn't open the update tab", body: String(e?.message ?? e) });
+  }
 }
 
 // The release's page in the browser.

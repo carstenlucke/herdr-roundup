@@ -384,9 +384,10 @@ patch. State is shared under `roundup-workspace-chrome.update.`:
 `latest` (`{version, url}`), `dismissed`, `notified`, `auto` (false: only
 when asked), `error` (the last reason, null after an answer). The automatic
 check runs from the file-reading loop and `cx.timer.every(3600000)`. The
-brand copy takes the commands `roundup-workspace-chrome.check`, `.update`
-and `.notes` through `nextCommand()`; the toast's `action` and the menu send
-them. `.update` calls `knownAgents()` and runs `tab.new {name, folder:
+brand copy takes the commands `roundup-workspace-chrome.check`, `.update`,
+`.notes` and `.auto` (Daily chosen: check now if due) through
+`nextCommand()`; the toast's `action` and the menu send them. A Check asked
+for during another check runs after it, so it still answers with a toast. `.update` calls `knownAgents()` and runs `tab.new {name, folder:
 appHome(), argv: agent.run, task}`; `.notes` runs `open` (macOS),
 `xdg-open` (Linux) or `cmd /c start "" <url>` (Windows) by
 `window().platform`. Toasts are `notify()` (drawn by the shipped `toast`).
@@ -394,9 +395,12 @@ appHome(), argv: agent.run, task}`; `.notes` runs `open` (macOS),
 The card is gpui-base's `HoverCard` (anchor `top_left`, open delay 500, close
 delay 150) around logo and name, its content `info.js`. The menu is the mod
 again as a popup, `openOverlay({mod: "roundup-workspace-chrome", kind:
-"popup", width: 260, height, props: {menu: {installed, herdr}}})`, drawn by
+"popup", width: 260, height, props: {menu: {installed, herdr, release, error}}})`, drawn by
 `menu.js` after roundup-tabs' `menu.js`. Its height is summed from fixed
-line heights (`menuHeight`, `infoHeight`). The popup sets shared
+line heights (`menuHeight`, `infoHeight`), with the release offered and the
+last error as they were at the click (`release`, `error` in its props), so a
+check that ends while it is open can't add rows it has no room for; a reason
+is cut after two lines. The popup sets shared
 `roundup-workspace-chrome.menu` while it is open (its `close()` clears it,
 the brand copy clears it at start); shared
 `roundup-workspace-chrome.details` false turns the card off. Skip, Daily,
@@ -405,8 +409,8 @@ Check, Update and Release notes go to the brand copy as commands.
 
 Its own art: `logo.png` (160×160, three black sheep), `search.svg`,
 `sidebar.svg`, `settings.svg`, `plus.svg`, and Lucide icons `refresh.svg`,
-`bot.svg`, `notes.svg`, `skip.svg`, `check.svg`, `circle-alert.svg`,
-`circle-check.svg`, `circle-arrow-up.svg`, plus `spinner.svg` (a copy of
+`bot.svg`, `notes.svg`, `skip.svg`, `check.svg`, `circle-alert.svg`, plus
+`spinner.svg` (a copy of
 `workspace-chrome`'s).
 
 **`roundup-pane`** (clone of `pane` 0.1.13, `place: "none"`, title "Pane
