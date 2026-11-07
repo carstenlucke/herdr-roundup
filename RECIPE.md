@@ -117,7 +117,8 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
     new, modified and deleted below them, and their `+N −N` from 360px of
     width. The selected row is on `selected`, a hovered one on `hover`.
   - **Footer** (only when needed, 11px `dim`): "Folders show their first 500
-    entries", "First 200 matches", "Search covers the first 40,000 paths".
+    entries", "First 200 matches", "Search covers the first 40,000 files"
+    (or "the first 20,000 folders", whichever limit cut the index short).
 - **Status bar** (28px): Herdr's shipped `workspace-status`.
 
 ## How it behaves
@@ -216,11 +217,15 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
     `.venv`, `venv`, `__pycache__`, `dist`, `build`, `.next`, `.nuxt`,
     `.cache`, `.gradle`, `.idea`, `vendor`, `Pods`, `.tox`, `.mypy_cache`,
     `.pytest_cache` and `coverage` (a file with such a name is searched),
-    ignored files included (`.env`, local settings), 12 levels deep (5 at
+    ignored files included (`.env`, local settings), and at home `Library`,
+    `AppData` and `.Trash` at its top level (a project's `Library` is
+    searched; at `/` they are skipped at any depth), 12 levels deep (5 at
     home or `/`), at most 20,000 folders and 40,000 other paths. Not on
     Windows yet, nor on a machine without `sh`: there search reads git's
     files whatever the switch said, and where git has none it says why
     ("Not a git repository · Search can't read the disk on Windows yet").
+    That error stands until git answers again (the next refresh): typing
+    on doesn't try again with every key.
 
   A link to a folder is a folder there, as in the tree, and search doesn't
   follow it; from git's files only a tracked one is, a new one stays a file.
@@ -429,8 +434,8 @@ virtual list's item renderer refuses click handlers (`on_click` there
 throws, and the list draws nothing). Opening centres the row
 (`scroll_to_item(i, "center")`), so its place follows from the list's
 height, the row height and the row count; `on_size_change` reports the
-window's pixels, so the height is divided by `settings().zoom` (without it,
-the search field's measured height / 28), as Herdr's `picker` does. The
+window's pixels, so the height is divided by `settings().zoom`, as Herdr's
+`picker` does. The
 panel's width, for `+N −N` and the branch row's bar, is divided the same way. A wheel scroll, a press outside
 (`on_mouse_down_out`) or its row moving closes it.
 Copy uses `cx.write_to_clipboard` and `notify`. Send uses `focused()`,
@@ -521,7 +526,11 @@ global `tab.close` and `pane.close`.
   with a 23,000-file `node_modules`), and `--ignored=matching` lists a new
   folder that holds only ignored files file by file, so it isn't dimmed.
   Its git reads write nothing under `.git` (see above), or each
-  refresh would wake the watch again.
+  refresh would wake the watch again. A folder reached through a link
+  (`/tmp`, a linked project) is reported resolved (`/private/tmp`), while
+  the pane's folder keeps the link: the panel resolves it once (`pwd -P`)
+  and places the watch's paths against both, or every batch would refresh
+  and search would miss new files.
 - **A virtual list's rows can't hold handlers:** `on_click` inside the row
   renderer throws. Clicks come from `on_item_click(key)` and
   `on_item_secondary_click(key, event)` on the list, with the path as key.

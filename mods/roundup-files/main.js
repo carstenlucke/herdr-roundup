@@ -11,7 +11,7 @@ import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, InputState, Input, Scrollbar, Popup, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { spaces, panes, focused, readTextFile, watchFolder, theme, settings, window, props, notify, openOverlay, closeOverlay, shared, setShared, nextCommand } from "herdr";
 import { iconFor, rootIcon } from "./icon.js";
-import { listDir, buildIndex, diskSearch, kinds, indexDepth, compare, prunedName, prunedAbove, PER_FOLDER, INDEX_PATHS } from "./disk.js";
+import { listDir, buildIndex, diskSearch, kinds, indexDepth, compare, prunedName, prunedAbove, realPath, PER_FOLDER, INDEX_DIRS, INDEX_PATHS } from "./disk.js";
 import { readGit, listFiles, emptyGit, ancestors, dirOf, within, NEW, MODIFIED, DELETED } from "./git.js";
 import { openExternal, revealExternal, copy, sendToAgent, relTo } from "./actions.js";
 
@@ -50,6 +50,9 @@ const join = (root, rel) => {
   return (/[\\/]$/.test(root) ? root : root + sep) + (sep === "/" ? rel : rel.replace(/\//g, "\\"));
 };
 const message = (e) => String(e?.message ?? e);
+const thousands = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+// What cut an index short, for the footer: "the first 20,000 folders and the first 40,000 files".
+const limits = (cut = []) => cut.map((c) => (c === "dirs" ? `the first ${thousands(INDEX_DIRS)} folders` : `the first ${thousands(INDEX_PATHS)} files`)).join(" and ") || "part of this folder";
 // Why a folder has no repo: git found none, or no git started there.
 const noRepo = (g) => (g.missing ? "Git not found" : "Not a git repository");
 // Git's colors: new green and deleted red, as in Herdr's `files` and `changes`; modified
@@ -161,7 +164,9 @@ export default class Files extends View {
     const key = JSON.stringify([root, on]), s = this.saved.get(key);
     // noDisk: buildIndex can't read the disk here (Windows; found out later: no sh).
     // base: where the repo is (readGit); drops: how often a `.git` change dropped it.
-    this.ctx = { key, root, on, noDisk: !diskSearch(on), base: null, drops: 0 }; this.root = root; this.on = on;
+    // real: root with links resolved, as the watch reports it (watch). failed: the last index
+    // build that failed, kept while git's answer is the same one (ensureIndex).
+    this.ctx = { key, root, on, noDisk: !diskSearch(on), base: null, drops: 0, real: undefined, failed: null }; this.root = root; this.on = on;
     this.kmenu = null;
     this.entries = new Map(); this.folders = new Set(s?.folders); this.shut = new Set(s?.shut); this.pending = new Set();
     // searchSeq++: a search still running for the folder before ends without a word here.
@@ -228,12 +233,15 @@ export default class Files extends View {
   }
 
   // Local folders refresh when something under them changes; other machines on the timer.
+  // A folder reached through a link (/tmp, a linked project) is reported resolved: changed()
+  // places paths against both.
   watch(cx) {
     if (this.on || this.watched === this.root) return;
     const ctx = this.ctx, root = this.root;
     this.watched = root;
     cx.spawn(async (cx) => {
       try {
+        if (ctx.real === undefined) ctx.real = await realPath(root).catch(() => null);
         while (this.current(ctx)) {
           const paths = await watchFolder(root);
           if (!this.current(ctx)) return;
@@ -258,7 +266,7 @@ export default class Files extends View {
     // A path it can't place, or none at all, refreshes as well: it can't tell.
     let shown = !paths.length;
     for (const abs of paths) {
-      const rel = relTo(this.root, abs);
+      const rel = relTo(this.root, abs) ?? relTo(this.ctx.real, abs);
       if (rel === null) { shown = true; continue; }
       if (rel === ".git") { this.ctx.base = null; this.ctx.drops++; } // a repo made or removed here: rev-parse again
       if (!shown && !this.unseen(rel)) shown = true;
@@ -272,7 +280,7 @@ export default class Files extends View {
       if (this.unindexed(rel, fromGit)) continue;
       // From the disk, a new path named like a pruned folder (a build's `dist`, say): recheck
       // tells a file from a folder. One recheck can't place is most likely the folder.
-      if (!fromGit && !index.known.has(rel) && prunedName(this.root, baseOf(rel)) && !this.placeable(index, rel)) continue;
+      if (!fromGit && !index.known.has(rel) && prunedName(this.root, rel) && !this.placeable(index, rel)) continue;
       if (rel === "" || index.dirs.has(rel)) index.stale = true;
       else if (index.added.has(rel) || (!index.known.has(rel) && this.placeable(index, rel))) check.push(rel);
       // A capped index can't place it, and reading it again would be cut short as well.
@@ -357,7 +365,7 @@ export default class Files extends View {
         files = [...r.files]; dirs = [...r.dirs];
       } else {
         for (const [rel, kind] of await kinds(ctx.root, rels, ctx.on)) {
-          if (kind === "d" && prunedName(ctx.root, baseOf(rel))) continue;
+          if (kind === "d" && prunedName(ctx.root, rel)) continue;
           if (kind === "d") return "stale";
           files.push(rel);
         }
@@ -480,28 +488,34 @@ export default class Files extends View {
   // One index build per source at a time; searches typed meanwhile wait for it. `from`: what
   // it was read from ("disk" also when git was asked for outside a repo or in a folder it
   // ignores). Where the disk can't be read, git's files; where git has none either, an error
-  // that says why.
+  // that says why. A build that failed isn't tried again on the next keystroke: its error
+  // stands until git answers again (the next refresh: a watch batch or the 10s timer).
+  // Where git has said it has no files here (no repo, no git, root ignored), it isn't asked.
   ensureIndex(ctx) {
-    const i = this.index, source = this.searchSource();
+    const i = this.index, source = this.searchSource(), f = ctx.failed;
     if (i && i.source === source && !this.outdated(i)) return Promise.resolve(i);
+    if (f && f.source === source && f.git === this.git) return Promise.reject(f.error);
     if (this.indexing?.source !== source) {
       const job = { source };
       job.promise = (async () => {
         const g = this.git, ignored = g.known && g.repo ? g.rootIgnored : undefined;
-        let fromGit = source === "git" ? await listFiles(ctx.root, ctx.on, INDEX_PATHS, undefined, ignored) : null, built = fromGit;
+        const files = () => (g.known && (!g.repo || g.rootIgnored) ? null : listFiles(ctx.root, ctx.on, INDEX_PATHS, undefined, ignored));
+        let fromGit = source === "git" ? await files() : null, built = fromGit;
         if (!built) {
           try { built = await buildIndex(ctx.root, ctx.on); }
           catch (e) {
             if (!e?.noIndex) throw e;
             ctx.noDisk = true;
-            if (source === "disk") built = fromGit = await listFiles(ctx.root, ctx.on, INDEX_PATHS, undefined, ignored);
+            if (source === "disk") built = fromGit = await files();
             if (!built) throw new Error(this.current(ctx) && this.gitReason() ? `${this.gitReason()} · ${e.message}` : e.message);
           }
         }
-        const index = { dirs: built.dirs, all: built.all, lower: built.all.map((rel) => rel.toLowerCase()), full: built.full, source: ctx.noDisk ? "git" : source, from: fromGit ? "git" : "disk", known: new Set(built.all), added: new Set(), pending: new Set(), checking: false, at: Date.now(), stale: false, held: false, dirty: Boolean(fromGit ? job.changedGit : job.changedDisk) };
+        const index = { dirs: built.dirs, all: built.all, lower: built.all.map((rel) => rel.toLowerCase()), full: built.full, cut: built.cut, source: ctx.noDisk ? "git" : source, from: fromGit ? "git" : "disk", known: new Set(built.all), added: new Set(), pending: new Set(), checking: false, at: Date.now(), stale: false, held: false, dirty: Boolean(fromGit ? job.changedGit : job.changedDisk) };
         if (this.current(ctx) && this.searchSource() === index.source) this.index = index;
         return index;
-      })().finally(() => { if (this.current(ctx) && this.indexing === job) this.indexing = null; });
+      })()
+        .catch((e) => { if (this.current(ctx)) ctx.failed = { source, git: this.git, error: e }; throw e; })
+        .finally(() => { if (this.current(ctx) && this.indexing === job) this.indexing = null; });
       this.indexing = job;
     }
     return this.indexing.promise;
@@ -699,9 +713,9 @@ export default class Files extends View {
   // bottom when the list can't scroll that far. Null before the list was measured.
   // (A virtual list's rows can't hold the menu: they take no click handlers.)
   keyMenuAt(n) {
-    const k = this.kmenu, zoom = this.zoom();
-    if (!this.listHeight || !zoom) return null;
-    const h = this.listHeight / zoom - 4; // the list, inside the box's bottom padding
+    const k = this.kmenu;
+    if (!this.listHeight) return null;
+    const h = this.listHeight / this.zoom() - 4; // the list, inside the box's bottom padding
     const offset = Math.max(0, Math.min(k.row * ROW + ROW / 2 - h / 2, n * ROW - h));
     const top = k.row * ROW - offset, left = 4 + 8 + k.depth * 14 + 18;
     // Where it wouldn't fit below its row, it opens above it.
@@ -710,12 +724,8 @@ export default class Files extends View {
   }
 
   // on_size_change measures in the window's pixels, which Herdr's zoom makes larger than the
-  // mod's (Herdr's picker divides the same way): settings() has the zoom; without it the
-  // search field, 28 of the mod's high and measured rounded, gives it roughly. 0: unknown.
-  zoom() {
-    const set = Number(settings()?.zoom);
-    return set > 0 ? set : this.fieldHeight ? this.fieldHeight / 28 : 0;
-  }
+  // mod's: settings() has the zoom (Herdr's picker divides the same way).
+  zoom() { return Number(settings()?.zoom) || 1; }
 
   // A 1px point the keyboard menu's surface hangs from.
   keyMenuPin(t, at) {
@@ -937,7 +947,7 @@ export default class Files extends View {
     }
     const t = theme();
     // The panel's width in the mod's pixels, for the rows' +N −N and the branch row's bar.
-    if (this.measuredWidth) this.width = this.measuredWidth / (this.zoom() || 1);
+    if (this.measuredWidth) this.width = this.measuredWidth / this.zoom();
     const root = v_flex().id(NAME).size_full().min_h(0).rounded(10).overflow_hidden().bg(t.background).border_1().border_color(t.border).text_color(t.foreground).text_size(13)
       .track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx))
       .on_size_change((size, cx) => { if (Math.abs(size.width - (this.measuredWidth ?? 0)) > 4) { this.measuredWidth = size.width; cx.notify(); } })
@@ -957,11 +967,10 @@ export default class Files extends View {
     const note = this.note(rows), more = [];
     if (this.limited && !this.hits) more.push(`Folders show their first ${PER_FOLDER} entries`);
     if (this.hits?.length >= FIND_LIMIT) more.push(`First ${FIND_LIMIT} matches`);
-    if (this.hits && this.index && !this.index.full) more.push(`Search covers the first ${String(INDEX_PATHS).replace(/\B(?=(\d{3})+(?!\d))/g, ",")} paths`);
+    if (this.hits && this.index && !this.index.full) more.push(`Search covers ${limits(this.index.cut)}`);
     return root
       .child(this.summary(t))
       .child(h_flex().id("rf-search").flex_none().mx(8).mt(8).mb(4).h(28).px(8).gap(6).items_center().rounded(7).bg(t.canvas ?? t.surface)
-        .on_size_change((size) => { this.fieldHeight = size.height; })
         .border_1().border_color(this.typing ? t.accent : t.border).cursor_text()
         .child(svg(ICON("search")).size(13).flex_none().text_color(t.dim))
         .child(Input.new(this.input).flex_1().h_full().text_size(12).text_color(t.foreground))

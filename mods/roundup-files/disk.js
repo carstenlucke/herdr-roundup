@@ -25,10 +25,17 @@ export const psQuote = (s) => "'" + s.replace(/['‘’‚‛]/g, "$&$&") + "'";
 // A machine without sh (Windows over `on`): exec says so when it tries.
 const noSh = (e, on) => on && String(e).includes("cannot start sh: program not found");
 const atHomeOf = (root) => root === home() || root === "/";
-// Whether a folder of this name below root is never indexed. A file of that name is.
-export const prunedName = (root, name) => PRUNE.includes(name) || (atHomeOf(root) && HOME_PRUNE.includes(name));
+// Whether a folder at rel below root is never indexed. A file there is. HOME_PRUNE: at home
+// only its top level (~/Library, not a project's Library), at / at any depth.
+export const prunedName = (root, rel) => {
+  const name = rel.slice(rel.lastIndexOf("/") + 1);
+  return PRUNE.includes(name) || (HOME_PRUNE.includes(name) && (root === "/" || (root === home() && !rel.includes("/"))));
+};
 // Whether rel lies inside a pruned folder below root (rel itself may still be a file).
-export const prunedAbove = (root, rel) => rel.split("/").slice(0, -1).some((n) => prunedName(root, n));
+export const prunedAbove = (root, rel) => {
+  const parts = rel.split("/");
+  return parts.slice(0, -1).some((_, i) => prunedName(root, parts.slice(0, i + 1).join("/")));
+};
 
 // Natural order, case-insensitive ("file2" before "file10"); this runtime has no Intl.
 export function compare(a, b) {
@@ -78,20 +85,21 @@ export async function listDir(path, on) {
   return { entries: sortEntries(list).slice(0, PER_FOLDER), more: list.length > PER_FOLDER };
 }
 
-// Every path below root, "/"-separated and relative: { dirs: Set, all: [], full }. `full`
-// is false when a limit cut it short. Skips PRUNE (and HOME_PRUNE at home), 12 levels deep
-// (5 at home or /). Not on Windows yet (issue #10), nor without sh: an error with noIndex.
+// Every path below root, "/"-separated and relative: { dirs: Set, all: [], full, cut }.
+// `full` is false when a limit cut it short; `cut` says which ("dirs", "files").
+// Skips PRUNE (and HOME_PRUNE: at home its top level, at / any), 12 levels deep (5 at home or
+// /). Not on Windows yet (issue #10), nor without sh: an error with noIndex.
 export async function buildIndex(root, on) {
   const atHome = atHomeOf(root);
   const depth = indexDepth(root);
   const dirs = new Set(), all = [];
-  const prune = [...PRUNE, ...(atHome ? HOME_PRUNE : [])];
   // Matched against the part below root, so a root inside a pruned name still indexes. Only
   // folders are pruned: a file named `build` or `vendor` is indexed; `.git` never is (a
   // worktree's is a file). A link to a folder counts as a folder, as in the tree, and isn't
   // followed.
   if (windows(on)) throw noIndex("Search can't read the disk on Windows yet");
-  const names = prune.map((n) => `-name '${n}'`).join(" -o ");
+  const top = !atHome ? [] : HOME_PRUNE.map((n) => (root === "/" ? `-name '${n}'` : `-path './${n}'`));
+  const names = [...PRUNE.map((n) => `-name '${n}'`), ...top].join(" -o ");
   // A link to a folder: -type l and test -d (which follows it). One with a pruned name is in
   // neither list.
   const skip = `-type d \\( ${names} \\) -prune -o`, link = `-type l -exec test -d {} \\;`;
@@ -113,7 +121,17 @@ export async function buildIndex(root, on) {
     all.push(rel);
     if (inDirs) dirs.add(rel);
   }
-  return { dirs, all, full: nd <= INDEX_DIRS && nf <= INDEX_PATHS };
+  const over = [...(nd > INDEX_DIRS ? ["dirs"] : []), ...(nf > INDEX_PATHS ? ["files"] : [])];
+  return { dirs, all, full: !over.length, cut: over };
+}
+
+// root with links resolved, as the folder watch reports it (macOS: /tmp is /private/tmp);
+// null where it is the same or can't be told. Here only, as the watch is.
+export async function realPath(root) {
+  if (windows(null)) return null;
+  const r = await exec("sh", ["-c", 'cd "$1" && pwd -P', "roundup-files", root]).catch(() => null);
+  const real = r?.code === 0 ? r.stdout.replace(/\n$/, "") : "";
+  return real && real !== (root.replace(/\/+$/, "") || "/") ? real : null;
 }
 
 // How many levels below root buildIndex reads.

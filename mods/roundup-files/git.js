@@ -259,5 +259,5 @@ export async function listFiles(root, on, limit, paths, ignored) {
     const found = await kinds(root, links, on).catch(() => new Map());
     for (const [rel, kind] of found) if (kind === "d" && files.delete(rel)) addDir(rel);
   }
-  return { dirs, files, all: [...dirs, ...files], full };
+  return { dirs, files, all: [...dirs, ...files], full, cut: full ? [] : ["files"] };
 }
