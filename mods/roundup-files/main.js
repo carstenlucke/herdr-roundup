@@ -43,7 +43,12 @@ const SOURCES = ["git", "disk"];
 const REQUEST = `${NAME}.request`;
 
 const baseOf = (rel) => rel.slice(rel.lastIndexOf("/") + 1);
-const join = (root, rel) => (rel ? (/[\\/]$/.test(root) ? root + rel : `${root}/${rel}`) : root);
+// rel is "/"-separated; a Windows root (C:\ or \\server) gets "\" throughout.
+const join = (root, rel) => {
+  if (!rel) return root;
+  const sep = /^([A-Za-z]:\\|\\\\)/.test(root) ? "\\" : "/";
+  return (/[\\/]$/.test(root) ? root : root + sep) + (sep === "/" ? rel : rel.replace(/\//g, "\\"));
+};
 const message = (e) => String(e?.message ?? e);
 // Why a folder has no repo: git found none, or no git started there.
 const noRepo = (g) => (g.missing ? "Git not found" : "Not a git repository");
@@ -159,7 +164,9 @@ export default class Files extends View {
     this.ctx = { key, root, on, noDisk: !diskSearch(on), base: null, drops: 0 }; this.root = root; this.on = on;
     this.kmenu = null;
     this.entries = new Map(); this.folders = new Set(s?.folders); this.shut = new Set(s?.shut); this.pending = new Set();
+    // searchSeq++: a search still running for the folder before ends without a word here.
     this.cursor = s?.cursor ?? ""; this.git = emptyGit(); this.index = null; this.indexing = null; this.hits = null; this.searchError = null;
+    this.searchSeq++; this.searching = false;
     this.error = null; this.limited = false; this.loading = false; this.again = false; this.watched = null;
     this.scrollTo = this.cursor || null;
     if (this.query) { this.query = ""; this.input?.set_value(""); }
@@ -255,7 +262,11 @@ export default class Files extends View {
       if (rel === null) { shown = true; continue; }
       if (rel === ".git") { this.ctx.base = null; this.ctx.drops++; } // a repo made or removed here: rev-parse again
       if (!shown && !this.unseen(rel)) shown = true;
-      if (job && (baseOf(rel) === ".gitignore" || !this.unindexed(rel, job.source === "git"))) job.changed = true;
+      // Either source may end up read from the other (ensureIndex): both rules are kept.
+      if (job) {
+        if (baseOf(rel) === ".gitignore" || !this.unindexed(rel, true)) job.changedGit = true;
+        if (!this.unindexed(rel, false)) job.changedDisk = true;
+      }
       if (!index) continue;
       if (fromGit && baseOf(rel) === ".gitignore") { index.stale = true; continue; }
       if (this.unindexed(rel, fromGit)) continue;
@@ -480,7 +491,7 @@ export default class Files extends View {
             if (!built) throw new Error(this.current(ctx) && this.gitReason() ? `${this.gitReason()} · ${e.message}` : e.message);
           }
         }
-        const index = { dirs: built.dirs, all: built.all, full: built.full, source: ctx.noDisk ? "git" : source, from: fromGit ? "git" : "disk", known: new Set(built.all), added: new Set(), pending: new Set(), checking: false, at: Date.now(), stale: false, held: false, dirty: Boolean(job.changed) };
+        const index = { dirs: built.dirs, all: built.all, full: built.full, source: ctx.noDisk ? "git" : source, from: fromGit ? "git" : "disk", known: new Set(built.all), added: new Set(), pending: new Set(), checking: false, at: Date.now(), stale: false, held: false, dirty: Boolean(fromGit ? job.changedGit : job.changedDisk) };
         if (this.current(ctx) && this.searchSource() === index.source) this.index = index;
         return index;
       })().finally(() => { if (this.current(ctx) && this.indexing === job) this.indexing = null; });

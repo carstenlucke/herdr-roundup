@@ -36,7 +36,8 @@ export function compare(a, b) {
   for (let i = 0; i < Math.min(x.length, y.length); i++) {
     if (x[i] === y[i]) continue;
     const nx = /^\d/.test(x[i]), ny = /^\d/.test(y[i]);
-    if (nx && ny) return Number(x[i]) - Number(y[i]) || x[i].length - y[i].length;
+    // Runs past 2^53 can come out the same Number: then their digits decide, below.
+    if (nx && ny && (Number(x[i]) !== Number(y[i]) || x[i].length !== y[i].length)) return Number(x[i]) - Number(y[i]) || x[i].length - y[i].length;
     return x[i] < y[i] ? -1 : 1;
   }
   return x.length - y.length || (a < b ? -1 : a > b ? 1 : 0);
@@ -94,10 +95,11 @@ export async function buildIndex(root, on) {
   // A link to a folder: -type l and test -d (which follows it). One with a pruned name is in
   // neither list.
   const skip = `-type d \\( ${names} \\) -prune -o`, link = `-type l -exec test -d {} \\;`;
+  // -mindepth 1: "." itself would count against the cut and hide one folder too many.
   // NUL-separated, as a name may hold a newline. `cut` keeps the first N records and ends
   // find early (head -z is GNU only): it swaps NUL and newline around head and back.
   const cut = `cut() { tr '\\000\\n' '\\n\\000' | head -n "$1" | tr '\\n\\000' '\\000\\n'; }`;
-  const script = `${cut}; cd "$1" || exit 3; find . -maxdepth ${depth} ${skip} \\( -type d -o -type l ! \\( ${names} \\) -exec test -d {} \\; \\) -print0 2>/dev/null | cut ${INDEX_DIRS + 1}; printf '//\\0'; find . -maxdepth ${depth} ${skip} ! -type d ! -name .git ! \\( ${link} \\) -print0 2>/dev/null | cut ${INDEX_PATHS + 1}`;
+  const script = `${cut}; cd "$1" || exit 3; find . -mindepth 1 -maxdepth ${depth} ${skip} \\( -type d -o -type l ! \\( ${names} \\) -exec test -d {} \\; \\) -print0 2>/dev/null | cut ${INDEX_DIRS + 1}; printf '//\\0'; find . -maxdepth ${depth} ${skip} ! -type d ! -name .git ! \\( ${link} \\) -print0 2>/dev/null | cut ${INDEX_PATHS + 1}`;
   let r;
   try { r = await exec("sh", ["-c", script, "roundup-files", root], { on }); }
   catch (e) { if (noSh(e, on)) throw noIndex("Search can't read the disk without sh"); throw e; }
