@@ -24,6 +24,7 @@ export default {
   async load(file, env, previous) {
     if (env.on) throw new Error("PDF previews work for files on this computer only");
     const first = await renderPages(file, 1, BATCH);
+    if (!first.pages.length) throw new Error("This PDF has no pages");
     pruneCache();
     const pages = new Array(Math.min(first.count, MAX)).fill(null);
     for (const p of first.pages) pages[p.n - 1] = p;

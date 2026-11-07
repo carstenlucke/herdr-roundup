@@ -13,7 +13,7 @@ import { dirname, native, localPath, samePath, changedFile } from "./paths.js";
 import { VIEWERS } from "./viewers/index.js";
 import { openMenu } from "./menu.js";
 import { iconButton } from "./viewers/controls.js";
-import { previewId, MOVED, OPEN, FLOAT, shownIn, openCommand } from "./open-file.js";
+import { previewId, MOVED, OPEN, FLOAT, shownIn, remember, openCommand } from "./open-file.js";
 import { formatSize } from "./size.js";
 import { programs } from "./programs.js";
 import { systemOf } from "./platform.js";
@@ -87,7 +87,9 @@ export class Preview {
   }
 
   // Tells roundup-files what this preview shows now, so it isn't reused for the file it opened with.
+  // Not the floating window: it is in no OPEN entry, and its file's key is a tab's.
   moved() {
+    if (this.float) return;
     const opened = props()?.file, id = previewId(opened, this.on);
     setShared(MOVED, { ...(shared(MOVED) ?? {}), [id]: samePath(this.file, opened) ? opened : this.file });
   }
@@ -116,8 +118,10 @@ export class Preview {
     run(...openCommand({ file, on }));
     const record = () => {
       const made = panes().find((p) => !before.has(p.pane) && p.mod === "roundup-preview");
-      if (made) setShared(OPEN, { ...(shared(OPEN) ?? {}), [previewId(file, on)]: made.pane });
-      return Boolean(made);
+      if (!made) return false;
+      const next = remember(shared(OPEN), shared(MOVED), file, on, made.pane, new Set(panes().map((p) => p.pane)));
+      setShared(OPEN, next.open); setShared(MOVED, next.moved);
+      return true;
     };
     if (record()) closeOverlay(overlay);
     else cx.timer.after(300, () => { record(); closeOverlay(overlay); });

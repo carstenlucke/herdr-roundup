@@ -12,6 +12,14 @@ export function shownIn(open, moved, file, on, alive) {
   return pane && alive.has(pane) && (moved?.[id] ?? file) === file ? pane : null;
 }
 
+/** OPEN and MOVED once `pane` was made for `file`: it shows the file itself (no MOVED entry),
+ *  and entries for panes no longer in `alive` are dropped, so neither map only grows. */
+export function remember(open, moved, file, on, pane, alive) {
+  const id = previewId(file, on);
+  const keep = (map) => Object.fromEntries(Object.entries(map ?? {}).filter(([k]) => k !== id && alive.has(open?.[k])));
+  return { open: { ...keep(open), [id]: pane }, moved: keep(moved) };
+}
+
 // The floating preview: one window (kind "window", one key), which opening again replaces
 // in its place. FLOAT: { id, file, on, token } of the open one, null when none is; the
 // token tells the window's own copy that it is still the one FLOAT names.
@@ -19,8 +27,6 @@ export const FLOAT = "roundup-preview.float";
 export function floatSpec({ file, on = null, token }) {
   return { kind: "window", key: "roundup-preview", mod: "roundup-preview", width: 0.6, height: 0.75, props: { file, on, float: token } };
 }
-
-export const MODES = ["tab", "split-right", "split-down"];
 
 /** The app command, as [name, args], that shows `file` (on machine `on`) in roundup-preview. */
 export function openCommand({ file, on = null, mode = "tab" }) {

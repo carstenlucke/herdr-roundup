@@ -18,7 +18,7 @@ import { readGit, listFiles, emptyGit, ancestors, dirOf, within, NEW, MODIFIED, 
 import { openExternal, revealExternal, copy, sendToAgent, relTo } from "./actions.js";
 // A copy of roundup-preview's: how it opens and which pane already shows a file. sync.sh
 // checks that the two copies match.
-import { OPEN, MOVED, FLOAT, previewId, shownIn, openCommand, floatSpec } from "./open-file.js";
+import { OPEN, MOVED, FLOAT, shownIn, remember, openCommand, floatSpec } from "./open-file.js";
 
 const NAME = "roundup-files";
 const PREVIEW = "roundup-preview";
@@ -733,7 +733,7 @@ export default class Files extends View {
     this.cursor = r.rel;
     if (r.dir || r.gone) { if (n === 1) this.activate(r, cx); return; }
     if (n === 1) this.follow();
-    else if (n === 2) this.openFloat(r.rel);
+    else if (n === 2) { if (!this.floats(r.rel)) this.openFloat(r.rel); }
     else if (n === 3) { this.closeFloat(); this.openPreview(r.rel, cx); }
   }
 
@@ -787,8 +787,10 @@ export default class Files extends View {
     run(...openCommand({ file, on }));
     const record = () => {
       const made = panes().find((p) => !before.has(p.pane) && p.mod === PREVIEW);
-      if (made) setShared(OPEN, { ...(shared(OPEN) ?? {}), [previewId(file, on)]: made.pane });
-      return Boolean(made);
+      if (!made) return false;
+      const next = remember(shared(OPEN), shared(MOVED), file, on, made.pane, new Set(panes().map((p) => p.pane)));
+      setShared(OPEN, next.open); setShared(MOVED, next.moved);
+      return true;
     };
     if (!record()) cx.timer.after(300, () => { record(); });
   }
@@ -877,7 +879,7 @@ export default class Files extends View {
   request(req, cx) {
     const abs = join(this.root, req.rel);
     if (req.action === "preview") { this.cursor = req.rel; this.show(req.rel, cx, true); return; }
-    if (req.action === "float") { this.cursor = req.rel; this.openFloat(req.rel); return; }
+    if (req.action === "float") { this.cursor = req.rel; cx.spawn(async () => this.openFloat(req.rel)); return; }
     if (req.action === "tab") { this.cursor = req.rel; cx.spawn(async (cx) => this.openPreview(req.rel, cx)); return; }
     cx.spawn(async (cx) => {
       try {
