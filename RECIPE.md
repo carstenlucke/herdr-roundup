@@ -117,7 +117,8 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
     new, modified and deleted below them, and their `+N −N` from 360px of
     width. The selected row is on `selected`, a hovered one on `hover`.
   - **Footer** (only when needed, 11px `dim`): "Folders show their first 500
-    entries", "First 200 matches", "Search covers the first 40,000 files"
+    entries", "First 200 matches", "Changed shows the first 2,000 paths",
+    "Search covers the first 40,000 files"
     (or "the first 20,000 folders", whichever limit cut the index short).
 - **Status bar** (28px): Herdr's shipped `workspace-status`.
 
@@ -197,6 +198,9 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   untracked folder or a submodule as one row that opens from disk. Such a
   folder also shows what git lists below it and isn't on disk (a file
   deleted next to new ones), and a search opens it for what it found there.
+  At most the first 2,000 paths, in git's order (the counts and the branch
+  row still count all): the tree is built on every render, about 70 ms for
+  5,000 paths in Herdr's runtime, and every arrow key would wait for it.
   A tracked folder there folds and unfolds without reading the disk.
   Struck through means not on disk, not deleted in git: after
   `git rm --cached` the file is red but still previews. When the shown folder is
@@ -531,6 +535,14 @@ global `tab.close` and `pane.close`.
   the pane's folder keeps the link: the panel resolves it once (`pwd -P`)
   and places the watch's paths against both, or every batch would refresh
   and search would miss new files.
+- **A `roundup-files` refresh costs more git than `files`:** five reads at
+  once (status, ignored, forced, `check-ignore`, numstat) where Herdr's
+  `files` runs status alone. Measured 2026-11-07: 12 ms in a small repo,
+  136 ms with 38,000 files, 351 ms (about 580 ms CPU) with 68,000. Every 10s
+  that is about 6 % of a core for the largest; while an agent keeps
+  writing, refreshes run back to back (never two at once). Left as is:
+  caching `check-ignore` would save 9 ms; if the load shows, a minimum of
+  about 1 s between the watch's refreshes is the lever.
 - **A virtual list's rows can't hold handlers:** `on_click` inside the row
   renderer throws. Clicks come from `on_item_click(key)` and
   `on_item_secondary_click(key, event)` on the list, with the path as key.

@@ -19,6 +19,9 @@ const NAME = "roundup-files";
 const ICON = (name) => `mods/${NAME}/${name}.svg`;
 const ROW = 26;
 const FIND_LIMIT = 200;
+// Changed shows at most this many of git's paths (in git's order): its rows are built on every
+// render, about 10 µs a row here, so 2,000 keep a key press near 20 ms (5,000: 70 ms).
+const CHANGED_LIMIT = 2000;
 // A search index older than this is read again on the next search, whatever the watch said.
 const INDEX_AGE = 300000;
 // After a file the index knows changed (it may be gone), the index is read again once it is
@@ -539,6 +542,7 @@ export default class Files extends View {
   // disk: a folder that opens from disk (this.folders); in Changed, the others fold (this.shut).
   rows() {
     const out = [], q = this.query.trim().toLowerCase();
+    this.changedCut = false;
     if (this.error) return out; // the folder failed to load: only the error shows
     if (this.view === "changed") return this.changedRows(q);
     if (this.hits) return this.hitRows();
@@ -574,12 +578,15 @@ export default class Files extends View {
   }
 
   // Exactly the paths git status lists, as a tree: deleted files too, untracked folders and
-  // submodules as one row that opens from disk. A search filters them.
+  // submodules as one row that opens from disk. A search filters them. The first
+  // CHANGED_LIMIT of them (changedCut: more were left out).
   changedRows(q) {
     const g = this.git, out = [], kids = new Map(), dirs = new Set([...g.untracked, ...g.links]);
     const add = (rel) => { const p = dirOf(rel); if (!kids.has(p)) kids.set(p, new Set()); kids.get(p).add(rel); };
+    let taken = 0;
     for (const rel of g.files.keys()) {
       if (q && !rel.toLowerCase().includes(q)) continue;
+      if (taken++ >= CHANGED_LIMIT) { this.changedCut = true; break; }
       add(rel);
       for (const a of ancestors(rel)) { dirs.add(a); add(a); }
     }
@@ -967,6 +974,7 @@ export default class Files extends View {
     const note = this.note(rows), more = [];
     if (this.limited && !this.hits) more.push(`Folders show their first ${PER_FOLDER} entries`);
     if (this.hits?.length >= FIND_LIMIT) more.push(`First ${FIND_LIMIT} matches`);
+    if (this.view === "changed" && this.changedCut) more.push(`Changed shows the first ${thousands(CHANGED_LIMIT)} paths`);
     if (this.hits && this.index && !this.index.full) more.push(`Search covers ${limits(this.index.cut)}`);
     return root
       .child(this.summary(t))
