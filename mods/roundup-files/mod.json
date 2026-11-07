@@ -1,0 +1,9 @@
+{
+  "place": "none",
+  "title": "Files",
+  "focusable": true,
+  "cloned_from": {
+    "name": "files",
+    "version": "0.1.13"
+  }
+}

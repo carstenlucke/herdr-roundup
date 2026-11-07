@@ -7,7 +7,10 @@ softly tinted initial, its name and, under it, its repo, branch,
 ahead/behind and uncommitted changes, plus a badge with the number of agents
 running in it. A repo and its worktrees sit together on one card. On the
 right, the terminals of the active tab in rounded panes, with tabs above and
-a status bar below. Built for light and dark themes alike.
+a status bar below. A side panel shows the focused folder's files with
+Symbols icons and their git state, all of them or only the changed ones,
+searchable across folders not yet opened. Built for light and dark themes
+alike.
 
 ![Herdr-Roundup](preview.png)
 
@@ -84,7 +87,37 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   down, Zoom, where right-clicks go, Close pane), then "Ask before closing
   a pane" with the same three choices, for panes only.
 - **Side panel** on the right, hidden at first (368px, 280–900px): a stack
-  of Herdr's `files` and `changes`.
+  of `roundup-files` and Herdr's `changes`, picked with the Files and
+  Changes buttons at the right of the tab bar. `roundup-files` is a card
+  (radius 10, 1px `border`, `background`), top to bottom:
+  - **Header** (42px): "Files" in semibold, a switch **All | Changed** (24px,
+    `raised` behind, the chosen one on `background`; Changed carries the
+    number of entries `git status` lists), and at the right the shown
+    folder's name in `dim` with Symbols' root-folder icon. While a file
+    previews: a back arrow, the file's icon and its path.
+  - **Branch row** (46px): a branch glyph, the branch in medium weight,
+    `↑ahead` `↓behind` in `muted`, "upstream gone" when its upstream was
+    deleted, "clean" or the lines changed against `HEAD` (`+N` in `ansi2`,
+    `−N` in `ansi1`); under it a 4px bar of modified (`ansi3`), new (`ansi2`)
+    and deleted (`ansi1`) paths, sized by their counts, with the counts at
+    its right; when clean, no bar, only its space. Outside a repo: "Not a git
+    repository"; before git answers: "Reading git…".
+  - **Search field** (28px, `canvas`, `border`, `accent` while typing):
+    "Search files". In All, inside a repo, not in a folder git ignores and
+    where search can read the disk, a 20px switch at its right end, the
+    branch glyph: lit (`accent` on `raised`) while search reads git's
+    files, `dim` while it reads the disk.
+  - **Tree** (26px rows, 14px indent per level): a chevron for folders, a
+    16px Symbols icon (one set for light and dark themes; an open folder
+    keeps its icon, as in VS Code), the name, then the git marks. Names take their status
+    color: new or added `ansi2`, modified `ansi3`, deleted or conflicted
+    `ansi1`, renamed `ansi4`; ignored paths are `dim` with a half-faded icon.
+    Files end with `+N −N` and their letter (`?`, `A`, `M`, `D`, `U`, `R`,
+    `T`) in a 12px column; folders show a colored dot and count for each of
+    new, modified and deleted below them, and their `+N −N` from 360px of
+    width. The selected row is on `selected`, a hovered one on `hover`.
+  - **Footer** (only when needed, 11px `dim`): "Folders show their first 500
+    entries", "First 200 matches", "Search covers the first 40,000 paths".
 - **Status bar** (28px): Herdr's shipped `workspace-status`.
 
 ## How it behaves
@@ -108,8 +141,7 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   on its repo's card instead of jumping there.
 - **At start** the list waits up to 1.5s for the git of every space already
   there ("Loading…" meanwhile), then shows them all at once, already on
-  their cards. It reorders nothing before that
-  (`docs/adr/0001-first-draw-waits-for-git.md`).
+  their cards. It reorders nothing before that.
 - **The git line refreshes** when something under a local repo's `.git`
   changes (a commit, a checkout, a fetch), when a command or an agent's turn
   in that space ends, when a space's terminal moves to another folder, when a
@@ -151,11 +183,86 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   the two, Enter or Space presses the one with the ring, Esc cancels.
 - **Version tooltip:** follows the layout file. After a new release is
   installed, it shows the new version without a restart.
+- **Files panel follows the focused pane's folder** (a mod pane: the first
+  terminal of its tab), on its machine. Each folder keeps its open folders,
+  selection and preview while another one shows. The files show at once;
+  git fills in its marks without moving a row, so unlike the spaces panel
+  nothing waits for it. A local folder refreshes
+  when anything under it changes (`watchFolder`), any folder every 10s.
+- **All** lists the disk, folders first, in natural order ("file2" before
+  "file10"), dotfiles included, `.git` left out. Folders load when opened.
+  **Changed** lists exactly the paths `git status` lists, as a tree with
+  every folder open: deleted files too (struck through, faded icon), and an
+  untracked folder or a submodule as one row that opens from disk. Such a
+  folder also shows what git lists below it and isn't on disk (a file
+  deleted next to new ones), and a search opens it for what it found there.
+  A tracked folder there folds and unfolds without reading the disk.
+  Struck through means not on disk, not deleted in git: after
+  `git rm --cached` the file is red but still previews. When the shown folder is
+  itself new to git, Changed says so and every row in All shows `?`. The
+  view stays after a restart.
+- **Search** (type in the field, or `/`): in All it searches every path
+  below the folder, opened or not, and shows the matches as a tree, names
+  that match first, at most 200. The switch in the field picks what it
+  reads, and the panel keeps the choice:
+  - **Git's files** (the default): what git counts as the project, tracked
+    and new files, without what `.gitignore` leaves out, at most 40,000
+    files, at any depth. A file deleted but not yet committed shows struck
+    through. "No matches · ignored files left out" says where else to look.
+    Outside a repo, in a folder git ignores (or inside one, also when it
+    holds a tracked file), or where git can't run, search reads the disk
+    instead.
+  - **The disk:** everything but the folders `.git`, `node_modules`, `target`,
+    `.venv`, `venv`, `__pycache__`, `dist`, `build`, `.next`, `.nuxt`,
+    `.cache`, `.gradle`, `.idea`, `vendor`, `Pods`, `.tox`, `.mypy_cache`,
+    `.pytest_cache` and `coverage` (a file with such a name is searched),
+    ignored files included (`.env`, local settings), 12 levels deep (5 at
+    home or `/`), at most 20,000 folders and 40,000 other paths. Not on
+    Windows yet, nor on a machine without `sh`: there search reads git's
+    files whatever the switch said, and where git has none it says why
+    ("Not a git repository · Search can't read the disk on Windows yet").
+
+  A link to a folder is a folder there, as in the tree, and search doesn't
+  follow it; from git's files only a tracked one is, a new one stays a file.
+
+  The index is read on the first search and again when a folder changes, a
+  `.gitignore` changes (git's files) or it is 5 minutes old. A new path is
+  checked on its own and added (git's files: `ls-files` for that path, with
+  what is below a new folder; the disk: whether it is there, in a folder the
+  index holds), and a path added that way that is gone again comes out, so
+  saves through temporary files don't read the whole index. A new folder
+  from the disk, more than 100 new paths at once or a failed check read it
+  again; a folder named like a skipped one (a build's `dist`) doesn't. In an
+  index a limit cut short, a new path can't be added and counts like a
+  changed file. When a file it knows changes (it may be
+  deleted), it is read again once it is 30 seconds old, also without typing:
+  at most one read per 30 s while an agent keeps writing. In Changed, the search filters git's paths. `×` or Esc clears it.
+- **Click** a folder to open or close it, a file to preview it. **Keys**,
+  once the panel has the keyboard (a click on it, or `pane.go`): ↑ ↓ select,
+  PgUp PgDn Home End jump, → opens a folder or steps into an open one, ←
+  closes it or goes to its parent, Enter or Space previews a file or toggles
+  a folder, `/` goes to the search field, Esc leaves the preview or clears
+  the search; in the field ↑ ↓ move the selection and Enter acts on it. In
+  search results, Enter on a folder shows it in the tree with the search
+  cleared.
+- **Right-click** a row (or the Menu key, Shift-F10, the `menu` command:
+  then the menu opens below the selected row, ↑ ↓ Home End pick, Enter
+  runs, Esc or ← closes, and it opens above the row where it doesn't fit
+  below): Preview, Open with
+  default app, Reveal in Finder ("Show in folder" elsewhere) / Copy relative
+  path, Copy absolute path / Send @path to agent. Send types `@path ` into
+  the agent of the shown tab (the focused pane's if it is an agent, else the
+  tab's focused or first agent), relative to that agent's folder, focuses
+  it, and puts the clipboard back after 600ms; without an agent it says "No
+  agent in this tab". On another machine the menu leaves out Open and
+  Reveal; for a deleted file, Preview, Open and Reveal.
+- **Preview:** read-only, highlighted by extension, the first 400,000
+  characters; binary files say so. Esc, ← or the back arrow go back.
 
 ## Built from
 
 **Layout** `layouts/Herdr-Roundup.json`, cloned from Herdr's `main` 0.1.13
-(`cloned_from`) with a root `"version"` (`0.5.0`). Root `row` (`titlebar:
+(`cloned_from`) with a root `"version"` (`0.6.0`). Root `row` (`titlebar:
 "none"`, `traffic_lights: [12, 16]`, `background: "canvas"`,
 `terminal_padding: [14, 12]`, `terminal_menu: "roundup-pane"`, divider 1px
 `border`):
@@ -174,11 +281,14 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
       "background", lone: true, border 1 "border", focus 1 "accent",
       header { mod "roundup-pane", height 30, top, reveal "always" } }`
     - `panel` column (hidden, px 368, min 280, max 900) → `panel-body`
-      stack (active `files`): shipped `files`, shipped `changes`
+      stack (active `files`): `files` block with `roundup-files`, shipped
+      `changes`
   - `status` block (px 28): shipped `workspace-status`
 
 The only difference from `main` is that `brand`, `sidebar-footer`,
-`spaces`, `tabs` and the pane header point at the `roundup-` mods.
+`spaces`, `tabs`, `files` and the pane header point at the `roundup-` mods.
+The block ids stay Herdr's, so the tab bar's Files button (`layout.select
+{stack: "panel-body", child: "files"}`) finds it.
 
 **`roundup-workspace-chrome`** (clone of `workspace-chrome` 0.1.13, `place:
 "none"`). Two looks by `props().footer`. The brand row reads the layout's own
@@ -199,7 +309,7 @@ pane in `panes()`. herdr-core can't rename a running terminal (`hc run
 `roundup-pane.name`, read from `terminals()[i].labels` and written with
 `hc(["label", terminal, "roundup-pane.name=<name>"])` (`…=` removes it). A mod
 pane has no terminal: its name is in shared `roundup-pane.names` (pane id →
-name). See `docs/adr/0002-pane-names-in-core-labels.md`. The id chip copies
+name). See `docs/adr/0001-pane-names-in-core-labels.md`. The id chip copies
 with `cx.write_to_clipboard` on `click_count === 2`. The rename dialog is the
 same mod, opened with `openOverlay({ mod: "roundup-pane", kind: "dialog",
 width: 380, height: 196, props: { rename: { pane, terminal, value, fallback }
@@ -264,7 +374,70 @@ the dialog keeps which one is chosen (Cancel in `init`), moves it on Tab and
 Shift-Tab, focuses its handle and draws the ring on it. Herdr's own questions ("Close space?") still use
 the shipped `confirm`.
 
-**Shipped mods used:** `agents`, `files`, `changes`,
+**`roundup-files`** (clone of `files` 0.1.13, `place: "none"`, title
+"Files", `focusable: true`). `main.js` draws the panel and, opened with
+`props().menu`, the context menu; `disk.js` lists folders (`sh` here and on
+other machines, PowerShell on Windows, as `files` does; 500 entries per
+folder) and builds the disk's search index with `find` (none on Windows
+yet, issue #10); `git.js` reads git and git's search
+index; `actions.js`
+opens, reveals, copies and sends; `icon.js` picks an icon from `icons.js`.
+The tree is a `v_virtual_list` (rows report clicks through `on_item_click`
+and `on_item_secondary_click`) with a `Scrollbar` and a
+`VirtualListScrollHandle`. Git runs through `exec` on the folder's machine:
+
+- `git --no-optional-locks -c core.fsmonitor=false -c
+  diff.autoRefreshIndex=false rev-parse --show-toplevel --show-prefix`
+- the same options, `status --porcelain=v2 -z --branch --no-renames
+  --untracked-files=normal --ignored=no -- .`: each path's `XY` and the
+  branch (`# branch.head`, `# branch.upstream`, `# branch.ab`)
+- alongside it, `ls-files -z --others --ignored --exclude-standard
+  --directory -- .`: at most 5,000 ignored paths, a folder that is ignored
+  or holds only ignored files as one path (what lies below it is left out),
+  `ls-files -z --cached --ignored --exclude-standard -- .`: the tracked
+  files an ignore rule matches (added with `git add -f`), which with their
+  folders don't count as ignored, and `check-ignore -q --no-index -- ./`:
+  whether the shown folder is ignored or lies in an ignored folder
+- alongside status, `diff HEAD --numstat -z --no-renames -- .` for the
+  `+N −N` of files, summed up for folders (it fails before the first commit:
+  no lines then)
+- for search from git's files, `ls-files -z --cached --others
+  --exclude-standard -- .` (an untracked repo inside comes as `dir/`: one
+  folder); when it fails (no repo, no git), search reads the disk
+
+Previews use `readTextFile` and a read-only `EditorState` + `Editor`. The
+right-click menu is `openOverlay({mod: "roundup-files", kind: "popup", width: 228,
+props: {menu}})`, 28px per item and 9px per divider; its Preview, Open,
+Reveal and Send write shared `roundup-files.request` (`{n, action, from,
+root, on, rel}`), which the panel runs (see "A popup's tasks end with it").
+`from` is a random id of the panel copy that opened the menu: every shown
+copy reads the request, and only that copy runs it, so two windows on the
+same folder don't open or send twice.
+The keyboard menu is the panel's own: a `Popup` (gpui-base) on a 1px point
+in the list's box, which runs its items itself. It can't sit in the row: a
+virtual list's item renderer refuses click handlers (`on_click` there
+throws, and the list draws nothing). Opening centres the row
+(`scroll_to_item(i, "center")`), so its place follows from the list's
+height, the row height and the row count; `on_size_change` reports the
+window's pixels, so the height is divided by `settings().zoom` (without it,
+the search field's measured height / 28), as Herdr's `picker` does. The
+panel's width, for `+N −N` and the branch row's bar, is divided the same way. A wheel scroll, a press outside
+(`on_mouse_down_out`) or its row moving closes it.
+Copy uses `cx.write_to_clipboard` and `notify`. Send uses `focused()`,
+`panes()`, `agents()`, `pane.focus {terminal}` and `terminal.paste`. Open and
+Reveal run `open` / `open -R` (PowerShell `Invoke-Item` / `explorer.exe
+/select` on Windows, `xdg-open` elsewhere). Its key commands (none bound):
+`focus`, `search`, `view:all`, `view:changed`, `source:git`,
+`source:disk`, `menu`. `localStorage` keeps the view and the search's source. `this.highlights` (path → `{color, at}`, a theme color name) tints
+a row and colors its name; nothing fills it yet, so a later source (an
+agent's reads and writes) can light up paths without changing the tree. Its
+own art: Symbols 0.0.26 by Miguel Solorio in `icons/` (245 SVGs, with
+`icons/LICENSE`) and `icons.js`, all written by `scripts/build-icons.mjs`
+(`docs/adr/0002-file-icon-set.md`);
+Herdr's `chevron-right`, `chevron-down`, `chevron-left`, `branch` and
+`search` glyphs.
+
+**Shipped mods used:** `agents`, `changes`,
 `workspace-status`, plus `picker`, `menu` and `machine-add` as overlays.
 
 **Keys:** the `layout:Herdr-Roundup` section binds `cmd-w` to
@@ -319,6 +492,51 @@ global `tab.close` and `pane.close`.
   and moves it itself (`stop_propagation`).
 - **Install by copying, not symlinking:** Herdr App doesn't load a mod's own
   SVGs through a symlink.
+- **Read git's branch from `--porcelain=v2 --branch`:** v1's `## main...origin/main
+  [ahead 1]` follows the user's language (`[voraus 1]` in German); v2's
+  `# branch.ab +1 -0` doesn't. Its entries mark an unchanged side with `.`
+  where v1 has a space.
+- **A deletion in git's index isn't a missing file:** after `git rm --cached`,
+  status says `D.` with working-tree mode `000000`, as for a file really
+  gone, and lists the file as new (`?`) as well. Only below a folder git
+  lists as a whole, or an ignored one, does it not: `roundup-files` asks the
+  disk for those (at most 2,000; one it didn't ask counts as there). A submodule is one path with `S` in `<sub>`, not a file.
+- **`roundup-files` watches its whole folder:** on macOS that includes
+  `.git` and ignored folders. A batch that touches only what git ignores (a
+  build in `node_modules` or `target`), outside the open folders, doesn't
+  refresh, nor, outside a repo, one that touches only closed folders
+  (`.git` in the shown folder still does); the 10s timer still does. A
+  tracked file an ignore rule matches isn't ignored: its edits refresh. A refresh while one runs only marks
+  another one due, so they never pile up. Ignored paths come from
+  `ls-files --directory`, not from status: `--ignored=traditional` walks
+  every ignored folder in full on each refresh (about four times as long
+  with a 23,000-file `node_modules`), and `--ignored=matching` lists a new
+  folder that holds only ignored files file by file, so it isn't dimmed.
+  Its git reads write nothing under `.git` (see above), or each
+  refresh would wake the watch again.
+- **A virtual list's rows can't hold handlers:** `on_click` inside the row
+  renderer throws. Clicks come from `on_item_click(key)` and
+  `on_item_secondary_click(key, event)` on the list, with the path as key.
+- **A popup's tasks end with it:** the context menu closes on a click, so
+  anything that waits (a timer restoring the clipboard, `open`) runs in the
+  panel.
+- **Icon colors are fixed:** Symbols' SVGs carry their own colors
+  (`image()`), the one exception to theme colors. One set serves light and
+  dark themes.
+- **Symbols leans on language ids:** `.css`, `.html`, `.php`, `.vue` and
+  more get their icons only through VS Code's languages, which Herdr
+  doesn't have. `scripts/build-icons.mjs` turns them into extensions from a
+  table of VS Code's associations; without it those files show the plain
+  document icon. It also drops the six rules of 0.0.26 that name icons the
+  release lacks (`less`, `folder-redux`), as VS Code ignores them.
+- **Search limits:** from the disk the index stops at 20,000 folders and
+  40,000 other paths and at 12 levels, from git at 40,000 files; a deeper or
+  larger folder is searched only in part, and the footer says so. Folders
+  show their first 500 entries.
+- **No search from the disk on Windows yet** (issue #10): `Get-ChildItem
+  -Recurse` walks into `node_modules` and the other pruned folders before
+  it drops them, so it needs a walk of its own. Until then search reads
+  git's files there, and outside a repo it says it can't.
 
 ## Done when
 
@@ -359,3 +577,22 @@ global `tab.close` and `pane.close`.
 - In the question, Enter right away cancels; Tab, then Enter closes.
 - In a light and a dark theme, every avatar's letter and every badge count
   can be read.
+- The side panel's Files button shows `roundup-files`; Changes still shows
+  Herdr's diff and commit panel.
+- In a repo with a modified, a new, a staged, a deleted and an ignored
+  file, the branch row shows the branch and `↑n ↓n` as `git status -sb`
+  does; the files show `M`, `?`, `A` and their `+N −N`, the ignored one is
+  dim, and their folders show the counts. Changed lists exactly what
+  `git status -s` lists, the deleted file struck through. Editing or
+  deleting a file shows the change within a second, without a restart.
+- Files and folders, open ones too, show Symbols icons in light and dark
+  themes (`package.json`, `Dockerfile`, `style.css`, `index.html`, `src/`,
+  `.github/`).
+- Typing the name of a file in a folder that was never opened finds it;
+  `node_modules` stays out. Enter previews a file; Esc goes back. In a repo,
+  an ignored `.env` is found only after the switch in the field goes to the
+  disk; a folder outside a repo is searched with the switch hidden.
+- ↑ ↓ → ← Enter and Esc work as described; right-clicking a file shows the
+  menu, and Copy relative path puts the path on the clipboard.
+- A folder without git shows "Not a git repository" and its files; a folder
+  with more than 500 entries says so in the footer.
