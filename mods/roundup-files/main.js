@@ -46,6 +46,11 @@ const SOURCES = ["git", "disk"];
 const REQUEST = `${NAME}.request`;
 
 const baseOf = (rel) => rel.slice(rel.lastIndexOf("/") + 1);
+// What a change in the shown folder's .git does to an index from git: excludes and config
+// (core.excludesFile) change its list, so it is read again; the index (`git add -f`,
+// `git rm --cached` of an ignored file) changes on every add and commit, so it only comes
+// out dirty, read again once DIRTY_AGE old. Anything else in .git: nothing (null).
+const gitMeta = (rel) => (rel === ".git/info/exclude" || rel === ".git/config" ? "stale" : rel === ".git/index" ? "dirty" : null);
 // rel is "/"-separated; a Windows root (C:\ or \\server) gets "\" throughout.
 const join = (root, rel) => {
   if (!rel) return root;
@@ -265,7 +270,10 @@ export default class Files extends View {
   // it knows may have been deleted: the index is read again once it is DIRTY_AGE old, not on
   // every save; after a folder changed, once it is STALE_AGE old (reindex), not on every
   // batch a build sends. Paths the index never holds don't count: .git and, from the disk, the pruned
-  // folders, from git, what it ignores. From git, a changed .gitignore counts.
+  // folders, from git, what it ignores. From git, a changed .gitignore counts, and so does what
+  // in .git changes git's list without a path changing (gitMeta). Only the .git in the shown
+  // folder is watched: in a worktree (.git is a file there), below a repo's top folder and for
+  // a global excludes file, the index catches such a change only once it is INDEX_AGE old.
   // A change during an index build may be missing from it: that index comes out dirty.
   changed(paths, cx) {
     const index = this.index, job = this.indexing, fromGit = index?.from === "git";
@@ -278,12 +286,14 @@ export default class Files extends View {
       if (rel === ".git") { this.ctx.base = null; this.ctx.drops++; } // a repo made or removed here: rev-parse again
       if (!shown && !this.unseen(rel)) shown = true;
       // Either source may end up read from the other (ensureIndex): both rules are kept.
+      const meta = gitMeta(rel);
       if (job) {
-        if (baseOf(rel) === ".gitignore" || !this.unindexed(rel, true)) job.changedGit = true;
+        if (baseOf(rel) === ".gitignore" || meta || !this.unindexed(rel, true)) job.changedGit = true;
         if (!this.unindexed(rel, false)) job.changedDisk = true;
       }
       if (!index) continue;
-      if (fromGit && baseOf(rel) === ".gitignore") { index.stale = true; continue; }
+      if (fromGit && (baseOf(rel) === ".gitignore" || meta === "stale")) { index.stale = true; continue; }
+      if (fromGit && meta === "dirty") { index.dirty = true; continue; }
       if (this.unindexed(rel, fromGit)) continue;
       // From the disk, a new path named like a pruned folder (a build's `dist`, say): recheck
       // tells a file from a folder. One recheck can't place is most likely the folder.
@@ -379,10 +389,16 @@ export default class Files extends View {
       }
     } catch { return "stale"; }
     if (!this.current(ctx) || this.index !== index || index.stale) return "same";
+    // Past a limit, nothing is taken in: the index is read again, which cuts it and says so.
+    // From git only the files count (listFiles caps no folders); folders aren't files.
+    const newDirs = new Set(dirs.filter((d) => !index.dirs.has(d) && !index.known.has(d)));
+    const newFiles = new Set(files.filter((f) => !index.known.has(f) && !newDirs.has(f)));
+    if (index.files + newFiles.size > INDEX_PATHS) return "stale";
+    if (index.from === "disk" && index.dirs.size + newDirs.size > INDEX_DIRS) return "stale";
     let moved = false;
     const take = (rel) => { if (index.known.has(rel)) return; index.all.push(rel); index.lower.push(rel.toLowerCase()); index.known.add(rel); index.added.add(rel); moved = true; };
-    for (const d of dirs) if (!index.dirs.has(d)) { index.dirs.add(d); take(d); }
-    for (const f of files) take(f);
+    for (const d of dirs) if (!index.dirs.has(d)) { if (index.known.has(d)) index.files--; index.dirs.add(d); take(d); }
+    for (const f of files) if (!index.known.has(f)) { take(f); index.files++; }
     // What it took in and is gone now, with what it took in below it.
     const here = new Set([...files, ...dirs]);
     const gone = rels.filter((rel) => index.added.has(rel) && !here.has(rel));
@@ -391,7 +407,7 @@ export default class Files extends View {
       const drop = new Set([...index.added].filter(out));
       index.lower = index.lower.filter((_, i) => !drop.has(index.all[i]));
       index.all = index.all.filter((p) => !drop.has(p));
-      for (const p of drop) { index.added.delete(p); index.known.delete(p); index.dirs.delete(p); }
+      for (const p of drop) { if (!index.dirs.delete(p)) index.files--; index.added.delete(p); index.known.delete(p); }
       moved = true;
     }
     return moved ? "moved" : "same";
@@ -517,7 +533,7 @@ export default class Files extends View {
             if (!built) throw new Error(this.current(ctx) && this.gitReason() ? `${this.gitReason()} · ${e.message}` : e.message);
           }
         }
-        const index = { dirs: built.dirs, all: built.all, lower: built.all.map((rel) => rel.toLowerCase()), full: built.full, cut: built.cut, source: ctx.noDisk ? "git" : source, from: fromGit ? "git" : "disk", known: new Set(built.all), added: new Set(), pending: new Set(), checking: false, at: Date.now(), stale: false, held: false, dirty: Boolean(fromGit ? job.changedGit : job.changedDisk) };
+        const index = { dirs: built.dirs, all: built.all, lower: built.all.map((rel) => rel.toLowerCase()), full: built.full, cut: built.cut, files: built.all.length - built.dirs.size, source: ctx.noDisk ? "git" : source, from: fromGit ? "git" : "disk", known: new Set(built.all), added: new Set(), pending: new Set(), checking: false, at: Date.now(), stale: false, held: false, dirty: Boolean(fromGit ? job.changedGit : job.changedDisk) };
         if (this.current(ctx) && this.searchSource() === index.source) this.index = index;
         return index;
       })()
@@ -846,8 +862,9 @@ export default class Files extends View {
   // ── drawing ──────────────────────────────────────────────────────────────────────────
   row(r, t) {
     const g = this.git, rel = r.rel;
-    const status = g.status.get(rel) ?? (this.underUntracked(rel) ? "?" : null);
-    const ignored = !status && this.isIgnored(rel);
+    // An ignored path below an untracked folder (newdir/node_modules) is dimmed, not new.
+    const own = g.status.get(rel), ignored = !own && this.isIgnored(rel);
+    const status = own ?? (!ignored && this.underUntracked(rel) ? "?" : null);
     const color = statusColor(t, status);
     const lines = g.diff.get(rel), counts = r.dir ? g.counts.get(rel) : null, selected = rel === this.cursor;
     const showLines = Boolean(lines?.[0] || lines?.[1]) && (!r.dir || this.width >= 360);

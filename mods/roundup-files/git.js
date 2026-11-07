@@ -54,6 +54,9 @@ export function within(set, rel) {
 // At most this many unsure paths are looked up on disk per read, in one kinds() call. One not
 // looked up, or whose lookup failed, counts as there: a missing file then says so when opened.
 const UNSURE = 2000;
+// At most this many paths git lists as one that may be a link to a folder (maybeDirs) are
+// looked up per read, in the same kinds() call; as many as Changed shows. Tracked links first.
+const MAYBE_DIRS = 2000;
 
 // repo: inside a work tree; known: git has answered (or there is none); missing: no git started;
 // failed: in a repo, but status failed (too large or slow, a broken index): nothing below is known.
@@ -62,7 +65,8 @@ export const emptyGit = (known = false) => ({
   status: new Map(), // rel (file or folder) → letter: ? A M R T D U
   files: new Map(), // rel → change, for every path git status lists (files and untracked folders)
   untracked: new Set(), // untracked folders git lists as a whole ("dir/")
-  links: new Set(), // submodules: folders, though git lists them as one path
+  links: new Set(), // submodules and links to folders: folders, though git lists them as one path
+  maybeDirs: new Set(), // listed paths that may be links to folders: tracked links, untracked paths without "/"
   gone: new Set(), // listed paths not in the working tree (a deletion in the index alone isn't one)
   unsure: new Set(), // ones git can't place: below an untracked or ignored folder; gone if the disk agrees
   rootUntracked: false, // the shown folder is itself one of them
@@ -145,6 +149,9 @@ export function parseStatus(stdout, git) {
     if (!rel) continue;
     if (xy === "??") present.add(rel);
     if (sub.startsWith("S")) git.links.add(rel);
+    // Git doesn't follow a link: a link to a folder comes as one path, untracked without "/".
+    // Only the disk tells (readGit): mode 120000 is a tracked link that is there.
+    else if (worktree === "120000" || (xy === "??" && !raw.endsWith("/"))) git.maybeDirs.add(rel);
     if (worktree === "000000") absent.add(rel);
     git.records++;
     const conflict = kind === "u" || /U/.test(xy) || xy === "AA" || xy === "DD";
@@ -208,10 +215,17 @@ export async function readGit(root, on, base) {
       if (forcedList?.code === 0) parseForced(forcedList.stdout, out);
       if (r?.code !== 0) { failed = true; return; }
       if (parseStatus(r.stdout, out) && base) { failed = true; return; }
+      // One kinds() call for both: the unsure paths and the ones that may be links to folders,
+      // each with its own cap, so neither crowds out the other.
       const unsure = [...out.unsure].slice(0, UNSURE);
-      if (!unsure.length) return;
-      const found = await kinds(root, unsure, on).catch(() => null);
-      if (found) for (const rel of unsure) if (!found.has(rel)) out.gone.add(rel);
+      const all = [...out.maybeDirs], untracked = (rel) => out.status.get(rel) === "?";
+      const maybe = [...all.filter((rel) => !untracked(rel)), ...all.filter(untracked)].slice(0, MAYBE_DIRS);
+      const look = [...new Set([...unsure, ...maybe])];
+      if (!look.length) return;
+      const found = await kinds(root, look, on).catch(() => null);
+      if (!found) return;
+      for (const rel of unsure) if (!found.has(rel)) out.gone.add(rel);
+      for (const rel of maybe) if (found.get(rel) === "d") out.links.add(rel);
     });
   const [, numstat] = await Promise.all([status, g(["diff", "HEAD", "--numstat", "-z", "--no-renames", "--", "."]).catch(() => null)]);
   // The repo found with `base` is gone or moved: find it again.
