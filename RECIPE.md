@@ -12,7 +12,9 @@ Symbols icons and their git state, all of them or only the changed ones,
 searchable across folders not yet opened. Built for light and dark themes
 alike.
 
-![Herdr-Roundup](preview.png)
+![Herdr-Roundup, the files panel showing All](preview.png)
+
+![Herdr-Roundup, the files panel showing Changed](preview-changed.png)
 
 ## What you see
 

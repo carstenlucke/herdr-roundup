@@ -1,12 +1,18 @@
 # Draws the Herdr-Roundup window as an SVG, with made-up spaces, agents and terminals:
 # no one's real spaces, paths or sessions. Sizes come from layouts/Herdr-Roundup.json and
-# the roundup- mods, colors from the graphite theme. Run from the repo:
-#   python3 scripts/preview.py . layouts/Herdr-Roundup.svg
+# the roundup- mods, colors from the graphite theme. A newer release is out (the brand row
+# says so), and the side panel shows roundup-files in its All or Changed view. Run from the repo:
+#   python3 scripts/preview.py . layouts/Herdr-Roundup.svg all
 #   rsvg-convert -z 2 layouts/Herdr-Roundup.svg -o preview.png
-import base64, os, re, sys
+#   python3 scripts/preview.py . /tmp/changed.svg changed
+#   rsvg-convert -z 2 /tmp/changed.svg -o preview-changed.png
+# Settings shows the SVG (All); RECIPE.md shows both PNGs.
+import base64, json, os, re, sys
 from html import escape
 
 REPO, OUT = sys.argv[1], sys.argv[2]
+VIEW = sys.argv[3] if len(sys.argv) > 3 else "all"
+INSTALLED, RELEASE = "0.7.0", "0.8.0"
 # Program icons come from the install, as Herdr draws them.
 HOME = os.environ.get("HERDR_APP_HOME", os.path.expanduser("~/.config/herdr-app"))
 W, H = 1440, 900
@@ -39,7 +45,20 @@ ICON = {
     "split-down": '<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 12h18"/>',
     "zoom": '<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>',
     "close": '<path d="M18 6 6 18M6 6l12 12"/>',
+    "chevron-down": '<path d="m6 9 6 6 6-6"/>',
+    "chevron-right": '<path d="m9 18 6-6-6-6"/>',
 }
+
+# Helvetica's widths (1/1000 em) for placing text that follows other text.
+_HW = dict(zip(" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~",
+    [278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278] + [556] * 10 +
+    [278, 278, 584, 584, 584, 556, 1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833,
+     722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556, 333,
+     556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556, 556, 556, 333, 500,
+     278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584]))
+
+def tw(s, size, weight=400):
+    return sum(_HW.get(ch, 556) for ch in s) * size / 1000 * (1.05 if weight >= 600 else 1.02 if weight >= 500 else 1)
 
 out = []
 def add(s): out.append(s)
@@ -103,6 +122,32 @@ def program(key, x, y, size, color):
     data = base64.b64encode(src.encode()).decode()
     add(f'<image x="{x}" y="{y}" width="{size}" height="{size}" href="data:image/svg+xml;base64,{data}"/>')
 
+# roundup-files' icons (Symbols), picked as its icon.js does; they carry their own colors.
+_src = open(f"{REPO}/mods/roundup-files/icons.js").read()
+ICONS = json.loads(_src[_src.index("export default ") + 15:].strip().rstrip(";"))
+
+def icon_for(rel, folder, open_):
+    parts = [p for p in rel.lower().split("/") if p]
+    name = parts[-1] if parts else ""
+    def find(table):
+        for i in range(len(parts) - 1):
+            if "/".join(parts[i:]) in table:
+                return table["/".join(parts[i:])]
+        return table.get(name)
+    if folder:
+        return (open_ and find(ICONS["folderNamesExpanded"])) or find(ICONS["folderNames"]) or \
+            (ICONS["folderExpanded"] if open_ else ICONS["folder"])
+    found = find(ICONS["fileNames"])
+    exts = [name] + [name[i + 1:] for i, ch in enumerate(name) if ch == "."]
+    for e in exts:
+        found = found or ICONS["fileExtensions"].get(e)
+    return found or ICONS["file"]
+
+def file_icon(id_, x, y, size, op=1.0):
+    data = base64.b64encode(open(f"{REPO}/mods/roundup-files/icons/{id_}.svg", "rb").read()).decode()
+    o = f' opacity="{op}"' if op < 1 else ""
+    add(f'<image x="{x}" y="{y}" width="{size}" height="{size}"{o} href="data:image/svg+xml;base64,{data}"/>')
+
 def avatar(x, y, letter, color):
     rect(x, y, 22, 22, color, rx=6, op=0x2e / 255)  # dark themes tint with alpha 2e
     text(x + 11, y + 15.2, letter, 11.5, color, 700, "middle")
@@ -121,9 +166,7 @@ def badge(right, cy, n, status):
 
 # ---- window ----
 add(f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}">')
-add(f'<defs><clipPath id="win"><rect width="{W}" height="{H}" rx="12"/></clipPath>'
-    f'<clipPath id="left"><rect x="278" y="80" width="571" height="782"/></clipPath>'
-    f'<clipPath id="right"><rect x="859" y="80" width="572" height="782"/></clipPath></defs>')
+add(f'<defs><clipPath id="win"><rect width="{W}" height="{H}" rx="12"/></clipPath></defs>')
 add('<g clip-path="url(#win)">')
 rect(0, 0, W, H, "canvas")
 
@@ -138,7 +181,10 @@ for i, c in enumerate(["#ff5f57", "#febc2e", "#28c840"]):
 logo = base64.b64encode(open(f"{REPO}/mods/roundup-workspace-chrome/logo.png", "rb").read()).decode()
 add(f'<clipPath id="logo"><rect x="76" y="13" width="20" height="20" rx="5"/></clipPath>')
 add(f'<image x="76" y="13" width="20" height="20" clip-path="url(#logo)" href="data:image/png;base64,{logo}"/>')
-text(104, 27.5, "Herdr Roundup", 13.5, "foreground", 600)
+# A newer release: a point on the logo's corner (10px, a 2px chrome ring) and "<version> available" under the name.
+add(f'<circle cx="94" cy="15" r="5" fill="{paint("chrome")[0]}"/><circle cx="94" cy="15" r="3" fill="{paint("accent")[0]}"/>')
+text(104, 21.5, "Herdr Roundup", 13, "foreground", 600)
+text(104, 35, f"{RELEASE} available", 11, "accent")
 icon("search", 207.5, 15.5, 15, "muted")
 icon("sidebar", 237.5, 15.5, 15, "muted")
 
@@ -226,7 +272,11 @@ def agent(y, prog, space, task, when, status, active=False):
     text(234, y + 17.5, when, 11, "dim", anchor="end")
     if status == "working":
         spinner(248, y + 13, "working")
-    elif status in ("blocked", "done"):
+    elif status == "blocked":
+        # Under the "Needs you" header Herdr marks the row with a ! in a 14px square, not a dot.
+        rect(241, y + 6, 14, 14, "blocked", rx=4, op=0x26 / 255)
+        text(248, y + 17, "!", 10.5, "blocked", 700, "middle")
+    elif status == "done":
         add(f'<circle cx="248" cy="{y + 13}" r="4" fill="{paint(status)[0]}"/>')
     else:
         add(f'<circle cx="248" cy="{y + 13}" r="3.5" fill="none" stroke="{paint("dim")[0]}" stroke-width="1.3"/>')
@@ -239,7 +289,7 @@ def group(label, n, color, items):
         agent(ay, *it)
         ay += 28
 
-group("Blocked", 1, "blocked", [("codex", "fix-login", "Run the migration?", "4m", "blocked")])
+group("Needs you", 1, "blocked", [("codex", "fix-login", "Run the migration?", "4m", "blocked")])
 group("Done", 1, "done", [("claude", "website", "Pricing page", "12m", "done")])
 group("Working", 2, "working", [("claude", "search-filters", "Facet filters", "1m", "working", True),
                                 ("pi", "research", "Benchmarks", "3m", "working")])
@@ -266,15 +316,24 @@ program("shell", WX + 171, 14, 14, "muted")
 text(WX + 189, 25.5, "zsh", 13, "muted")
 program("vite", WX + 227, 14, 14, "muted")
 text(WX + 245, 25.5, "dev server", 13, "muted")
-icon("plus", W - 190, 15, 12, "dim", sw=2)
-icon("files", W - 160, 15, 12, "muted", sw=2)
-text(W - 144, 25.5, "Files", 12, "muted")
-icon("compare", W - 98, 15, 12, "muted", sw=2)
-text(W - 82, 25.5, "Changes", 12, "muted")
+# The panel buttons (26px, 8px sides, 14px icon, 5px gap), 3px apart, 10px from the edge; Files is on.
+bx = W - 10
+for name, label, glyph, on in reversed([("files", "Files", "files", True), ("changes", "Changes", "compare", False)]):
+    bw = 8 + 14 + 5 + tw(label, 12) + 8
+    bx -= bw
+    if on:
+        rect(round(bx, 1), 8, round(bw, 1), 26, "selected", rx=6)
+    icon(glyph, round(bx + 8, 1), 14, 14, "foreground" if on else "muted", sw=2)
+    text(round(bx + 27, 1), 25.5, label, 12, "foreground" if on else "muted")
+    bx -= 3
+icon("plus", round(bx - 22, 1), 15, 12, "dim", sw=2)
 
-# The active tab's panes, 8px padding and gap, rounded 10px.
+# The active tab's pane and the side panel, 8px padding and gap, rounded 10px. The panel is 368px.
 PY, PH = 50, H - 28 - 8 - 50
-panes = [(WX + 8, 573, True), (WX + 8 + 573 + 8, W - 8 - (WX + 8 + 573 + 8), False)]
+PW = 368
+PX = W - 8 - PW
+panes = [(WX + 8, PX - 8 - (WX + 8), True)]
+add(f'<defs><clipPath id="left"><rect x="{WX + 9}" y="{PY + 31}" width="{panes[0][1] - 2}" height="{PH - 32}"/></clipPath></defs>')
 for px, pw, focus in panes:
     rect(px, PY, pw, PH, "background", rx=10)
     frame(px, PY, pw, PH, "accent" if focus else "border", rx=10)
@@ -282,13 +341,10 @@ for px, pw, focus in panes:
     for k, name in enumerate(["close", "zoom", "split-down", "split-right"]):
         icon(name, px + pw - 22 - 26 * k, PY + 9, 12, "dim", sw=2)
 
-lx, rx_ = panes[0][0], panes[1][0]
+lx, lw = panes[0][0], panes[0][1]
 program("claude", lx + 12, PY + 8, 14, "dim")
 text(lx + 32, PY + 19.5, "Claude Code", 12.5, "foreground", 600)
 text(lx + 112, PY + 19.5, "~/code/atlas-search-filters", 12, "dim")
-program("shell", rx_ + 12, PY + 8, 14, "dim")
-text(rx_ + 30, PY + 19.5, "zsh", 12.5, "foreground", 600)
-text(rx_ + 56, PY + 19.5, "~/code/atlas-search-filters", 12, "dim")
 
 def term(x, y, lines, clip):
     add(f'<g clip-path="url(#{clip})">')
@@ -335,30 +391,142 @@ term(lx + 14, PY + 30 + 12 + 14, [
     [("  ? for shortcuts", D, 400)],
 ], "left")
 # The prompt's box and cursor.
-add(f'<path d="M{lx + 14} {PY + 30 + 12 + 14 + 21 * 30 - 15}h545" stroke="{paint("raised")[0]}"/>')
-add(f'<path d="M{lx + 14} {PY + 30 + 12 + 14 + 21 * 32 - 15}h545" stroke="{paint("raised")[0]}"/>')
+add(f'<path d="M{lx + 14} {PY + 30 + 12 + 14 + 21 * 30 - 15}h{lw - 28}" stroke="{paint("raised")[0]}"/>')
+add(f'<path d="M{lx + 14} {PY + 30 + 12 + 14 + 21 * 32 - 15}h{lw - 28}" stroke="{paint("raised")[0]}"/>')
 rect(lx + 30, PY + 30 + 12 + 14 + 21 * 31 - 13, 8, 17, "terminal", op=0.85)
 
-term(rx_ + 14, PY + 30 + 12 + 14, [
-    [("~/code/atlas-search-filters ", "ansi6", 600), ("search-filters ", "ansi5", 400), ("↑3 ±5", D, 400)],
-    [("❯ ", "ansi2", 600), ("git log --oneline -4", F, 400)],
-    [("a41c2e9 ", "ansi3", 400), ("feat: facet counts in search results", F, 400)],
-    [("7be03d1 ", "ansi3", 400), ("test: facets for an empty index", F, 400)],
-    [("19f8a6c ", "ansi3", 400), ("refactor: one query builder for search", F, 400)],
-    [("c02d5aa ", "ansi3", 400), ("chore: search index v3", F, 400)],
-    [],
-    [("~/code/atlas-search-filters ", "ansi6", 600), ("search-filters ", "ansi5", 400), ("↑3 ±5", D, 400)],
-    [("❯ ", "ansi2", 600), ("git status --short", F, 400)],
-    [(" M ", "ansi1", 400), ("src/search/facets.ts", F, 400)],
-    [(" M ", "ansi1", 400), ("src/search/query.ts", F, 400)],
-    [(" M ", "ansi1", 400), ("src/ui/ResultsHeader.tsx", F, 400)],
-    [("?? ", "ansi1", 400), ("src/ui/FilterChip.tsx", F, 400)],
-    [("?? ", "ansi1", 400), ("test/facets.test.ts", F, 400)],
-    [],
-    [("~/code/atlas-search-filters ", "ansi6", 600), ("search-filters ", "ansi5", 400), ("↑3 ±5", D, 400)],
-    [("❯ ", "ansi2", 600)],
-], "right")
-rect(rx_ + 14 + 16, PY + 30 + 12 + 14 + 21 * 16 - 13, 8, 17, "terminal", op=0.5)
+# ---- side panel: roundup-files, 368px ----
+# The same folder as the pane: three files modified, two new, three commits ahead.
+def r(v):
+    return round(v, 1)
+
+rect(PX, PY, PW, PH, "background", rx=10)
+frame(PX, PY, PW, PH, "border", rx=10)
+X0, X1 = PX + 1, PX + PW - 1  # inside the 1px border
+
+# Header, 42px: "Files", the All | Changed switch (Changed with its count), the folder at the right.
+hcy = PY + 1 + 21
+text(X0 + 12, hcy + 4.5, "Files", 13, "foreground", 600)
+sx = X0 + 12 + tw("Files", 13, 600) + 8
+CHANGED = 5
+w_all = 8 + tw("All", 12) + 8
+w_ch = 8 + tw("Changed", 12) + 5 + tw(str(CHANGED), 11) + 8
+rect(r(sx), hcy - 12, r(2 + w_all + 2 + w_ch + 2), 24, "raised", rx=7)
+for view, label, bw, bx_ in [("all", "All", w_all, sx + 2), ("changed", "Changed", w_ch, sx + 2 + w_all + 2)]:
+    on = VIEW == view
+    if on:
+        rect(r(bx_), hcy - 10, r(bw), 20, "background", rx=5)
+    text(r(bx_ + 8), hcy + 4, label, 12, "foreground" if on else "dim")
+    if view == "changed":
+        text(r(bx_ + 8 + tw(label, 12) + 5), hcy + 4, str(CHANGED), 11, "muted" if on else "dim")
+folder = "atlas-search-filters"
+text(X1 - 12, hcy + 4, folder, 12, "dim", anchor="end")
+file_icon(ICONS["rootFolder"], r(X1 - 12 - tw(folder, 12) - 6 - 14), hcy - 7, 14)
+line(X0, PY + 1 + 41.5, X1, PY + 1 + 41.5, "border")
+
+# Branch row, 46px: the branch, ↑ahead, the lines changed; under it the bar of modified and new paths.
+by = PY + 1 + 42
+l1 = by + 14.5
+icon("branch", X0 + 12, l1 - 6, 12, "muted")
+text(X0 + 30, l1 + 4, "search-filters", 12, "foreground", 500)
+text(r(X0 + 30 + tw("search-filters", 12, 500) + 6), l1 + 4, "↑3", 12, "muted")
+text(X1 - 12, l1 + 4, "−14", 11.5, "ansi1", anchor="end")
+text(r(X1 - 12 - tw("−14", 11.5) - 6), l1 + 4, "+48", 11.5, "ansi2", anchor="end")
+bar = by + 6.5 + 16 + 7 + 3
+room = PW - 26 - 26 * 2 - 2 * 2
+xb = X0 + 12
+for n, col in [(3, "ansi3"), (2, "ansi2")]:
+    w_ = max(3, room * n / 5)
+    rect(r(xb), bar, r(w_), 4, col, rx=2)
+    xb += w_ + 2
+text(X1 - 12 - 26, bar + 4.5, "3", 10.5, "ansi3", anchor="end")
+text(X1 - 12, bar + 4.5, "2", 10.5, "ansi2", anchor="end")
+line(X0, by + 45.5, X1, by + 45.5, "border")
+
+# Search field, 28px; in All the source switch at its end, lit: search reads git's files.
+sy = by + 46 + 8
+rect(X0 + 8, sy, X1 - X0 - 16, 28, "canvas", rx=7)
+frame(X0 + 8, sy, X1 - X0 - 16, 28, "border", rx=7)
+icon("search", X0 + 16, sy + 7.5, 13, "dim")
+text(X0 + 16 + 13 + 6, sy + 18, "Search files", 12, "dim")
+if VIEW == "all":
+    rect(X1 - 16 - 20, sy + 4, 20, 20, "raised", rx=5)
+    icon("branch", X1 - 16 - 20 + 3.5, sy + 7.5, 13, "accent")
+
+# The tree: 26px rows, 14px a level. Names in their status color, files end with +N −N and their
+# letter, folders with a dot and count for new, modified and deleted below them, and their +N −N.
+STATUS = {"M": "ansi3", "?": "ansi2", "A": "ansi2", "D": "ansi1"}
+
+def frow(y, rel, depth, folder=False, open_=False, st=None, lines=(0, 0), counts=None, ignored=False, selected=False):
+    x0, x1 = X0 + 4, X1 - 4
+    if selected:
+        rect(x0, y, x1 - x0, 26, "selected", rx=6)
+    cy = y + 13
+    x = x0 + 8 + depth * 14
+    if folder:
+        icon("chevron-down" if open_ else "chevron-right", x, cy - 6, 12, "dim", sw=2)
+    x += 12 + 6
+    file_icon(icon_for(rel, folder, open_), x, cy - 8, 16, 0.5 if ignored else 1)
+    x += 16 + 6
+    color = "dim" if ignored else STATUS.get(st, "foreground")
+    text(x, cy + 4.5, rel.split("/")[-1], 13, color)
+    rr = x1 - 10
+    if st and not folder:
+        text(rr, cy + 4, st, 11, color, 600, anchor="end")
+    rr -= 12
+    parts = [(str(n), ["ansi2", "ansi3", "ansi1"][i], True) for i, n in enumerate(counts or []) if n]
+    parts += [(f"+{lines[0]}", "ansi2", False)] if lines[0] else []
+    parts += [(f"−{lines[1]}", "ansi1", False)] if lines[1] else []
+    for s, col, dot in reversed(parts):
+        rr -= 6
+        text(r(rr), cy + 4, s, 11, col, anchor="end")
+        rr -= tw(s, 11)
+        if dot:
+            add(f'<circle cx="{r(rr - 6)}" cy="{cy}" r="3" fill="{paint(col)[0]}"/>')
+            rr -= 3 + 6
+
+if VIEW == "all":
+    tree = [
+        (".github", 0, dict(folder=True)),
+        ("node_modules", 0, dict(folder=True, ignored=True)),
+        ("public", 0, dict(folder=True)),
+        ("src", 0, dict(folder=True, open_=True, counts=(1, 3, 0), lines=(48, 14))),
+        ("src/search", 1, dict(folder=True, open_=True, counts=(0, 2, 0), lines=(31, 9))),
+        ("src/search/facets.ts", 2, dict(st="M", lines=(24, 3), selected=True)),
+        ("src/search/index.ts", 2, {}),
+        ("src/search/query.ts", 2, dict(st="M", lines=(7, 6))),
+        ("src/search/ranking.ts", 2, {}),
+        ("src/ui", 1, dict(folder=True, open_=True, counts=(1, 1, 0), lines=(17, 5))),
+        ("src/ui/FilterChip.tsx", 2, dict(st="?")),
+        ("src/ui/ResultsHeader.tsx", 2, dict(st="M", lines=(17, 5))),
+        ("src/ui/SearchBox.tsx", 2, {}),
+        ("src/main.ts", 1, {}),
+        ("test", 0, dict(folder=True, open_=True, counts=(1, 0, 0))),
+        ("test/facets.test.ts", 1, dict(st="?")),
+        ("test/query.test.ts", 1, {}),
+        (".gitignore", 0, {}),
+        ("index.html", 0, {}),
+        ("package.json", 0, {}),
+        ("package-lock.json", 0, {}),
+        ("README.md", 0, {}),
+        ("tsconfig.json", 0, {}),
+        ("vite.config.ts", 0, {}),
+    ]
+else:
+    tree = [
+        ("src", 0, dict(folder=True, open_=True, counts=(1, 3, 0), lines=(48, 14))),
+        ("src/search", 1, dict(folder=True, open_=True, counts=(0, 2, 0), lines=(31, 9))),
+        ("src/search/facets.ts", 2, dict(st="M", lines=(24, 3), selected=True)),
+        ("src/search/query.ts", 2, dict(st="M", lines=(7, 6))),
+        ("src/ui", 1, dict(folder=True, open_=True, counts=(1, 1, 0), lines=(17, 5))),
+        ("src/ui/FilterChip.tsx", 2, dict(st="?")),
+        ("src/ui/ResultsHeader.tsx", 2, dict(st="M", lines=(17, 5))),
+        ("test", 0, dict(folder=True, open_=True, counts=(1, 0, 0))),
+        ("test/facets.test.ts", 1, dict(st="?")),
+    ]
+ly = sy + 28 + 4
+for i, (rel, depth, kw) in enumerate(tree):
+    frow(ly + 26 * i, rel, depth, **kw)
 
 # Status bar, 28px.
 SY = H - 28
