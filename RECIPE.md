@@ -389,9 +389,13 @@ and `on_item_secondary_click`) with a `Scrollbar` and a
 - `git --no-optional-locks -c core.fsmonitor=false -c
   diff.autoRefreshIndex=false rev-parse --show-toplevel --show-prefix`
 - the same options, `status --porcelain=v2 -z --branch --no-renames
-  --untracked-files=normal --ignored=traditional -- .`: each path's `XY`,
-  the branch (`# branch.head`, `# branch.upstream`, `# branch.ab`), at most
-  5,000 ignored paths
+  --untracked-files=normal --ignored=no -- .`: each path's `XY` and the
+  branch (`# branch.head`, `# branch.upstream`, `# branch.ab`)
+- alongside it, `ls-files -z --others --ignored --exclude-standard
+  --directory -- .`: at most 5,000 ignored paths, a folder that is ignored
+  or holds only ignored files as one path (what lies below it is left out),
+  and `check-ignore -q --no-index -- ./`: whether the shown folder is
+  ignored or lies in an ignored folder
 - alongside status, `diff HEAD --numstat -z --no-renames -- .` for the
   `+N −N` of files, summed up for folders (it fails before the first commit:
   no lines then)
@@ -499,9 +503,12 @@ global `tab.close` and `pane.close`.
   `.git` and ignored folders. A batch that touches only what git ignores (a
   build in `node_modules` or `target`), outside the open folders, doesn't
   refresh; the 10s timer still does. A refresh while one runs only marks
-  another one due, so they never pile up. Status reads ignored files with
-  `--ignored=matching`: `traditional` walks every ignored folder in full on
-  each refresh. Its git reads write nothing under `.git` (see above), or each
+  another one due, so they never pile up. Ignored paths come from
+  `ls-files --directory`, not from status: `--ignored=traditional` walks
+  every ignored folder in full on each refresh (about four times as long
+  with a 23,000-file `node_modules`), and `--ignored=matching` lists a new
+  folder that holds only ignored files file by file, so it isn't dimmed.
+  Its git reads write nothing under `.git` (see above), or each
   refresh would wake the watch again.
 - **A virtual list's rows can't hold handlers:** `on_click` inside the row
   renderer throws. Clicks come from `on_item_click(key)` and

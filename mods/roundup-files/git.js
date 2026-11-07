@@ -63,15 +63,29 @@ function parseHeader(rec, git) {
   else if (key === "branch.ab") { const m = /^\+(\d+) -(\d+)$/.exec(value); b.ahead = Number(m?.[1] ?? 0); b.behind = Number(m?.[2] ?? 0); b.gone = false; }
 }
 
-// git status --porcelain=v2 -z --branch --no-renames --ignored=matching. Entries:
+// git ls-files -z --others --ignored --exclude-standard --directory, run in root: the ignored
+// paths below it, relative to it. An ignored folder comes as a whole without being walked
+// ("node_modules/"), and so does a folder git doesn't track that holds only ignored files
+// ("logs/" for `logs/*`), as status --ignored=traditional lists them. Traditional walks every
+// ignored folder on every refresh, and "matching" lists the second kind file by file. ls-files
+// also lists each path below such a folder: those are left out here, so they don't count
+// against IGNORED. Read before parseStatus, which needs it for its unsure paths.
+export function parseIgnored(stdout, git) {
+  for (const rec of stdout.split("\0")) {
+    const rel = rec.replace(/\/$/, "");
+    if (!rel || within(git.ignored, dirOf(rel))) continue;
+    if (git.ignored.size >= IGNORED) break;
+    git.ignored.add(rel);
+  }
+}
+
+// git status --porcelain=v2 -z --branch --no-renames --ignored=no (parseIgnored reads the
+// ignored paths). Entries:
 //   1 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <path>          (changed; "." in XY: unchanged)
 //   u <XY> <sub> <m1> <m2> <m3> <mW> <h1> <h2> <h3> <path> (unmerged)
-//   ? <path> (untracked; a folder ends in /)   ! <path> (ignored)
+//   ? <path> (untracked; a folder ends in /)
 // <sub> starts with S for a submodule. <mW>, the working tree's mode, is 000000 where the path
 // isn't there for git: also after `git rm --cached`, but then git lists the file as new too.
-// "matching" lists an ignored folder without walking it ("traditional" walks all of it, every
-// node_modules and target, on every refresh), and the ignored files of a folder that isn't
-// ignored itself one by one ("traditional" lists that folder when all it holds is ignored).
 export function parseStatus(stdout, git) {
   const map = (p) => (p.startsWith(git.prefix) ? p.slice(git.prefix.length).replace(/\/$/, "") : null);
   const up = (rel, fn) => { for (const d of [...ancestors(rel), ""]) fn(d); };
@@ -80,20 +94,17 @@ export function parseStatus(stdout, git) {
     if (rec.startsWith("# ")) { parseHeader(rec, git); continue; }
     const kind = rec[0];
     let xy, raw, sub = "", worktree = "";
-    if (kind === "?" || kind === "!") { xy = kind + kind; raw = rec.slice(2); }
+    if (kind === "?") { xy = "??"; raw = rec.slice(2); }
     else if (kind === "1" || kind === "u") {
       const fields = rec.split(" "), n = kind === "1" ? 8 : 10;
       if (fields.length <= n) continue;
       xy = fields[1].replace(/\./g, " "); raw = fields.slice(n).join(" ");
       sub = fields[2]; worktree = fields[kind === "1" ? 5 : 6];
     } else continue;
-    // The shown folder ignored, or inside an ignored folder: git names only that folder.
-    if (xy === "!!" && raw.endsWith("/") && git.prefix.startsWith(raw)) { git.rootIgnored = true; continue; }
     const rel = map(raw);
     // The shown folder itself untracked ("? sub/" run from sub): everything below is new.
     if (rel === "" && xy === "??") { git.rootUntracked = true; git.records++; git.counts.set("", [1, 0, 0]); continue; }
     if (!rel) continue;
-    if (xy === "!!") { if (git.ignored.size < IGNORED) git.ignored.add(rel); continue; }
     if (xy === "??") present.add(rel);
     if (sub.startsWith("S")) git.links.add(rel);
     if (worktree === "000000") absent.add(rel);
@@ -134,11 +145,17 @@ export async function readGit(root, on) {
   if (top?.code !== 0) return git;
   const [dir, prefix = ""] = top.stdout.split("\n");
   git.repo = true; git.top = dir.trim(); git.prefix = prefix.trim();
-  // Status (and then the disk for its unsure paths, all batches at once) beside numstat;
-  // without a commit yet, diff HEAD fails and there are no lines to count.
-  const status = Promise.all([g(["status", "--porcelain=v2", "-z", "--branch", "--no-renames", "--untracked-files=normal", "--ignored=matching", "--", "."]).catch(() => null), ignoresRoot(root, on)])
-    .then(([r, ignored]) => {
+  // Status, the ignored paths and whether root is ignored (then the disk for status's unsure
+  // paths, all batches at once) beside numstat; without a commit yet, diff HEAD fails and there
+  // are no lines to count. In an ignored root every path is ignored: its list isn't needed.
+  const status = Promise.all([
+    g(["status", "--porcelain=v2", "-z", "--branch", "--no-renames", "--untracked-files=normal", "--ignored=no", "--", "."]).catch(() => null),
+    g(["ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--directory", "--", "."]).catch(() => null),
+    ignoresRoot(root, on),
+  ])
+    .then(([r, ignoredList, ignored]) => {
       if (ignored) git.rootIgnored = true;
+      else if (ignoredList?.code === 0) parseIgnored(ignoredList.stdout, git);
       if (r?.code !== 0) return;
       parseStatus(r.stdout, git);
       const unsure = [...git.unsure].slice(0, UNSURE), batches = [];
