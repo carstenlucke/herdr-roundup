@@ -6,6 +6,8 @@ A layout for [Herdr App](https://herdr.dev), started from Herdr's default layout
 
 The layout is called `Herdr-Roundup`: Herdr's Settings show a layout by its file name, and a name with a space can't be switched to. Its mods keep the short `roundup-` prefix.
 
+![Herdr-Roundup, the files panel showing All](preview.png)
+
 ## Contents
 
 | Path | What |
