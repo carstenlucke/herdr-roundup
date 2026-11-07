@@ -1,6 +1,6 @@
 // The update check (issue #9): this layout's latest GitHub release against the installed version.
 // It only looks and tells. Installing is an agent's job, in a tab of its own, and it asks before changing anything.
-import { shared, setShared, notify, knownAgents, run, appHome, exec, window } from "herdr";
+import { shared, setShared, notify, knownAgents, run, appHome, exec, window, spaces } from "herdr";
 
 export const RELEASES = "https://api.github.com/repos/carstenlucke/herdr-roundup/releases/latest";
 const PAGE = "https://github.com/carstenlucke/herdr-roundup/releases";
@@ -86,17 +86,23 @@ export async function check(installed, manual) {
 }
 
 // What the agent is told. It reads the release and checks for local changes before it touches anything.
-function brief(installed, release) {
-  return `Update the Herdr layout Herdr Roundup from v${installed} to v${release.version}. First read ~/.config/herdr-app/AGENTS.md. ` +
+// `home` is the app's folder (appHome(), with HERDR_APP_HOME not the usual one): every path names it, and
+// sync.sh and `herdr-app status` get the variable, which the agent's shell may not have.
+function brief(installed, release, home) {
+  const env = `HERDR_APP_HOME=${JSON.stringify(home)} `;
+  return `Update the Herdr layout Herdr Roundup from v${installed} to v${release.version}. Herdr's app folder is ${home}. ` +
+    `First read ${home}/AGENTS.md. ` +
     `Clone https://github.com/carstenlucke/herdr-roundup at tag v${release.version} into a new empty folder (mktemp -d). ` +
     `Read its release notes (${release.url}) and README. Before changing anything, tell me what changes, whether keys in the ` +
-    "`layout:Herdr-Roundup` section of ~/.config/herdr-app/keys.json that I changed myself would be replaced, and whether the " +
-    `installed \`roundup-*\` mods in ~/.config/herdr-app/mods differ from tag v${installed} (local edits that would be lost). ` +
-    "Only after I agree, run the clone's scripts/sync.sh, then confirm `herdr-app status` shows no errors.";
+    `\`layout:Herdr-Roundup\` section of ${home}/keys.json that I changed myself would be replaced, and whether the ` +
+    `installed \`roundup-*\` mods in ${home}/mods differ from tag v${installed} (local edits that would be lost). ` +
+    `Only after I agree, run \`${env}scripts/sync.sh\` in the clone, then confirm \`${env}herdr-app status\` shows no errors.`;
 }
 
-// A new tab in the shown space with the first installed agent (most picked first) and the brief.
-// In the app's own folder, so an agent that asks whether to trust a folder asks once.
+// A new tab with the first installed agent (most picked first) and the brief, in a space on this computer: a tab
+// stays on its space's machine, and the agents and the app's folder looked at here are this computer's. The shown
+// space if it is here, else the first one here, else a new one. In the app's own folder, so an agent that asks
+// whether to trust a folder asks once.
 export async function install(installed) {
   const release = get("latest");
   if (!release || !newer(release.version, installed)) {
@@ -109,8 +115,15 @@ export async function install(installed) {
       body: `Tell your agent: update Herdr Roundup to ${release.version} as its README says` });
     return;
   }
+  const home = appHome();
+  const here = spaces().filter(s => s.machine === null);
+  const space = here.find(s => s.active) ?? here[0];
+  const tab = { folder: home, argv: agent.run, task: brief(installed, release, home) };
   try {
-    run("tab.new", { name: "Update Herdr Roundup", folder: appHome(), argv: agent.run, task: brief(installed, release) });
+    if (space) {
+      if (!space.active) run("space.select", { id: space.id });
+      run("tab.new", { ...tab, name: "Update Herdr Roundup", space: space.id });
+    } else run("space.new", { ...tab, machine: "", tab: "Update Herdr Roundup" });
   } catch (e) {
     notify({ level: "warning", title: "Couldn't open the update tab", body: String(e?.message ?? e) });
   }

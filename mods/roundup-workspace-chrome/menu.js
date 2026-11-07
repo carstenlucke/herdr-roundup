@@ -15,9 +15,12 @@ export const MENU_OPEN = "roundup-workspace-chrome.menu";
 
 const icon = (name) => `mods/roundup-workspace-chrome/${name}.svg`;
 
-// `m.release`: the release offered when the menu opened (fixed, as the popup's height), else the shared one.
+// Whether the update rows show is fixed when the menu opens (`m.release`), as the popup's height is. Their version
+// is the shared one: a check that finds a newer release while the menu is open changes the labels with it, so a
+// label always names what install() and openNotes() act on.
 function rows(m) {
-  const release = "release" in m ? m.release : available(m.installed), auto = get("auto") !== false, details = shared(DETAILS) !== false;
+  const offered = "release" in m ? m.release : available(m.installed);
+  const release = offered && (available(m.installed) ?? offered), auto = get("auto") !== false, details = shared(DETAILS) !== false;
   return [
     { label: "Check for updates", icon: "refresh", act: () => run("roundup-workspace-chrome.check") },
     ...(release ? [

@@ -235,8 +235,11 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   - Under a divider: **Show details on hover** with a check when on (the
     default). Off, hovering shows nothing but the lit area.
   - ↑/↓ move, Enter runs, Esc closes; a choice closes the menu.
-- **Updating with an agent:** a new tab "Update Herdr Roundup" in the shown
-  space, in `~/.config/herdr-app` (one folder, so an agent that asks whether
+- **Updating with an agent:** a new tab "Update Herdr Roundup" in a space on
+  this computer (the shown one if it is here, else the first one here, else a
+  new one; a tab stays on its space's machine, and the agents and the app's
+  folder are looked up here), in the app's folder (`appHome()`: `~/.config/herdr-app`
+  or `$HERDR_APP_HOME`; one folder, so an agent that asks whether
   to trust a folder asks once), with the first installed agent (most picked
   first) and this brief as its first message: update from v0.7.0 to v0.8.0,
   read AGENTS.md, clone the repo at the tag into a new empty folder, read
@@ -244,7 +247,8 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   person changed in the `layout:Herdr-Roundup` section would be replaced and
   whether the installed `roundup-*` mods differ from the installed tag; only
   after a yes run the clone's `scripts/sync.sh` and check `herdr-app
-  status`. The mod never writes the install itself. Without an installed
+  status`. Every path in it is the app's folder, and both commands get
+  `HERDR_APP_HOME` set to it (the agent's shell may not have it). The mod never writes the install itself. Without an installed
   agent a `warning` toast says what to tell one's own agent.
 - **Files panel follows the focused pane's folder** (a mod pane: the first
   terminal of its tab), on its machine. Each folder keeps its open folders,
@@ -717,8 +721,11 @@ global `tab.close` and `pane.close`.
   "Couldn't check for updates" (before the first release: "No release on
   GitHub yet"); the automatic check stays quiet on that.
 - The toast and "Update to <version> with an agent…" open a tab "Update
-  Herdr Roundup" in `~/.config/herdr-app` with an installed agent and the
-  brief, versions filled in.
+  Herdr Roundup" in the app's folder with an installed agent and the
+  brief, versions and the app's folder filled in; with a space on another
+  machine shown, the tab opens in a space on this computer.
+- A check that finds a newer release while the menu is open changes the
+  version in its labels: the label names what the action installs.
 - Skip <version> keeps point, line and toast away until a newer version.
 - `lastCheck` changes at most once a day across reloads and restarts;
   with Only when I ask it doesn't change at all.
