@@ -136,9 +136,9 @@ export async function readGit(root, on) {
   git.repo = true; git.top = dir.trim(); git.prefix = prefix.trim();
   // Status (and then the disk for its unsure paths, all batches at once) beside numstat;
   // without a commit yet, diff HEAD fails and there are no lines to count.
-  const status = g(["status", "--porcelain=v2", "-z", "--branch", "--no-renames", "--untracked-files=normal", "--ignored=matching", "--", "."])
-    .catch(() => null)
-    .then((r) => {
+  const status = Promise.all([g(["status", "--porcelain=v2", "-z", "--branch", "--no-renames", "--untracked-files=normal", "--ignored=matching", "--", "."]).catch(() => null), ignoresRoot(root, on)])
+    .then(([r, ignored]) => {
+      if (ignored) git.rootIgnored = true;
       if (r?.code !== 0) return;
       parseStatus(r.stdout, git);
       const unsure = [...git.unsure].slice(0, UNSURE), batches = [];
@@ -153,23 +153,31 @@ export async function readGit(root, on) {
   return git;
 }
 
+// Whether git ignores root: root is ignored or lies in an ignored folder, also when that
+// folder holds a tracked file (status lists the file then and doesn't name the folder). The
+// one test for it: readGit's rootIgnored and listFiles both use it. Null when git can't tell.
+export async function ignoresRoot(root, on) {
+  const r = await exec("git", [...READ, "check-ignore", "-q", "--no-index", "--", "./"], { cwd: root, on }).catch(() => null);
+  return r?.code === 0 ? true : r?.code === 1 ? false : null;
+}
+
 // The files git counts as the project below root: tracked and new ones, without what
 // .gitignore leaves out, and the folders that hold them. At most `limit` files. Null outside
-// a repo, without git, or when root is ignored (git would list little or nothing there): the
+// a repo, without git, or when git ignores root (it would list little or nothing there): the
 // caller reads the disk then. `paths` (relative to root): only those, and what is below them.
-export async function listFiles(root, on, limit, paths) {
-  let r, ignored;
+// `ignored`: whether git ignores root, when the caller knows (readGit's rootIgnored).
+export async function listFiles(root, on, limit, paths, ignored) {
+  let r, skip;
   const specs = paths ? paths.map((p) => `:(literal)${p}`) : ["."];
   // -s: tracked entries come as "<mode> <object> <stage>\t<path>" (a submodule's mode is
-  // 160000, a folder), new ones as their bare path. check-ignore --no-index: root ignored,
-  // or inside an ignored folder, even when it holds a tracked file (status names it then).
+  // 160000, a folder), new ones as their bare path.
   try {
-    [r, ignored] = await Promise.all([
+    [r, skip] = await Promise.all([
       exec("git", [...READ, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "-s", "--abbrev=4", "--", ...specs], { cwd: root, on }),
-      paths ? null : exec("git", [...READ, "check-ignore", "-q", "--no-index", "--", "./"], { cwd: root, on }).catch(() => null),
+      paths || ignored !== undefined ? ignored : ignoresRoot(root, on),
     ]);
   } catch { return null; }
-  if (r.code !== 0 || ignored?.code === 0) return null;
+  if (r.code !== 0 || skip) return null;
   const dirs = new Set(), files = new Set();
   let full = true;
   const addDirs = (rel) => { for (const a of ancestors(rel)) { if (dirs.has(a)) break; dirs.add(a); } };

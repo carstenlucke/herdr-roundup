@@ -12,12 +12,15 @@ export const PER_FOLDER = 500;
 const PRUNE = [".git", "node_modules", "target", ".venv", "venv", "__pycache__", "dist", "build", ".next", ".nuxt", ".cache", ".gradle", ".idea", "vendor", "Pods", ".tox", ".mypy_cache", ".pytest_cache", "coverage"];
 const HOME_PRUNE = ["Library", "AppData", ".Trash"];
 export const INDEX_DIRS = 20000, INDEX_PATHS = 40000;
-const NO_WINDOWS_INDEX = "On Windows, search reads git's files only, inside a repo";
 // The paths kinds() puts on one PowerShell command line: room left for the script, the root
 // and the quoting Windows adds.
 const WINDOWS_LINE = 24000;
 
 const windows = (on) => !on && window()?.platform === "windows";
+// Whether buildIndex can read the disk on `on`. A machine without sh is found only on trying.
+export const diskSearch = (on) => !windows(on);
+// buildIndex can't read the disk there: search keeps to git's files.
+const noIndex = (message) => Object.assign(new Error(message), { noIndex: true });
 export const psQuote = (s) => "'" + s.replace(/['‘’‚‛]/g, "$&$&") + "'";
 // A machine without sh (Windows over `on`): exec says so when it tries.
 const noSh = (e, on) => on && String(e).includes("cannot start sh: program not found");
@@ -74,7 +77,7 @@ export async function listDir(path, on) {
 
 // Every path below root, "/"-separated and relative: { dirs: Set, all: [], full }. `full`
 // is false when a limit cut it short. Skips PRUNE (and HOME_PRUNE at home), 12 levels deep
-// (5 at home or /). Not on Windows yet (issue #10): there search reads git's files only.
+// (5 at home or /). Not on Windows yet (issue #10), nor without sh: an error with noIndex.
 export async function buildIndex(root, on) {
   const atHome = atHomeOf(root);
   const depth = indexDepth(root);
@@ -84,7 +87,7 @@ export async function buildIndex(root, on) {
   // folders are pruned: a file named `build` or `vendor` is indexed; `.git` never is (a
   // worktree's is a file). A link to a folder counts as a folder, as in the tree, and isn't
   // followed.
-  if (windows(on)) throw new Error(NO_WINDOWS_INDEX);
+  if (windows(on)) throw noIndex("Search can't read the disk on Windows yet");
   const names = prune.map((n) => `-name '${n}'`).join(" -o ");
   // A link to a folder: -type l and test -d (which follows it). One with a pruned name is in
   // neither list.
@@ -92,7 +95,7 @@ export async function buildIndex(root, on) {
   const script = `cd "$1" || exit 3; find . -maxdepth ${depth} ${skip} \\( -type d -o -type l ! \\( ${names} \\) -exec test -d {} \\; \\) -print 2>/dev/null | head -n ${INDEX_DIRS + 1}; echo //; find . -maxdepth ${depth} ${skip} ! -type d ! -name .git ! \\( ${link} \\) -print 2>/dev/null | head -n ${INDEX_PATHS + 1}`;
   let r;
   try { r = await exec("sh", ["-c", script, "roundup-files", root], { on }); }
-  catch (e) { if (noSh(e, on)) throw new Error(NO_WINDOWS_INDEX); throw e; }
+  catch (e) { if (noSh(e, on)) throw noIndex("Search can't read the disk without sh"); throw e; }
   if (r.code === 3) throw new Error("Cannot open this folder");
   let inDirs = true, nd = 0, nf = 0;
   for (const line of r.stdout.split("\n")) {

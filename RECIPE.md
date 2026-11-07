@@ -103,9 +103,10 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
     its right; when clean, no bar, only its space. Outside a repo: "Not a git
     repository"; before git answers: "Reading git…".
   - **Search field** (28px, `canvas`, `border`, `accent` while typing):
-    "Search files". In All, inside a repo and not in a folder git ignores,
-    a 20px switch at its right end, the branch glyph: lit (`accent` on
-    `raised`) while search reads git's files, `dim` while it reads the disk.
+    "Search files". In All, inside a repo, not in a folder git ignores and
+    where search can read the disk, a 20px switch at its right end, the
+    branch glyph: lit (`accent` on `raised`) while search reads git's
+    files, `dim` while it reads the disk.
   - **Tree** (26px rows, 14px indent per level): a chevron for folders, a
     16px Symbols icon (one set for light and dark themes; an open folder
     keeps its icon, as in VS Code), the name, then the git marks. Names take their status
@@ -208,16 +209,18 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
     and new files, without what `.gitignore` leaves out, at most 40,000
     files, at any depth. A file deleted but not yet committed shows struck
     through. "No matches · ignored files left out" says where else to look.
-    Outside a repo, in a folder git ignores (or inside one), or where git
-    can't run, search reads the disk instead.
+    Outside a repo, in a folder git ignores (or inside one, also when it
+    holds a tracked file), or where git can't run, search reads the disk
+    instead.
   - **The disk:** everything but the folders `.git`, `node_modules`, `target`,
     `.venv`, `venv`, `__pycache__`, `dist`, `build`, `.next`, `.nuxt`,
     `.cache`, `.gradle`, `.idea`, `vendor`, `Pods`, `.tox`, `.mypy_cache`,
     `.pytest_cache` and `coverage` (a file with such a name is searched),
     ignored files included (`.env`, local settings), 12 levels deep (5 at
     home or `/`), at most 20,000 folders and 40,000 other paths. Not on
-    Windows yet: there search reads git's files only and says so outside
-    a repo.
+    Windows yet, nor on a machine without `sh`: there search reads git's
+    files whatever the switch said, and where git has none it says why
+    ("Not a git repository · Search can't read the disk on Windows yet").
 
   A link to a folder is a folder there, as in the tree, and search doesn't
   follow it; from git's files only a tracked one is, a new one stays a file.

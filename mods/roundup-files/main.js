@@ -11,7 +11,7 @@ import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, InputState, Input, Scrollbar, Popup, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { spaces, panes, focused, readTextFile, watchFolder, theme, settings, window, props, notify, openOverlay, closeOverlay, shared, setShared, nextCommand } from "herdr";
 import { iconFor, rootIcon } from "./icon.js";
-import { listDir, buildIndex, kinds, indexDepth, compare, prunedName, prunedAbove, PER_FOLDER, INDEX_PATHS } from "./disk.js";
+import { listDir, buildIndex, diskSearch, kinds, indexDepth, compare, prunedName, prunedAbove, PER_FOLDER, INDEX_PATHS } from "./disk.js";
 import { readGit, listFiles, emptyGit, ancestors, dirOf, within, NEW, MODIFIED, DELETED } from "./git.js";
 import { openExternal, revealExternal, copy, sendToAgent, relTo } from "./actions.js";
 
@@ -150,7 +150,8 @@ export default class Files extends View {
   reset(root, on) {
     if (this.ctx?.root) this.saved.set(this.ctx.key, { folders: this.folders, shut: this.shut, cursor: this.cursor, file: this.file });
     const key = JSON.stringify([root, on]), s = this.saved.get(key);
-    this.ctx = { key, root, on }; this.root = root; this.on = on;
+    // noDisk: buildIndex can't read the disk here (Windows; found out later: no sh).
+    this.ctx = { key, root, on, noDisk: !diskSearch(on) }; this.root = root; this.on = on;
     this.kmenu = null;
     this.entries = new Map(); this.folders = new Set(s?.folders); this.shut = new Set(s?.shut); this.pending = new Set();
     this.cursor = s?.cursor ?? ""; this.git = emptyGit(); this.index = null; this.indexing = null; this.hits = null; this.searchError = null;
@@ -431,23 +432,43 @@ export default class Files extends View {
     });
   }
 
+  // What search in All reads here: the choice, but git's files where the disk can't be read.
+  searchSource() { return this.ctx.noDisk ? "git" : this.source; }
+
   // One index build per source at a time; searches typed meanwhile wait for it. `from`: what
-  // it was read from ("disk" also when git was asked for outside a repo).
+  // it was read from ("disk" also when git was asked for outside a repo or in a folder it
+  // ignores). Where the disk can't be read, git's files; where git has none either, an error
+  // that says why.
   ensureIndex(ctx) {
-    const i = this.index, source = this.source;
+    const i = this.index, source = this.searchSource();
     if (i && i.source === source && !this.outdated(i)) return Promise.resolve(i);
     if (this.indexing?.source !== source) {
       const job = { source };
       job.promise = (async () => {
-        const fromGit = source === "git" ? await listFiles(ctx.root, ctx.on, INDEX_PATHS) : null;
-        const built = fromGit ?? await buildIndex(ctx.root, ctx.on);
-        const index = { dirs: built.dirs, all: built.all, full: built.full, source, from: fromGit ? "git" : "disk", known: new Set(built.all), added: new Set(), pending: new Set(), checking: false, at: Date.now(), stale: false, dirty: Boolean(job.changed) };
-        if (this.current(ctx) && this.source === source) this.index = index;
+        const g = this.git, ignored = g.known && g.repo ? g.rootIgnored : undefined;
+        let fromGit = source === "git" ? await listFiles(ctx.root, ctx.on, INDEX_PATHS, undefined, ignored) : null, built = fromGit;
+        if (!built) {
+          try { built = await buildIndex(ctx.root, ctx.on); }
+          catch (e) {
+            if (!e?.noIndex) throw e;
+            ctx.noDisk = true;
+            if (source === "disk") built = fromGit = await listFiles(ctx.root, ctx.on, INDEX_PATHS, undefined, ignored);
+            if (!built) throw new Error(this.current(ctx) && this.gitReason() ? `${this.gitReason()} · ${e.message}` : e.message);
+          }
+        }
+        const index = { dirs: built.dirs, all: built.all, full: built.full, source: ctx.noDisk ? "git" : source, from: fromGit ? "git" : "disk", known: new Set(built.all), added: new Set(), pending: new Set(), checking: false, at: Date.now(), stale: false, dirty: Boolean(job.changed) };
+        if (this.current(ctx) && this.searchSource() === index.source) this.index = index;
         return index;
       })().finally(() => { if (this.current(ctx) && this.indexing === job) this.indexing = null; });
       this.indexing = job;
     }
     return this.indexing.promise;
+  }
+
+  // Why git's files can't serve a search here, once git has answered.
+  gitReason() {
+    const g = this.git;
+    return !g.known ? "" : g.rootIgnored ? "Git ignores this folder" : g.repo ? "Git can't list this folder" : "Not a git repository";
   }
 
   clearSearch(cx) {
@@ -836,8 +857,8 @@ export default class Files extends View {
         .child(div().min_w(0).truncate().child(this.root?.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || this.root || "")));
   }
 
-  // In the search field, inside a repo and not in an ignored folder: whether All searches
-  // git's files (lit) or the disk.
+  // In the search field, inside a repo, not in a folder git ignores and where the disk can be
+  // read: whether All searches git's files (lit) or the disk.
   sourceToggle(t) {
     const git = this.source === "git";
     return div().id("rf-source").size(20).flex_none().flex().items_center().justify_center().rounded(5).cursor_pointer()
@@ -904,7 +925,7 @@ export default class Files extends View {
         .child(Input.new(this.input).flex_1().h_full().text_size(12).text_color(t.foreground))
         .when(Boolean(this.query), (el) => el.child(div().id("rf-clear").flex_none().text_size(13).text_color(t.dim).cursor_pointer()
           .hover((s) => s.text_color(t.foreground)).on_click((_e, cx) => this.clearSearch(cx)).child("×")))
-        .when(this.view === "all" && this.git.repo && !this.git.rootIgnored, (el) => el.child(this.sourceToggle(t)))
+        .when(this.view === "all" && this.git.repo && !this.git.rootIgnored && !this.ctx.noDisk, (el) => el.child(this.sourceToggle(t)))
         // Before the list was measured, the keyboard menu hangs below the search field.
         .when(Boolean(this.kmenu) && !pin, (el) => el.relative().child(this.keyMenuPin(t, { top: 28, left: 8 }))))
       .child(div().id("rf-list").flex_1().min_h(0).relative().px(4).pb(4)
