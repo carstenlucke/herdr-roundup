@@ -268,9 +268,10 @@ const WINDOWS = {
 /** The programs for `system`, a value of systemOf. */
 export const programs = (system) => system === "windows" ? WINDOWS : system === "macos" ? MACOS : POSIX;
 
-/** What a PDF command's result { code, stdout, stderr } rendered: { count, pages }, its paths checked. */
+/** What a PDF command's result { code, stdout, stderr } rendered: { count, pages }, its paths checked:
+ *  each a picture right in the cache folder (<key>-<revision>-p<n>.png), so no `..` leads out of it. */
 export function pdfPages(system, result, key) {
   const out = programs(system).pages(result, key);
-  if (!Array.isArray(out.pages) || out.pages.some((p) => !p.path.startsWith("data/roundup-preview/"))) throw new Error("The PDF renderer returned something unexpected");
+  if (!Array.isArray(out.pages) || out.pages.some((p) => !/^data\/roundup-preview\/[^/\\]+\.png$/.test(p?.path) || p.path.includes(".."))) throw new Error("The PDF renderer returned something unexpected");
   return out;
 }
