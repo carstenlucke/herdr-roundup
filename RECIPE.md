@@ -1,17 +1,13 @@
 # Herdr-Roundup
 
-Herdr's default window, made quieter and more informative about where each
-space stands. On the left a sidebar with the Herdr Roundup name and its
-three-sheep logo, the spaces list and the agents list. Each space shows a
-softly tinted initial, its name and, under it, its repo, branch,
-ahead/behind and uncommitted changes, plus a badge with the number of agents
-running in it. A repo and its worktrees sit together on one card. On the
-right, the terminals of the active tab in rounded panes, with tabs above and
-a status bar below. A side panel shows the focused folder's files with
-Symbols icons and their git state, all of them or only the changed ones,
-searchable across folders not yet opened. A file opens in a preview, in a
-floating window or a tab of its own: Markdown rendered, code, CSV and JSON,
-pictures and PDFs. Built for light and dark themes alike.
+Herdr's default window, quieter and more telling. Panes carry names you
+give them. Files open in a floating preview or a tab of their own:
+Markdown rendered, code, CSV, JSON, pictures and PDFs. A files panel shows
+Symbols icons and git state, filters to the changed files and searches
+folders not yet opened. Every space shows its repo, branch, ahead/behind,
+changes and how many agents run in it; a repo's worktrees share a card.
+Closing a tab or pane asks first while an agent works, and a new release
+installs through an agent. Light and dark themes alike.
 
 ![Herdr-Roundup: two agents side by side, a README in the floating preview, the files panel](preview.png)
 
@@ -31,58 +27,55 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   line) the installed version (`0.7.0`) in `dim`. When a newer release is
   out and not skipped, the second line reads `0.8.0 available` in `accent`
   and a 10px `accent` point with a 2px `chrome` ring sits on the logo's top
-  right corner (3px out). During a check the line reads `0.7.0 · checking…`.
-  Before the layout's file is read there is no second line. Logo and name
+  right corner (3px out). During a check it reads `0.7.0 · checking…`;
+  before the layout's file is read there is no second line. Logo and name
   sit on a 36px area, rounded 8px, that turns `hover` under the pointer and
   shows a hand. On the right, two 26px icon buttons in `muted`: search
-  (opens the space picker) and sidebar toggle. On the rail the logo, name and
-  search go away; on the macOS rail the toggle goes too.
+  (opens the space picker) and sidebar toggle. The rail drops logo, name and
+  search; the macOS rail the toggle too.
 - **Details card** (on hover over logo or name, after 500ms): 236px wide,
-  12px padding, `popover` background, 1px `border`, radius 10, a large shadow,
-  4px under the row. "Herdr Roundup" in semibold 13px, then four lines at
-  12px with the label in `dim` on the left and the value in `foreground` on
-  the right: Installed `0.7.0`, Based on `Herdr 0.1.13`, Latest `0.8.0` (in
-  `accent` when it is newer; `0.8.0 · skipped` when skipped; `–` before the
-  first answer), Checked `today 09:12` / `yesterday 18:40` / `Nov 3 09:12`
-  (`–` before the first answer). Under them, only when it has something to
-  say, a status line at 11.5px with a 12px icon: a turning spinner and
-  "Checking for updates…" in `muted`, or a circle with `!` and "Couldn't
-  check: <reason>" in `working` (it wraps). Last, under a 1px `border` line,
-  "Click the Roundup title for update options" at 11.5px in `dim`, in `accent` when an update
-  is available.
+  12px padding, `popover`, 1px `border`, radius 10, a large shadow, 4px
+  under the row. "Herdr Roundup" in semibold 13px, then four lines at 12px,
+  label in `dim` left, value in `foreground` right: Installed `0.7.0`, Based
+  on `Herdr 0.1.13`, Latest `0.8.0` (`accent` when newer, `0.8.0 · skipped`
+  when skipped), Checked `today 09:12` / `yesterday 18:40` / `Nov 3 09:12`;
+  Latest and Checked show `–` before the first answer. Then, only when it
+  has something to say, a status line at 11.5px with a 12px icon: a turning
+  spinner and "Checking for updates…" in `muted`, or a circle with `!` and
+  "Couldn't check: <reason>" in `working` (it wraps). Last, under a 1px
+  `border` line, "Click the Roundup title for update options" at 11.5px in
+  `dim`, in `accent` when an update is available.
 - **Spaces** (half of the remaining height, at least 90px):
-  - Header row 31px: "Spaces" in `dim` at 11.5px and a `+` button that makes
-    a new space.
-  - One row per space, 8px rounded, `selected` background when active,
-    `hover` otherwise. Left: a 22px square avatar, rounded 6px, with the
-    space name's first letter in bold 11.5px. Letter and background are the
-    space's color (a theme name `ansi1`..`ansi6`, or a hex), the background at
-    14% opacity in light themes (`24` alpha) and 18% in dark ones (`2e`). Then
-    the name in medium `foreground`, truncated.
-  - The **git line** under the name, in `dim` at 11.5px: a branch icon, then
-    `repo · branch`, then `↑2` `↓1` in `muted`, then `±3` (hover: "3
-    uncommitted changes"). The repo is left out when the space has the repo's
-    name, and in a worktree row. The branch is left out when the space has the
-    branch's name, and when it is `main` or `master`. A row with a git line is
-    44px high, one without it 32px. A space that isn't in a repo, or is clean
-    on main under its repo's name, has no git line.
+  - Header row 31px: "Spaces" in `dim` at 11.5px and a `+` (new space).
+  - One row per space, 8px rounded, `selected` when active, `hover`
+    otherwise. Left a 22px square avatar, rounded 6px, with the name's first letter
+    in bold 11.5px. Letter and background take the space's color (a theme
+    name `ansi1`..`ansi6`, or a hex), the background at 14% opacity in light
+    themes (`24` alpha), 18% in dark ones (`2e`). Then the name in medium
+    `foreground`, truncated.
+  - The **git line** under the name, `dim` 11.5px: a branch icon,
+    `repo · branch`, `↑2` `↓1` in `muted`, `±3` (hover: "3 uncommitted
+    changes"). The repo is left out when the space has its name, and in a
+    worktree row; the branch when the space has its name, or it is `main` or
+    `master`. A row with a git line is 44px high, one without 32px. A space
+    outside a repo, or clean on main under its repo's name, has none.
   - An **agent badge** on the right when agents run in the space: an 18px
-    pill, rounded 9px, with a small robot icon and the count in semibold 11px.
+    pill, rounded 9px, a small robot icon and the count in semibold 11px.
   - **Worktrees** of one repo share a card: 1px `border`, rounded 10px, 3px
-    padding, 6px apart from the rows around it. Each worktree row is indented
-    12px and has a branch icon in `dim` where the avatar would be. A space in
-    the repo's main checkout heads the card. Without one (Herdr makes each
-    worktree its own space, so this is the usual case), a 24px header heads
-    it: a folder icon in `dim` and the repo's name in medium `muted` 11.5px.
-    A single worktree whose main checkout has no space is an ordinary row
-    with an avatar and no card.
-  - Once a remote machine is known, spaces are grouped under a header per
-    machine (26px, `dim` 11px): a monitor or server icon, "This computer" or
-    the machine's name, its state when not connected, `+` (a new space
-    there), a green (`ansi2`) or gray dot, and a fold chevron. An empty
-    machine shows "New space there"; one still loading, "Loading…".
-  - On the rail a space is a 26px row with its number and a glyph: `●` in
-    the status color when an agent there is blocked or done, else `·`.
+    padding, 6px from the rows around it. Worktree rows are indented 12px,
+    with a branch icon in `dim` in place of the avatar. A space in the
+    repo's main checkout heads the card; without one (the usual case, as
+    Herdr makes each worktree its own space) a 24px header does: a folder
+    icon in `dim` and the repo's name in medium `muted` 11.5px. A single
+    worktree whose main checkout has no space is an ordinary row with an avatar, no card.
+  - Once a remote machine is known, spaces group under a header per machine
+    (26px, `dim` 11px): a monitor or server icon, "This computer" or the
+    machine's name, its state when not connected, `+` (a new space there),
+    a green (`ansi2`) or gray dot, a fold chevron. An empty machine shows
+    "New space there"; one still loading, "Loading…".
+  - On the rail a space is a 26px row with its number and `●` in the status
+    color when an agent there is blocked or done, else `·`: it speaks up
+    only when it needs you.
 - **Agents** (Herdr's shipped `agents` list, the other half, at least 90px).
 - **Footer** (69px, `border` line on top): "Settings" (with a small `accent`
   dot when an app update is ready) and "Add machine" in `dim`, each with a
@@ -92,55 +85,55 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
 
 - **Tabs** (42px, drags the window): Herdr's tab bar, as `roundup-tabs`.
   Right-clicking a tab shows Rename, New tab and Close, then "Ask before
-  closing a tab" with three choices, a check in `accent` on the chosen one:
-  Never, While an agent works, Always.
-- **Body** with 8px padding and an 8px gap: the active tab's panes, each one
-  rounded 10px on `background` with a 1px `border` (1px `accent` when
-  focused), 8px apart, each with a `roundup-pane`
-  header (30px, on top, always shown): the program's icon, the pane's name
-  (`foreground`, medium), its id in a small mono chip (10.5px, `dim` on
-  `hover`: the terminal's address such as `t5j`, or a mod pane's id shortened
-  to `p` and 6 hex digits), the folder in `dim`, the agent's status, and on
-  hover the buttons rename, split right, split down, zoom and close. Terminal padding 14 × 12px.
-  Right-clicking a terminal shows Herdr's pane menu (Split right, Split
-  down, Zoom, where right-clicks go, Close pane), then "Ask before closing
-  a pane" with the same three choices, for panes only.
+  closing a tab" with Never, While an agent works and Always, an `accent`
+  check on the chosen one.
+- **Body** (8px padding, 8px gap): the active tab's panes, 8px apart, each
+  rounded 10px on `background` with a 1px `border` (`accent` when focused)
+  and a `roundup-pane` header (30px, on top, always shown): the program's
+  icon, the pane's name (`foreground`, medium), its id in a small mono chip
+  (10.5px, `dim` on `hover`: the terminal's address such as `t5j`, or a mod
+  pane's id shortened to `p` and 6 hex digits), the folder in `dim`, the
+  agent's status, and on hover rename, split right, split down, zoom and
+  close. Terminal padding 14 × 12px. Right-clicking a terminal shows Herdr's
+  pane menu (Split right, Split down, Zoom, where right-clicks go, Close
+  pane), then "Ask before closing a pane" with the same three choices, for
+  panes only.
 - **Side panel** on the right, hidden at first (368px, 280–900px): a stack
   of `roundup-files` and Herdr's `changes`, picked with the Files and
   Changes buttons at the right of the tab bar. `roundup-files` is a card
   (radius 10, 1px `border`, `background`), top to bottom:
   - **Header** (42px): "Files" in semibold, a switch **All | Changed** (24px,
     `raised` behind, the chosen one on `background`; Changed carries the
-    number of entries `git status` lists), and at the right the shown
-    folder's name in `dim` with Symbols' root-folder icon. While a file
-    previews: a back arrow, the file's icon and its path.
+    number of entries `git status` lists), and at the right the folder's
+    name in `dim` with Symbols' root-folder icon. While a file previews: a
+    back arrow, the file's icon and its path.
   - **Branch row** (46px): a branch glyph, the branch in medium weight,
     `↑ahead` `↓behind` in `muted`, "upstream gone" when its upstream was
     deleted, "clean" or the lines changed against `HEAD` (`+N` in `ansi2`,
     `−N` in `ansi1`); under it a 4px bar of modified (`ansi3`), new (`ansi2`)
-    and deleted (`ansi1`) paths, sized by their counts, with the counts at
-    its right; when clean, no bar, only its space. Outside a repo: "Not a git
+    and deleted (`ansi1`) paths, sized by their counts, the counts at its
+    right; when clean, only the bar's space. Outside a repo: "Not a git
     repository"; when status fails (too large or slow, a broken index): "Git
     can't read this folder", in Changed too; before git answers: "Reading
     git…".
   - **Search field** (28px, `canvas`, `border`, `accent` while typing):
     "Search files". In All, inside a repo, not in a folder git ignores and
     where search can read the disk, a 20px switch at its right end, the
-    branch glyph: lit (`accent` on `raised`) while search reads git's
-    files, `dim` while it reads the disk.
+    branch glyph: lit (`accent` on `raised`) while search reads git's files,
+    `dim` while it reads the disk.
   - **Tree** (26px rows, 14px indent per level): a chevron for folders, a
-    16px Symbols icon (one set for light and dark themes; an open folder
-    keeps its icon, as in VS Code), the name, then the git marks. Names take their status
+    16px Symbols icon (one set for light and dark; an open folder keeps its
+    icon, as in VS Code), the name, the git marks. Names take their status
     color: new or added `ansi2`, modified `ansi3`, deleted or conflicted
-    `ansi1`, renamed `ansi4`; ignored paths are `dim` with a half-faded icon.
-    Files end with `+N −N` and their letter (`?`, `A`, `M`, `D`, `U`, `R`,
-    `T`) in a 12px column; folders show a colored dot and count for each of
-    new, modified and deleted below them, and their `+N −N` from 360px of
-    width. The selected row is on `selected`, a hovered one on `hover`.
+    `ansi1`, renamed `ansi4`; ignored paths are `dim` with a half-faded
+    icon. Files end with `+N −N` and their letter (`?`, `A`, `M`, `D`, `U`,
+    `R`, `T`) in a 12px column; folders show a colored dot and count for
+    each of new, modified and deleted below them, and from 360px of width
+    their `+N −N`. Selected row on `selected`, hovered on `hover`.
   - **Footer** (only when needed, 11px `dim`): "Folders show their first 500
     entries", "First 200 matches", "Changed shows the first 2,000 paths",
-    "Search covers the first 40,000 files"
-    (or "the first 20,000 folders", whichever limit cut the index short).
+    "Search covers the first 40,000 files" (or "the first 20,000 folders",
+    whichever limit cut the index short).
 - **Preview tab** (`roundup-preview`, opened from a file in `roundup-files`):
   a tab named after the file with one pane on `background`, 13px text. A
   42px header with a 1px `border` line under it: ← (only after following a
@@ -159,223 +152,213 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
 ## How it behaves
 
 - **Agent badge:** gray (`dim` on `selected`) while every agent in the space
-  is idle. Otherwise it takes the color of the most urgent one, ranked
-  blocked > done > working: text in `blocked`, `done` or `working`, the
-  background the same color at about 15% opacity. The tooltip counts them,
-  most urgent first: "3 agents: 1 blocked, 2 idle".
-- **On the rail** a space speaks up only when it needs you: `●` for blocked
-  or done, `·` otherwise.
-- **Click** a space to switch to it. **Right-click** opens Herdr's space
-  menu. **Drag** a space onto another one of the same machine to move it
-  there; the dragged row fades to half and a 2px `accent` bar marks where it
-  lands. Dragging a card's top row, or the repo name heading a card without
-  a main-checkout space, moves the whole card (the card fades instead); any
-  other worktree moves within its card and snaps back if dragged out.
-- **New spaces** get the color used least among the six (`ansi6`, `ansi3`,
-  `ansi4`, `ansi5`, `ansi2`, `ansi1`). The home space `~` gets none and shows
-  `ansi6`. A new space waits up to 1.5s for its git, so a worktree appears
-  on its repo's card instead of jumping there.
-- **At start** the list waits up to 1.5s for the git of every space already
-  there ("Loading…" meanwhile), then shows them all at once, already on
-  their cards. It reorders nothing before that.
+  is idle, else in the color of the most urgent one (blocked > done >
+  working): text in `blocked`, `done` or `working`, background the same at
+  about 15% opacity. Tooltip, most urgent first: "3 agents: 1 blocked, 2
+  idle".
+- **Click** a space to switch to it, **right-click** for Herdr's space menu.
+  **Drag** a space onto another of the same machine to move it there: the
+  row fades to half, a 2px `accent` bar marks where it lands. Dragging a
+  card's top row, or the repo name heading a card without a main-checkout
+  space, moves the whole card (the card fades); any other worktree moves
+  within its card and snaps back if dragged out.
+- **New spaces** get the color used least among `ansi6`, `ansi3`, `ansi4`,
+  `ansi5`, `ansi2`, `ansi1`; the home space `~` gets none and shows `ansi6`.
+  A new space waits up to 1.5s for its git, so a worktree appears on its
+  repo's card instead of jumping there. **At start** the list waits up to
+  1.5s for every space's git ("Loading…"), then shows all of them on their
+  cards at once, reordering nothing before.
 - **The git line refreshes** when something under a local repo's `.git`
-  changes (a commit, a checkout, a fetch), when a command or an agent's turn
-  in that space ends, when a space's terminal moves to another folder, when a
-  remote machine comes back, when the window comes back to the front, and
-  while the window is in front every 10s for the active space, every 60s for
-  the others. A commit refreshes every space of the same repo. An agent's
-  turn counts by its `turn` number, so a turn too short to be seen working
-  still refreshes; a shell reports no command end, so a quick command there
-  (`echo x >> file`) shows within 10s.
-- **Machine headers:** click to fold or unfold. A machine that was rebuilt or
-  replaced shows "rebuilt · Connect"; Connect removes it and adds it again
-  under the same name.
-- **Sidebar toggle:** narrows the sidebar to the rail and widens it back to
-  the width it had. Below 160px the sidebar counts as the rail, however it
-  got there. On the macOS rail the agents list's `»` unfolds it.
+  changes (commit, checkout, fetch), when a command or an agent's turn in
+  that space ends, when a space's terminal changes folder, when a remote
+  machine comes back, when the window comes to the front, and while it is
+  in front every 10s for the active space, 60s for the others. A commit
+  refreshes every space of its repo. A turn counts by its `turn` number, so
+  one too short to be seen working still refreshes; a shell reports no
+  command end, so a quick command there (`echo x >> file`) shows within 10s.
+- **Machine headers:** click to fold or unfold; folds stay after a restart.
+  A rebuilt or replaced machine shows "rebuilt · Connect"; Connect removes
+  it and adds it again under the same name.
+- **Sidebar toggle:** narrows to the rail and widens back to the width it
+  had. Below 160px the sidebar counts as the rail, however it got there. On
+  the macOS rail the agents list's `»` unfolds it.
 - **Pane header:** double-click the id chip to copy the id (a mod pane's
-  whole id) to the clipboard; the chip shows "copied" in `accent` for 1.2s.
-  Double-click the name, or click the pencil, to rename the pane in a dialog
-  (Enter saves, Esc cancels). An empty name goes back to the program's name.
-  A click anywhere else on the header focuses the pane. Tooltips: the id
-  chip shows the whole id, the name shows the given and the program's name.
-- **Closing a tab** (its ×, its menu's Close, `cmd-w`) **or a pane** (its
-  header's ×, Close pane in the terminal's menu, `cmd-shift-w`) asks first
-  as that kind's choice says: tabs as the tab menu's, panes as the
-  terminal menu's. A tab's only pane closes the tab, so it follows the
-  choice for tabs: a pane's × never ends a tab more quietly than `cmd-w`
-  would. Never: it closes
-  at once, and the last tab takes its space with it unasked. While an agent
-  works (the default): it asks while an agent in the tab (or pane, with its
-  sub-agents) is working or blocked ("Claude Code is still running in it.
-  Closing ends it."), otherwise Herdr's own close runs, which asks "Close
-  space?" before a space's last tab goes. Always: it asks every time. A
-  tab's only pane closes the tab, and the question says so ("It's the tab's
-  only pane, so the tab closes too."), as it says when the space closes too.
-  The choice stays after a restart.
-- **The question** has Cancel and Confirm, and Cancel holds the keyboard
-  when it opens (a 2px `accent` ring around it): Enter cancels, so a second
-  `cmd-w` or Enter too many closes nothing. Tab and Shift-Tab move between
-  the two, Enter or Space presses the one with the ring, Esc cancels.
-- **Version:** follows the layout file. After a new release is installed,
-  the second line and the details show the new version without a restart.
-- **Update check:** once a day the brand row asks GitHub for the layout's
-  latest release (at start, and every hour it looks whether a day has
-  passed). A request counts as made before it is sent, so failures,
-  restarts and reloads still ask at most once a day. The automatic check is
-  quiet: no toast on errors, and for a new version exactly one toast, never
-  for a skipped one: "Herdr Roundup 0.8.0 is out" / "You have 0.7.0 · Click
-  to update with an agent" (`info`). Clicking it starts the update.
+  whole id); the chip shows "copied" in `accent` for 1.2s. Double-click the
+  name, or click the pencil, to rename the pane in a dialog (Enter saves,
+  Esc cancels); an empty name goes back to the program's. A click elsewhere
+  on the header focuses the pane. Tooltips: the whole id on the chip, the
+  given and the program's name on the name.
+- **Closing** asks first as its kind's choice says: the tab menu's for tabs,
+  the terminal menu's for panes; both stay after a restart. A tab closes by
+  its ×, its menu's Close or `cmd-w`; a pane by its header's ×, Close pane
+  in the terminal's menu or `cmd-shift-w`. A tab's only pane closes the tab,
+  so it follows the choice for tabs: a pane's × never ends a tab more
+  quietly than `cmd-w` would.
+  - **Never:** closes at once; the last tab takes its space with it unasked.
+  - **While an agent works** (the default): asks while an agent in the tab
+    (or in the pane, with its sub-agents) is working or blocked ("Claude
+    Code is still running in it. Closing ends it."); otherwise Herdr's own
+    close runs, which asks "Close space?" before a space's last tab goes.
+  - **Always:** asks every time.
+
+  The question also says when the tab closes too ("It's the tab's only
+  pane, so the tab closes too.") or the space.
+- **The question** has Cancel and Confirm. Cancel holds the keyboard when it
+  opens (a 2px `accent` ring): Enter cancels, so a second `cmd-w` or Enter
+  too many closes nothing. Tab and Shift-Tab move the ring, Enter or Space
+  presses its button, Esc cancels.
+- **Version** follows the layout file: after an update the second line and
+  the details show the new one without a restart.
+- **Update check:** once a day the brand row asks GitHub for the latest
+  release (at start, and hourly it looks whether a day has passed). A
+  request counts as made before it is sent, so failures, restarts and
+  reloads still ask at most once a day. The automatic check is quiet: no toast on errors,
+  and for a new version exactly one, never for a skipped one: "Herdr Roundup
+  0.8.0 is out" / "You have 0.7.0 · Click to update with an agent" (`info`).
+  Clicking it starts the update.
 - **Click on logo or name** opens the menu (a popup at the pointer, 260px,
-  as the tab menus: `popover`, 5px padding, 12.8px). A press that moves the
-  window is a drag, not a click, and a double-click maximizes the window as
-  anywhere in the row. While the menu is open, or right after the click,
-  the details card stays away. The menu, top to bottom:
-  - The details as in the card (without the hint), then a divider.
+  like the tab menus: `popover`, 5px padding, 12.8px). A press that moves
+  the window is a drag, not a click; a double-click maximizes, as anywhere
+  in the row. While the menu is open, or right after the click, the details
+  card stays away. Top to bottom:
+  - The card's details (without the hint), a divider.
   - **Check for updates** (refresh icon): asks at once, whatever the day and
-    the choice below, and always answers with a toast: the new-version
-    toast (also for a skipped version, which it un-skips), "Herdr Roundup
-    is up to date" / "0.7.0 is the latest release" (`success`), or
-    "Couldn't check for updates" / the reason (`warning`). Reasons: no
-    connection to api.github.com, GitHub's rate limit, no release on GitHub
-    yet (404), a tag that isn't `v1.2.3`.
-  - Only with an update available and not skipped: **Update to 0.8.0 with
-    an agent…** (bot icon, in `accent`), **Release notes 0.8.0** (opens the
-    release page in the browser), **Skip 0.8.0** (the point, the second
-    line and the toast stay away until a newer version).
-  - Under a divider and the heading "Check for updates" in `dim` 11px:
-    **Daily** and **Only when I ask**, the chosen one with an `accent` check.
-    Only when I ask stops the automatic check.
-  - Under a divider: **Show details on hover** with a check when on (the
-    default). Off, hovering shows nothing but the lit area.
+    the choice below, and always answers with a toast: the new-version toast
+    (also for a skipped version, which it un-skips), "Herdr Roundup is up to
+    date" / "0.7.0 is the latest release" (`success`), or "Couldn't check
+    for updates" / the reason (`warning`): no connection to api.github.com,
+    GitHub's rate limit, no release on GitHub yet (404), a tag that isn't
+    `v1.2.3`.
+  - Only with an update available and not skipped: **Update to 0.8.0 with an
+    agent…** (bot icon, `accent`), **Release notes 0.8.0** (the release page
+    in the browser), **Skip 0.8.0** (point, second line and toast stay away
+    until a newer version).
+  - Divider, heading "Check for updates" (`dim` 11px), **Daily** and **Only
+    when I ask** (stops the automatic check), an `accent` check on the
+    chosen one.
+  - Divider, **Show details on hover**, checked when on (the default); off,
+    hovering only lights the area.
   - ↑/↓ move, Enter runs, Esc closes; a choice closes the menu.
-- **Updating with an agent:** a new tab "Update Herdr Roundup" in a space on
-  this computer (the shown one if it is here, else the first one here, else a
-  new one; a tab stays on its space's machine, and the agents and the app's
-  folder are looked up here), in the app's folder (`appHome()`: `~/.config/herdr-app`
-  or `$HERDR_APP_HOME`; one folder, so an agent that asks whether
-  to trust a folder asks once), with the first installed agent (most picked
-  first) and this brief as its first message: update from v0.7.0 to v0.8.0,
-  read AGENTS.md, clone the repo at the tag into a new empty folder, read
-  the release notes and README, then tell what changes, whether keys the
-  person changed in the `layout:Herdr-Roundup` section would be replaced and
-  whether the installed `roundup-*` mods differ from the installed tag; only
-  after a yes run the clone's `scripts/sync.sh` and check `herdr-app
-  status`. Every path in it is the app's folder, and both commands get
-  `HERDR_APP_HOME` set to it (the agent's shell may not have it). The mod never writes the install itself. Without an installed
-  agent a `warning` toast says what to tell one's own agent.
-- **Files panel follows the focused pane's folder** (a mod pane: the first
-  terminal of its tab), on its machine. Each folder keeps its open folders,
-  selection and preview while another one shows (the last 50 folders). The files show at once;
-  git fills in its marks without moving a row, so unlike the spaces panel
-  nothing waits for it. A local folder refreshes
-  when anything under it changes (`watchFolder`), any folder every 10s.
-- **All** lists the disk, folders first, in natural order ("file2" before
-  "file10"), dotfiles included, `.git` left out. Folders load when opened.
-  **Changed** lists exactly the paths `git status` lists, as a tree with
-  every folder open: deleted files too (struck through, faded icon), and an
-  untracked folder or a submodule as one row that opens from disk. Such a
-  folder also shows what git lists below it and isn't on disk (a file
-  deleted next to new ones), and a search opens it for what it found there.
-  At most the first 2,000 paths, in git's order (the counts and the branch
-  row still count all): the tree is built on every render, about 70 ms for
-  5,000 paths in Herdr's runtime, and every arrow key would wait for it.
-  A tracked folder there folds and unfolds without reading the disk.
-  Struck through means not on disk, not deleted in git: after
-  `git rm --cached` the file is red but still previews. When the shown folder is
-  itself new to git, Changed says so and every row in All shows `?`. The
-  view stays after a restart.
+- **Updating with an agent** opens a tab "Update Herdr Roundup" in a space
+  on this computer (the shown one if it is here, else the first one here,
+  else a new one), in the app's folder, with the first installed agent
+  (most picked first) and a brief as its first message: update from v0.7.0
+  to v0.8.0, read AGENTS.md, clone the repo at the tag into a new empty
+  folder, read the release notes and README, then tell what changes,
+  whether keys the person changed in the `layout:Herdr-Roundup` section
+  would be replaced and whether the installed `roundup-*` mods differ from
+  the installed tag; only after a yes run the clone's `scripts/sync.sh` and
+  check `herdr-app status`. The mod never writes the install itself.
+  Without an installed agent a `warning` toast says what to tell one's own.
+- **The files panel follows the focused pane's folder** (for a mod pane, the
+  first terminal of its tab), on its machine. Each folder keeps its open
+  folders, selection and preview while another shows (the last 50). Files
+  show at once; git fills in its marks without moving a row, so unlike the
+  spaces panel nothing waits. A local folder refreshes when anything under
+  it changes (`watchFolder`), any folder every 10s.
+- **All** lists the disk: folders first, natural order ("file2" before
+  "file10"), dotfiles included, `.git` left out; folders load when opened.
+  **Changed** lists exactly what `git status` lists, the first 2,000 paths
+  in git's order (counts and branch row count all), as a tree with every
+  folder open: deleted files struck through with a faded icon, an untracked
+  folder or a submodule as one row that opens from disk. Such a folder also
+  shows what git lists below it that isn't on disk (a file deleted next to
+  new ones), and a search opens it for what it found there. A tracked folder
+  folds and unfolds without reading the disk. Struck through means not on disk, not
+  deleted in git: after `git rm --cached` the file is red but previews. When
+  the shown folder is itself new to git, Changed says so and every row in
+  All shows `?`. The view stays after a restart.
 - **Search** (type in the field, or `/`): in All it searches every path
   below the folder, opened or not, and shows the matches as a tree, names
-  that match first, at most 200. The switch in the field picks what it
-  reads, and the panel keeps the choice:
-  - **Git's files** (the default): what git counts as the project, tracked
-    and new files, without what `.gitignore` leaves out, at most 40,000
-    files, at any depth. A file deleted but not yet committed shows struck
-    through. "No matches · ignored files left out" says where else to look.
-    Outside a repo, in a folder git ignores (or inside one, also when it
-    holds a tracked file), or where git can't run, search reads the disk
-    instead.
+  that match first, at most 200. The switch picks what it reads, and the
+  choice stays after a restart:
+  - **Git's files** (the default): tracked and new files, without what
+    `.gitignore` leaves out, at most 40,000, at any depth. A deleted, not yet
+    committed file shows struck through. "No matches · ignored files left
+    out" says where else to look. Outside a repo, in a folder git ignores
+    (or inside one, even holding a tracked file), or where git can't run, it
+    reads the disk instead.
   - **The disk:** everything but the folders `.git`, `node_modules`, `target`,
     `.venv`, `venv`, `__pycache__`, `dist`, `build`, `.next`, `.nuxt`,
     `.cache`, `.gradle`, `.idea`, `vendor`, `Pods`, `.tox`, `.mypy_cache`,
-    `.pytest_cache` and `coverage` (a file with such a name is searched),
-    ignored files included (`.env`, local settings), and at home `Library`,
-    `AppData` and `.Trash` at its top level (a project's `Library` is
-    searched; at `/` they are skipped at any depth), 12 levels deep (5 at
-    home or `/`; home is that of the folder's machine, read once per machine), at most 20,000 folders and 40,000 other paths. Not on
-    Windows yet, nor on a machine without `sh`: there search reads git's
-    files whatever the switch said, and where git has none it says why
-    ("Not a git repository · Search can't read the disk on Windows yet").
-    That error stands until git answers again (the next refresh): typing
-    on doesn't try again with every key.
+    `.pytest_cache` and `coverage` (a file of such a name is searched),
+    ignored files included (`.env`, local settings), and `Library`,
+    `AppData` and `.Trash` at the top of home (a project's `Library` is
+    searched; at `/` they are skipped at any depth); 12 levels deep (5 at
+    home or `/`, home being that of the folder's machine, read once per
+    machine), at most 20,000 folders and 40,000 other paths. Not on Windows
+    yet, nor without `sh`: there it reads git's files whatever the switch
+    says, and where git has none it says why ("Not a git repository ·
+    Search can't read the disk on Windows yet"), until git answers again
+    (the next refresh), not again with every key.
 
-  A link to a folder is a folder there, as in the tree, and search doesn't
-  follow it; from git's files only a tracked one is, a new one stays a file.
+  A link to a folder is a folder, as in the tree, and search doesn't follow
+  it; from git's files only a tracked one is, a new one stays a file.
 
-  The index is read on the first search and again when a folder changes, a
-  `.gitignore` changes (git's files) or it is 5 minutes old. A new path is
-  checked on its own and added (git's files: `ls-files` for that path, with
-  what is below a new folder; the disk: whether it is there, in a folder the
-  index holds), and a path added that way that is gone again comes out, so
-  saves through temporary files don't read the whole index. A new folder
-  from the disk, more than 100 new paths at once or a failed check read it
-  again; a folder named like a skipped one (a build's `dist`) doesn't. In an
-  index a limit cut short, a new path can't be added and counts like a
-  changed file. When a file it knows changes (it may be
-  deleted), it is read again once it is 30 seconds old, also without typing:
-  at most one read per 30 s while an agent keeps writing. When a folder it
-  knows changes (or too many paths to list), once it is 3 seconds old: at
-  most one read per 3 s while a build keeps making folders. In Changed, the search filters git's paths. `×` or Esc clears it.
+  The index is read on the first search, and again when a `.gitignore`
+  changes (git's files), at 5 minutes old, or when what it holds changes. A
+  new path is checked on its own and added (git's files: `ls-files` for it
+  and what lies below a new folder; the disk: whether it is there, in a
+  folder the index holds), and comes out if gone again, so saves through
+  temporary files don't read the whole index. A new folder from the disk,
+  more than 100 new paths at once or a failed check read it again; a folder
+  named like a skipped one (a build's `dist`) doesn't. In an index a limit
+  cut short, a new path can't be added and counts as a changed file. A
+  changed file it knows (or a deleted one) reads it again once the index is
+  30 s old, also without typing, a changed folder (or too many paths to
+  list) at 3 s: at most one read per 30 s while an agent writes, per 3 s
+  while a build makes folders. In Changed, search filters git's paths. `×`
+  or Esc clears it.
 - **Click** a folder to open or close it, a file to select it. A
   **double-click** on a file shows it in the floating preview (below), a
   **Cmd-double-click** (Ctrl on Windows and Linux) in a preview tab, closing
   the floating one if it shows that file; a file already open in a tab
-  brings that tab to the front. While the floating preview is open it
-  follows the selection: at once on a click, after 150ms of rest on ↑ ↓, so
-  holding a key opens it once where it stops. The tree keeps
-  showing the terminal's folder while the preview tab is shown.
-  **Keys**, once the panel has the keyboard (a click on it, or `pane.go`):
-  ↑ ↓ select, PgUp PgDn Home End jump, → opens a folder or steps into an
-  open one, ← closes it or goes to its parent, Space opens or closes the
-  floating preview of a file, Enter opens a file in the preview tab, both
-  toggle a folder, `/` goes to the search field, Esc closes the floating
-  preview, leaves the panel's own preview or clears the search; in the field ↑ ↓ move the selection and Enter acts on it. In
-  search results, Enter on a folder shows it in the tree with the search
-  cleared.
-- **Right-click** a row (or the Menu key, Shift-F10, the `menu` command:
-  then the menu opens below the selected row, ↑ ↓ Home End pick, Enter
-  runs, Esc or ← closes, and it opens above the row where it doesn't fit
-  below): Quick look, Open in tab, Preview in panel, Open with
-  default app, Reveal in Finder ("Show in folder" elsewhere) / Copy relative
-  path, Copy absolute path / Send @path to agent. Send types `@path ` into
-  the agent of the shown tab (the focused pane's if it is an agent, else the
-  tab's focused or first agent), relative to that agent's folder, focuses
-  it, and puts the clipboard back after 600ms when it still holds the path
-  (text only: other content is gone, and the clipboard is emptied); without
-  an agent it says "No agent in this tab". On another machine the menu leaves out Open and
-  Reveal; for a deleted file, Quick look, Open in tab, Preview in panel, Open and Reveal.
+  brings that tab to the front. While open, the floating preview follows
+  the selection: at once on a click, after 150ms of rest on ↑ ↓, so holding
+  a key opens it once where it stops. While the preview tab is shown, the
+  tree keeps the terminal's folder. **Keys**, once the panel has the
+  keyboard (a click on it, or `pane.go`): ↑ ↓ select, PgUp PgDn Home End
+  jump, → opens a folder or steps into it, ← closes it or goes to its
+  parent, Space opens or closes a file's floating preview, Enter opens a
+  file in the preview tab, both toggle a folder, `/` goes to the search
+  field, Esc closes the floating preview, leaves the panel's own preview or
+  clears the search; in the field ↑ ↓ move the selection and Enter acts on
+  it. In results, Enter on a folder shows it in the tree, search cleared.
+- **Right-click** a row (or Menu key, Shift-F10, the `menu` command: it
+  opens below the selected row, above where it doesn't fit; ↑ ↓ Home End
+  pick, Enter runs, Esc or ← closes): Quick look, Open in tab, Preview in
+  panel, Open with default app, Reveal in Finder ("Show in folder"
+  elsewhere) / Copy relative path, Copy absolute path / Send @path to
+  agent. Send types `@path ` into the shown tab's agent (the focused pane's
+  if it is one, else the tab's focused or first agent), relative to that
+  agent's folder, focuses it, and after 600ms puts the clipboard back if it
+  still holds the path (text only: other content is lost, the clipboard
+  emptied); with no agent: "No agent in this tab". On another machine Open
+  and Reveal are left out; for a deleted file, Quick look, Open in tab,
+  Preview in panel, Open and Reveal.
 - **Floating preview:** the preview tab's view (below) in a window over the
-  layout, 60% × 75% of the window, centered the first time, then where it was
-  dropped. Its header drags it; the controls and the file don't. Beside ⋯:
-  Open in tab (the tab, or the one already showing the file, then the window
-  closes) and Close. Esc closes it once it has the keyboard (a click in it).
-  The name and folder don't copy there: they are part of what drags.
+  layout, 60% × 75% of the window, centered the first time, then where it
+  was dropped. Its header drags it; the controls and the file don't. Beside
+  ⋯: Open in tab (the tab, or the one already showing the file, then the
+  window closes) and Close. Esc closes it once it has the keyboard (a click
+  in it). The name and folder don't copy there: they are part of what
+  drags.
 - **Preview in panel:** the file inside the panel, read-only, highlighted
   by extension, the first 400,000 characters; binary files say so. Esc, ←
   or the back arrow go back.
 - **Preview tab:** read-only; it reloads when the file changes on disk,
   keeping Raw, zoom and open JSON rows, and after a restart shows the file
-  it showed (a link followed, not the one it opened with). A click on the name copies the file
-  name, on the folder the full path. ⋯: Open in editor (`$VISUAL` or
-  `$EDITOR` read with the shell's quoting, without `--wait`/`-w`, else the default app), Open with default
-  app, Reveal in Finder, Copy path, Copy relative path. Markdown: web and
-  mail links open in the system, a local file opens in the same tab (←
-  returns), `#heading` shows the document from that heading, web images
-  load only after "Load them". PDF: ‹ › and Go to jump, pages render 6 at a
-  time, up to 500. Zoom steps 25 to 400%, the middle returns to Fit. JSON:
-  a click opens or closes a row, alt-click the whole branch. Files from
-  another machine show in the text viewers only.
+  it showed (a link followed, not the one it opened with). A click on the
+  name copies the file name, on the folder the full path. ⋯: Open in editor
+  (`$VISUAL` or `$EDITOR` read with the shell's quoting, without
+  `--wait`/`-w`, else the default app), Open with default app, Reveal in
+  Finder, Copy path, Copy relative path. Markdown: web and mail links open
+  in the system, a local file opens in the same tab (← returns),
+  `#heading` shows the document from that heading, web images load only
+  after "Load them". PDF: ‹ › and Go to jump, pages render 6 at a time, up
+  to 500. Zoom steps 25 to 400%, the middle returns to Fit. JSON: a click
+  opens or closes a row, alt-click the whole branch. Files from another
+  machine show in the text viewers only.
 
 ## Built from
 
@@ -403,93 +386,93 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
       `changes`
   - `status` block (px 28): shipped `workspace-status`
 
-The only difference from `main` is that `brand`, `sidebar-footer`,
-`spaces`, `tabs`, `files` and the pane header point at the `roundup-` mods.
-The block ids stay Herdr's, so the tab bar's Files button (`layout.select
-{stack: "panel-body", child: "files"}`) finds it.
+Only `brand`, `sidebar-footer`, `spaces`, `tabs`, `files` and the pane
+header differ from `main`: they point at the `roundup-` mods. The block ids
+stay Herdr's, so the tab bar's Files button (`layout.select {stack:
+"panel-body", child: "files"}`) finds it.
 
 **`roundup-workspace-chrome`** (clone of `workspace-chrome` 0.1.13, `place:
-"none"`). Two looks by `props().footer`. The brand row reads the layout's own
+"none"`), two looks by `props().footer`. The brand row reads the layout's
 file with `readTextFile(appHome() + "/layouts/" + shared("layout") +
-".json")`, because `layout()` leaves out the root's `version`. It re-reads
-the file when `watchFolder(appHome() + "/layouts")` reports that file (it
-ignores `layouts/.state/`). Search runs `mod.open {name: "picker"}`. The
-toggle stores the width in shared `sidebar.width`, sets
-`sidebar.collapsed`, and runs `layout.resize {id: "sidebar", px}`. Footer:
-`app.settings`, `mod.open {name: "machine-add"}`, `updates().app.ready`.
+".json")`, as `layout()` leaves out the root's `version`, and again when
+`watchFolder(appHome() + "/layouts")` reports that file (not
+`layouts/.state/`). Search runs `mod.open {name: "picker"}`. The toggle
+stores the width in shared `sidebar.width`, sets `sidebar.collapsed`, runs
+`layout.resize {id: "sidebar", px}`. Footer: `app.settings`, `mod.open
+{name: "machine-add"}`, `updates().app.ready`.
 
-The update check lives in `update.js` and only the brand copy runs it.
-`latest()` is a `fetch` GET of
+The update check is `update.js`, run by the brand copy only. `latest()` is
+a `fetch` GET of
 `https://api.github.com/repos/carstenlucke/herdr-roundup/releases/latest`
 with `Accept: application/vnd.github+json` and `User-Agent: herdr-roundup`
 (no token, nothing about the person); the version is `tag_name` without its
-`v`, the link `html_url`. Versions compare numerically by major, minor,
-patch. State is shared under `roundup-workspace-chrome.update.`:
-`lastCheck` (ms, set before the request), `checked` (ms of the last answer),
-`latest` (`{version, url}`), `dismissed`, `notified`, `auto` (false: only
-when asked), `error` (the last reason, null after an answer). The automatic
-check runs from the file-reading loop and `cx.timer.every(3600000)`. The
-brand copy takes the commands `roundup-workspace-chrome.check`, `.update`,
-`.notes` and `.auto` (Daily chosen: check now if due) through
-`nextCommand()`; the toast's `action` and the menu send them. A Check asked
-for during another check runs after it, so it still answers with a toast. `.update` calls `knownAgents()` and runs `tab.new {name, folder:
-appHome(), argv: agent.run, task}`; `.notes` runs `open` (macOS),
-`xdg-open` (Linux) or `cmd /c start "" <url>` (Windows) by
+`v`, the link `html_url`; versions compare numerically by major, minor,
+patch. Shared state under `roundup-workspace-chrome.update.`: `lastCheck`
+(ms, set before the request), `checked` (ms of the last answer), `latest`
+(`{version, url}`), `dismissed`, `notified`, `auto` (false: only when
+asked), `error` (the last reason, null after an answer). The brand copy
+takes the commands `roundup-workspace-chrome.check`, `.update`, `.notes`
+and `.auto` (Daily chosen: check now if due) through `nextCommand()`, sent
+by the toast's `action` and the menu. The automatic check runs from the
+file-reading loop and an hourly `cx.timer.every`; a Check asked for during a check runs
+after it, so it still answers with a toast. `.update` calls `knownAgents()`
+and runs `tab.new {name, folder: appHome(), argv: agent.run, task}` in a
+space on this computer, since a tab stays on its space's machine and the
+agents and `appHome()` are looked up here. `appHome()` (`~/.config/herdr-app`
+or `$HERDR_APP_HOME`) is the tab's folder and every path in the brief, so an
+agent that asks whether to trust a folder asks once; the brief's commands
+set `HERDR_APP_HOME` to it, as the agent's shell may not. `.notes` runs
+`open` (macOS), `xdg-open` (Linux) or `cmd /c start "" <url>` (Windows) by
 `window().platform`. Toasts are `notify()` (drawn by the shipped `toast`).
 
-The card is gpui-base's `HoverCard` (anchor `top_left`, open delay 500, close
-delay 150) around logo and name, its content `info.js`. The menu is the mod
-again as a popup, `openOverlay({mod: "roundup-workspace-chrome", kind:
-"popup", width: 260, height, props: {menu: {installed, herdr, release, error}}})`, drawn by
-`menu.js` after roundup-tabs' `menu.js`. Its height is summed from fixed
-line heights (`menuHeight`, `infoHeight`), with the release offered and the
-last error as they were at the click (`release`, `error` in its props), so a
-check that ends while it is open can't add rows it has no room for; a reason
-is cut after two lines. The popup sets shared
-`roundup-workspace-chrome.menu` while it is open (its `close()` clears it,
-the brand copy clears it at start); shared
+The card is gpui-base's `HoverCard` (anchor `top_left`, open delay 500,
+close delay 150) around logo and name, content `info.js`. The menu is the
+mod again as a popup, `openOverlay({mod: "roundup-workspace-chrome", kind:
+"popup", width: 260, height, props: {menu: {installed, herdr, release,
+error}}})`, drawn by `menu.js` after roundup-tabs' `menu.js`. Its height is
+summed from fixed line heights (`menuHeight`, `infoHeight`) with the
+release and error as they were at the click, so a check ending while it is
+open can't add rows it has no room for; a reason is cut after two lines.
+While open, the popup sets shared `roundup-workspace-chrome.menu` (cleared
+by its `close()`, and by the brand copy at start); shared
 `roundup-workspace-chrome.details` false turns the card off. Skip, Daily,
-Only when I ask and Show details on hover write shared state from the popup;
-Check, Update and Release notes go to the brand copy as commands.
+Only when I ask and Show details write shared state from the popup; Check,
+Update and Release notes are commands to the brand copy.
 
 Its own art: `logo.png` (160×160, three black sheep), `search.svg`,
-`sidebar.svg`, `settings.svg`, `plus.svg`, and Lucide icons `refresh.svg`,
-`bot.svg`, `notes.svg`, `skip.svg`, `check.svg`, `circle-alert.svg`, plus
-`spinner.svg` (a copy of
-`workspace-chrome`'s).
+`sidebar.svg`, `settings.svg`, `plus.svg`, Lucide's `refresh.svg`,
+`bot.svg`, `notes.svg`, `skip.svg`, `check.svg`, `circle-alert.svg`, and
+`spinner.svg` (copied from `workspace-chrome`).
 
 **`roundup-pane`** (clone of `pane` 0.1.13, `place: "none"`, title "Pane
-header"). One copy per pane, with `props()` `{pane, terminal}`; it finds its
-pane in `panes()`. herdr-core can't rename a running terminal (`hc run
---name` only at start), so a terminal pane's name is its core label
-`roundup-pane.name`, read from `terminals()[i].labels` and written with
-`hc(["label", terminal, "roundup-pane.name=<name>"])` (`…=` removes it). A mod
-pane has no terminal: its name is in shared `roundup-pane.names` (pane id →
-name). See `docs/adr/0001-pane-names-in-core-labels.md`. The id chip copies
-with `cx.write_to_clipboard` on `click_count === 2`. The rename dialog is the
-same mod, opened with `openOverlay({ mod: "roundup-pane", kind: "dialog",
-width: 380, height: 196, props: { rename: { pane, terminal, value, fallback }
-} })`; it is shaped like Herdr's `prompt`. It is also the layout's
-`terminal_menu`: a popup (`mod.json` `overlay` 240×296) with `props()`
-`{tab: "pane", target: {pane, terminal}, overlay}`, Herdr's pane menu item
-for item, drawn by `menu.js`. Closing goes through `closePane(pane, name)`
-from `close.js` (see `roundup-tabs`): a tab's only pane runs `tab.close`,
-another `pane.close`. Its key command `close` reaches every shown header;
-only the copy whose pane is `focused().pane` acts. Commands: `pane.focus`,
-`pane.split`, `pane.zoom`, `pane.close`, `tab.close`,
-`terminal.right_click`, `terminal.park`. Its own art: `rename.svg` (a
-pencil) and the shipped header's `split-right`, `split-down`, `zoom`,
-`unzoom`, `close`; the working spinner is Herdr's
+header"). One copy per pane, `props()` `{pane, terminal}`, its pane found
+in `panes()`. herdr-core can't rename a running terminal (`hc run --name`
+only at start), so a terminal pane's name is its core label
+`roundup-pane.name`, read from `terminals()[i].labels`, written with
+`hc(["label", terminal, "roundup-pane.name=<name>"])` (`…=` removes it); a
+mod pane's is in shared `roundup-pane.names` (pane id → name). See
+`docs/adr/0001-pane-names-in-core-labels.md`. The chip copies with
+`cx.write_to_clipboard` on `click_count === 2`. The rename dialog is the
+same mod, `openOverlay({ mod: "roundup-pane", kind: "dialog", width: 380,
+height: 196, props: { rename: { pane, terminal, value, fallback } } })`,
+shaped like Herdr's `prompt`. It is also the `terminal_menu`: a popup
+(`mod.json` `overlay` 240×296), `props()` `{tab: "pane", target: {pane,
+terminal}, overlay}`, Herdr's pane menu item for item, drawn by `menu.js`.
+Closing is `closePane(pane, name)` from `close.js` (see `roundup-tabs`). Its
+key command `close` reaches every shown header; only the copy whose pane is
+`focused().pane` acts. Commands: `pane.focus`, `pane.split`, `pane.zoom`,
+`pane.close`, `tab.close`, `terminal.right_click`, `terminal.park`. Its own
+art: `rename.svg` (a pencil) and the shipped header's `split-right`,
+`split-down`, `zoom`, `unzoom`, `close`; the working spinner is Herdr's
 `mods/workspace-chrome/spinner.svg`.
 
 **`roundup-spaces`** (clone of `spaces` 0.1.13, `place: "none"`, title
 "Spaces"). Reads `spaces()`, `panes()`, `terminals()` (each agent's `turn`),
-`agents()`, `machines()`, `theme()`,
-`settings().dark`, `window()?.active` and shared `space.colors` (shared with
-Herdr's mods; it fills in colors for new spaces and drops those of deleted
-ones). A space's place is its first terminal's `cwd`, else the space's
-`folder`, on its `machine`. For each place it runs, through `exec` (on the
-space's machine):
+`agents()`, `machines()`, `theme()`, `settings().dark`, `window()?.active`
+and shared `space.colors` (Herdr's; it adds colors for new spaces and drops
+deleted ones'). A space's place is its first terminal's `cwd`, else its
+`folder`, on its `machine`. For each place it runs through `exec`, on the
+space's machine:
 
 - `git --no-optional-locks -c core.fsmonitor=false status --porcelain=v2
   --branch`: branch (`# branch.head`), ahead/behind (`# branch.ab`),
@@ -499,36 +482,33 @@ space's machine):
   git before 2.31 echoes the unknown `--path-format` and answers a relative
   `.git`; then the checkout counts as its own repo, never as a worktree
 
-It watches each local repo's git folder with `watchFolder` and polls every
-250ms for what is due. Through `hc` it runs `machine ls --json`, and for
-Connect, `machine rm` and `machine add`. Commands: `space.select`,
+It watches each local repo's git folder with `watchFolder`. Through `hc` it
+runs `machine ls --json`, and for Connect `machine rm` and `machine add`,
+keeping the machine's address until the add succeeds, so a Connect that
+failed after the remove can be tried again. Commands: `space.select`,
 `space.move`, `space.new`. Menu: `openOverlay({ mod: "menu", kind: "popup",
-props: { tab: "space", target: { id } } })`. `localStorage` keeps
-`machines.folded` and `machines.reconnecting`. Its own art: `bot.svg` (a
-robot head in `currentColor`). It also draws icons from Herdr's shipped
-`mods/workspace-chrome/` folder: `branch`, `plus`, `monitor`, `server`,
-`chevron-down`, `chevron-right`, `folder`.
+props: { tab: "space", target: { id } } })`. Own art: `bot.svg` (a robot
+head in `currentColor`); from Herdr's `mods/workspace-chrome/`: `branch`,
+`plus`, `monitor`, `server`, `chevron-down`, `chevron-right`, `folder`.
 
-**`roundup-tabs`** (clone of `tabs` 0.1.13, `place: "none"`, title "Tabs").
-Herdr's tab bar, except how a tab closes (`close.js`). The choice for tabs is
-shared `roundup-tabs.confirm-close`, for panes `roundup-pane.confirm-close`:
-`never`, `agents` (also when unset) or `always`; a tab's only pane goes by
-the one for tabs. A tab's busy agents are `agents()` with its `tab` and status
-`working` or `blocked`. Asking opens `roundup-confirm` as a dialog (400×170)
-with `command: { name: "tab.close", args: { id, confirmed: true } }`; not
-asking runs `tab.close {id, confirmed: true}` (never) or `tab.close {id}`
-(agents). A tab's right-click menu is the mod itself as a popup (220×237,
-`props: { menu: { id, space } }`), not Herdr's `menu`, whose Close would run
-`tab.close` past the choice; `menu.js` draws it like Herdr's. Its key
-commands: `close` (the shown tab) and `close:<id>`. `close.js` and `menu.js`
-are copied as-is into `roundup-pane`.
+**`roundup-tabs`** (clone of `tabs` 0.1.13, `place: "none"`, title "Tabs"):
+Herdr's tab bar, except how a tab closes (`close.js`). The choice is shared
+`roundup-tabs.confirm-close` for tabs, `roundup-pane.confirm-close` for
+panes: `never`, `agents` (also when unset) or `always`. A tab's busy agents
+are `agents()` with its `tab` and status `working` or `blocked`. Asking
+opens `roundup-confirm` as a dialog (400×170) with `command: { name:
+"tab.close", args: { id, confirmed: true } }`; not asking runs `tab.close
+{id, confirmed: true}` (never) or `tab.close {id}` (agents). The tab menu is
+the mod itself as a popup (220×237, `props: { menu: { id, space } }`), drawn
+like Herdr's by `menu.js`; Herdr's `menu` would run `tab.close` past the
+choice. Key commands: `close` (the shown tab) and `close:<id>`.
 
-**`roundup-confirm`** (clone of `confirm` 0.1.13, `place: "none"`). Herdr's
+**`roundup-confirm`** (clone of `confirm` 0.1.13, `place: "none"`): Herdr's
 question dialog, props `{ title, detail, command: { name, args } }`; Confirm
-runs `command`. Each button tracks its own focus handle with `tab_index(0)`;
-the dialog keeps which one is chosen (Cancel in `init`), moves it on Tab and
-Shift-Tab, focuses its handle and draws the ring on it. Herdr's own questions ("Close space?") still use
-the shipped `confirm`.
+runs `command`. Each button has its own focus handle with `tab_index(0)`;
+the dialog keeps the chosen one (Cancel in `init`), moves it on Tab and
+Shift-Tab, focuses its handle and rings it. Herdr's own questions ("Close
+space?") still use the shipped `confirm`.
 
 **`roundup-preview`** (`place: "none"`, title "Preview"), from
 gsydler/herdr-cria's `file-preview` (the `cria-file-preview` mod) at
@@ -558,20 +538,18 @@ images, after the click), `find`/`mv`/`rm` in its cache only, `git
 rev-parse`, the login shell for `$EDITOR`, `open`.
 
 **`roundup-files`** (clone of `files` 0.1.13, `place: "none"`, title
-"Files", `focusable: true`). `main.js` draws the panel and, opened with
+"Files", `focusable: true`). `main.js` draws the panel and, with
 `props().menu`, the context menu; `disk.js` lists folders (`sh` here and on
-other machines, PowerShell on Windows, as `files` does; 500 entries per
-folder, of at most 10,000 read and sorted) and builds the disk's search index with `find` (none on Windows
-yet, issue #10); `git.js` reads git and git's search
-index; `actions.js`
-opens, reveals, copies and sends; `icon.js` picks an icon from `icons.js`.
-The tree is a `v_virtual_list` (rows report clicks through `on_item_click`
+other machines, PowerShell on Windows, as `files` does) and builds the
+disk's search index with `find`; `git.js` reads git and git's search index;
+`actions.js` opens, reveals, copies and sends; `icon.js` picks from
+`icons.js`. The tree is a `v_virtual_list` (clicks through `on_item_click`
 and `on_item_secondary_click`) with a `Scrollbar` and a
 `VirtualListScrollHandle`. Git runs through `exec` on the folder's machine.
 When `git` doesn't start on this Windows machine (installed after Herdr App
-started: the app keeps the PATH of its start), it tries `C:\Program
-Files\Git\cmd\git.exe` and `~\AppData\Local\Programs\Git\cmd\git.exe`, and
-keeps the one that starts. When none starts, the panel says "Git not found",
+started, which keeps the PATH of its start), it tries `C:\Program
+Files\Git\cmd\git.exe` and `~\AppData\Local\Programs\Git\cmd\git.exe` and
+keeps the one that starts; if none does, the panel says "Git not found",
 not "Not a git repository":
 
 - `git --no-optional-locks -c core.fsmonitor=false -c
@@ -669,37 +647,31 @@ panel remembers the last terminal folder per space (with its machine) and
 shows it while a tab without a terminal is focused; before one was seen,
 the first terminal of the space with a folder, else `space.folder`.
 Previews in the panel use `readTextFile` and a read-only `EditorState` +
-`Editor`. The right-click menu is `openOverlay({mod: "roundup-files", kind: "popup", width: 228,
-props: {menu}})`, 28px per item and 9px per divider; its Preview, Open,
-Reveal and Send write shared `roundup-files.request` (`{n, action, from,
-root, on, rel}`), which the panel runs (see "A popup's tasks end with it").
-`from` is a random id of the panel copy that opened the menu: every shown
-copy reads the request, and only that copy runs it, so two windows on the
-same folder don't open or send twice.
-The keyboard menu is the panel's own: a `Popup` (gpui-base) on a 1px point
-in the list's box, which runs its items itself. It can't sit in the row: a
-virtual list's item renderer refuses click handlers (`on_click` there
-throws, and the list draws nothing). Opening centres the row
-(`scroll_to_item(i, "center")`), so its place follows from the list's
-height, the row height and the row count; `on_size_change` reports the
-window's pixels, so the height is divided by `settings().zoom`, as Herdr's
-`picker` does. The
-panel's width, for `+N −N` and the branch row's bar, is divided the same way. A wheel scroll, a press outside
-(`on_mouse_down_out`) or its row moving closes it.
-Copy uses `cx.write_to_clipboard` and `notify`. Send uses `focused()`,
-`panes()`, `agents()`, `pane.focus {terminal}` and `terminal.paste`. Open and
-Reveal run `open` / `open -R` (PowerShell `Invoke-Item` / `explorer.exe
-/select` on Windows, `xdg-open` elsewhere). Its key commands (none bound):
+`Editor`. The right-click menu is `openOverlay({mod: "roundup-files", kind:
+"popup", width: 228, props: {menu}})`, 28px per item, 9px per divider. Its
+Quick look, Open in tab, Preview in panel, Open, Reveal and Send write shared `roundup-files.request` (`{n, action,
+from, root, on, rel}`) for the panel to run; `from` is a random id of the
+copy that opened the menu: every shown copy reads the request, only that
+one runs it, so two windows on
+one folder don't act twice. The keyboard menu is the panel's own `Popup`
+(gpui-base) on a 1px point in the list's box, running its items itself.
+Opening centres the row (`scroll_to_item(i, "center")`), so its place
+follows from the list's height, row height and row count; `on_size_change`
+reports window pixels, so the height is divided by `settings().zoom`, as in
+Herdr's `picker`, and so is the panel's width (for `+N −N` and the bar). A
+wheel scroll, a press outside (`on_mouse_down_out`) or its row moving
+closes it. Copy uses `cx.write_to_clipboard` and `notify`; Send `focused()`,
+`panes()`, `agents()`, `pane.focus {terminal}` and `terminal.paste`; Open
+and Reveal `open` / `open -R` (PowerShell `Invoke-Item` / `explorer.exe
+/select` on Windows, `xdg-open` elsewhere). Key commands (none bound):
 `focus`, `search`, `view:all`, `view:changed`, `source:git`,
-`source:disk`, `menu`. `localStorage` keeps the view and the search's source. Its
-own art: Symbols 0.0.26 by Miguel Solorio in `icons/` (245 SVGs, with
-`icons/LICENSE`) and `icons.js`, all written by `scripts/build-icons.mjs`
-(`docs/adr/0002-file-icon-set.md`);
-Herdr's `chevron-right`, `chevron-down`, `chevron-left`, `branch` and
-`search` glyphs.
+`source:disk`, `menu`. Own art: Symbols 0.0.26 by Miguel Solorio in
+`icons/` (245 SVGs, with `icons/LICENSE`) and `icons.js`, all written by
+`scripts/build-icons.mjs` (`docs/adr/0002-file-icon-set.md`); Herdr's
+`chevron-right`, `chevron-down`, `chevron-left`, `branch` and `search`.
 
-**Shipped mods used:** `agents`, `changes`,
-`workspace-status`, plus `picker`, `menu` and `machine-add` as overlays.
+**Shipped mods used:** `agents`, `changes`, `workspace-status`, plus
+`picker`, `menu` and `machine-add` as overlays.
 
 **Keys:** the `layout:Herdr-Roundup` section binds `cmd-w` to
 `roundup-tabs.close` and `cmd-shift-w` to `roundup-pane.close`, in place of
@@ -707,151 +679,143 @@ global `tab.close` and `pane.close`.
 
 ## Watch out
 
-- **Name:** the layout file must be `Herdr-Roundup.json`. Settings shows the
+- **Name:** the layout file must be `Herdr-Roundup.json`: Settings shows the
   file name, and a name with a space can't be switched to. Mod folders keep
-  the `roundup-` prefix, because a folder's name is the mod's identity.
+  the `roundup-` prefix; a folder's name is the mod's identity.
 - **Block ids** must stay unique; a duplicate crashes Herdr App.
-- **Programs and files:** `roundup-spaces` runs `git` in every space's
-  folder, on remote machines too, and runs `hc`. `roundup-workspace-chrome`
-  reads the layout's file outside its own folder, and once a day sends a
-  GET to `api.github.com` (generic User-Agent, nothing but the IP);
-  "Only when I ask" stops that. `roundup-preview` runs `sh`, `sips`,
+- **Programs, files, network:** `roundup-spaces` runs `git` in every space's
+  folder, remote ones too, and `hc`. `roundup-files` runs `git`, `sh` and
+  `find` (PowerShell on Windows) in the shown folder, on its machine, and
+  reads the files it previews. `roundup-preview` runs `sh`, `sips`,
   `osascript`, `git`, the login shell and the editor (Built from), reads
   the file it shows and the local images a Markdown file names, anywhere,
   and writes only to `data/roundup-preview/`; it fetches a Markdown file's
-  web images (https, 5 MB, 10 s) only after "Load them". Nothing else
-  reaches the network (`machine add` connects to a machine you already
-  had).
+  web images (https, 5 MB, 10 s) only after "Load them".
+  `roundup-workspace-chrome` reads the layout's file outside its folder
+  and, unless "Only when I ask", sends one GET a day to `api.github.com`
+  (generic User-Agent, nothing but the IP). Nothing else reaches the
+  network (`machine add` connects to a machine you had).
 - **A mod pane has no folder:** `panes()` gives a mod pane `cwd: null`, and
   `space.folder` is where the space's first shell started. Without the
   remembered folder, a click on a file would send `roundup-files`' tree to
   the space's starting folder as soon as the preview tab shows.
 - **`run()` returns null:** a command names nothing it made, hence the
   before/after look at `panes()` to find the new preview pane.
-- **GitHub's API:** 60 unauthenticated requests per hour per IP, shared with
-  everything else on that IP; over it the answer is 403 or 429. Without a
-  release (tags alone don't count) `releases/latest` answers 404, so every
-  release needs a GitHub release whose tag is `v` + the root `"version"`.
+- **GitHub's API** allows 60 unauthenticated requests per hour per IP,
+  shared with all else on it; over that it answers 403 or 429. Without a
+  release (tags don't count) `releases/latest` answers 404, so every release
+  needs a GitHub release tagged `v` + the root `"version"`.
 - **Click or drag:** in a `window_drag` block a press on logo and name moves
-  the window and its release still arrives as `on_click`. Stopping
-  `mouse_down` would cost the drag there, so the mod measures instead: a
-  click doesn't move the pointer, a drag does (3px or more, or 10 moves).
-  The window trails the pointer by only a few px, so the distance at release
-  alone isn't enough; the moves count too. `click_count` 2 is the
-  double-click that maximizes.
-- **The HoverCard's layer is above popups:** a card left open draws over the
-  menu. Its content is empty right after a click until the pointer leaves,
-  and while the shared `roundup-workspace-chrome.menu` says the menu is
-  open (the pointer can come back to the name over an open menu).
+  the window, and its release still arrives as `on_click`. Stopping
+  `mouse_down` would cost the drag, so the mod measures: a drag moves the
+  pointer 3px or more, or 10 times. The window trails the pointer by only a
+  few px, so the distance at release alone isn't enough. `click_count` 2 is
+  the double-click that maximizes.
+- **The HoverCard draws above popups**, so a card left open covers the menu.
+  Its content is empty right after a click until the pointer leaves, and
+  while shared `roundup-workspace-chrome.menu` says the menu is open (the
+  pointer can come back to the name over it).
 - **`line_height(16)` is 16 times the font size**, not 16px, and pushes the
   text out of the 46px row: write `"16px"`.
 - **A text in an `h_flex` doesn't wrap** without `min_w(0)`; the reason in
   the card ran past its edge.
-- **268px:** at the default width on macOS "Herdr Roundup" (92px) leaves
-  2px beside the search button, so nothing can go beside the name; the
-  version goes under it. The lit area's padding hangs into the row's margin
-  and gap (`pl(6).ml(-6).pr(4).mr(-4)`) so it takes no width.
+- **268px:** on macOS "Herdr Roundup" (92px) leaves 2px beside the search
+  button, so nothing fits beside the name; the version goes under it. The
+  lit area's padding hangs into the row's margin and gap
+  (`pl(6).ml(-6).pr(4).mr(-4)`) so it takes no width.
 - **Only shown copies get commands:** with the sidebar hidden
   (`ctrl-shift-b`) the brand row isn't shown, and the toast's action finds
-  no one; the rail still shows it but without logo, name or point.
-- **The popup ends when it closes**, timers and tasks included: what must
-  outlive it is a command to the brand copy.
-- **`git status` must not write under `.git`**: without
-  `--no-optional-locks` and `core.fsmonitor=false`, each status touches the
-  index or an fsmonitor cookie, which wakes the watch, which runs status
-  again, forever.
+  no one; the rail shows it, without logo, name or point.
+- **A popup ends when it closes**, timers and tasks included, and the file
+  menu closes on a click. What must outlive it goes to the copy that stays:
+  from the brand menu as commands, from the file menu (a timer restoring the
+  clipboard, `open`) through `roundup-files.request`.
+- **Git must not write under `.git`:** without `--no-optional-locks` and
+  `core.fsmonitor=false`, each status touches the index or an fsmonitor
+  cookie, which wakes the watch, which runs status again, forever.
+  `roundup-files` gives all its git reads these options.
 - **Don't watch working trees for `±n`:** on macOS `watchFolder` is
   recursive, ignored folders included, so build output and `node_modules`
-  would fire it constantly. That is why `±n` refreshes when a turn ends,
-  every 10s in the active space and when the window comes back to the front,
-  not on every save.
-- **`window()` can be `null`** (for instance under `herdr-app check`): read
-  it with `?.`, and not in `init`.
-- **Colors** are theme names, not hex, so the layout works light and dark.
+  would fire it constantly. `roundup-spaces` watches `.git` only.
+- **`window()` can be `null`** (under `herdr-app check`, say): read it with
+  `?.`, and not in `init`.
+- **Colors are theme names**, not hex, so the layout works light and dark.
   `alpha()` adds transparency only to hex (`#rgb`, `#rrggbb`, `#rrggbbaa`)
-  and returns null for anything else; then the avatar and the badge sit on
+  and returns null for a theme name; then avatar and badge sit on
   `selected`, so a letter is never drawn on its own color.
-- **Known gap:** Herdr's shipped `picker` still turns `ansi1`..`ansi6` into
-  fixed hex colors, so a space's color in the picker can differ from its
-  avatar in the sidebar.
-- **Pane names don't reach Herdr's other lists:** the shipped `agents` list
-  and the tab bar (`roundup-tabs`) still show the program's or the tab's name; only the pane
-  header reads `roundup-pane.name`. A name ends with its terminal.
-- **A double-click is two clicks:** the first one of a double-click on the
-  name or the id still focuses the pane; only `click_count === 2` acts.
-- **Herdr's `tab.close` asks only before a space's last tab goes**, and
-  Herdr's Settings have no switch for it nor room for a mod's. So the choice
-  sits in the tab's own menu, and every way this layout closes a tab goes
-  through `roundup-tabs` or `roundup-pane`. Not covered: the command
-  palette's `tab.close` and `pane.close`.
+- **Known gap:** Herdr's shipped `picker` turns `ansi1`..`ansi6` into fixed
+  hex colors, so a space's color there can differ from its avatar.
+- **Pane names stay in the header:** the shipped `agents` list and the tab
+  bar still show the program's or the tab's name. A name ends with its
+  terminal.
+- **A double-click is two clicks:** the first one on the name or the id
+  still focuses the pane; only `click_count === 2` acts.
+- **Herdr's `tab.close` asks only before a space's last tab goes**, and its
+  Settings have no switch for it nor room for a mod's. So the choice sits in
+  the tab's own menu, and every way this layout closes a tab goes through
+  `roundup-tabs` or `roundup-pane`. Not covered: the command palette's
+  `tab.close` and `pane.close`.
 - **`pane.close` has no `confirmed`**, and on a space's last pane Herdr asks
-  anyway. So a tab's only pane closes with `tab.close`, which takes it.
+  anyway. So a tab's only pane closes with `tab.close`, which takes it;
+  another pane with `pane.close`.
 - **Mods can't import from each other:** `find()` and `narrow()` are copied
-  into both chrome mods, and `close.js` and `menu.js` into `roundup-tabs`
-  and `roundup-pane`. `scripts/sync.sh` stops when the two copies differ.
+  into both chrome mods, `close.js` and `menu.js` from `roundup-tabs` into
+  `roundup-pane` unchanged. `scripts/sync.sh` stops when those two differ.
 - **Tab doesn't move a dialog's keyboard by itself:** with two `tab_index`
-  buttons, Tab left the keyboard where it was. The dialog hears Tab go down
-  and moves it itself (`stop_propagation`).
-- **Install by copying, not symlinking:** Herdr App doesn't load a mod's own
-  SVGs through a symlink.
-- **Read git's branch from `--porcelain=v2 --branch`:** v1's `## main...origin/main
-  [ahead 1]` follows the user's language (`[voraus 1]` in German); v2's
-  `# branch.ab +1 -0` doesn't. Its entries mark an unchanged side with `.`
-  where v1 has a space.
-- **A deletion in git's index isn't a missing file:** after `git rm --cached`,
-  status says `D.` with working-tree mode `000000`, as for a file really
-  gone, and lists the file as new (`?`) as well. Only below a folder git
-  lists as a whole, or an ignored one, does it not: `roundup-files` asks the
-  disk for those (at most 2,000; one it didn't ask counts as there). A submodule is one path with `S` in `<sub>`, not a file.
-- **`roundup-files` watches its whole folder:** on macOS that includes
-  `.git` and ignored folders. A batch that touches only what git ignores (a
-  build in `node_modules` or `target`), outside the open folders, doesn't
-  refresh, nor, outside a repo, one that touches only closed folders
-  (`.git` in the shown folder still does); the 10s timer still does. A
-  tracked file an ignore rule matches isn't ignored: its edits refresh. A refresh while one runs only marks
-  another one due, so they never pile up. Ignored paths come from
-  `ls-files --directory`, not from status: `--ignored=traditional` walks
-  every ignored folder in full on each refresh (about four times as long
-  with a 23,000-file `node_modules`), and `--ignored=matching` lists a new
-  folder that holds only ignored files file by file, so it isn't dimmed.
-  Its git reads write nothing under `.git` (see above), or each
-  refresh would wake the watch again. A folder reached through a link
-  (`/tmp`, a linked project) is reported resolved (`/private/tmp`), while
-  the pane's folder keeps the link: the panel resolves it once (`pwd -P`)
-  and places the watch's paths against both, or every batch would refresh
-  and search would miss new files.
+  buttons it stayed put. The dialog hears Tab go down and moves it
+  (`stop_propagation`).
+- **Read git's branch from `--porcelain=v2 --branch`:** v1's
+  `## main...origin/main [ahead 1]` follows the user's language
+  (`[voraus 1]` in German), v2's `# branch.ab +1 -0` doesn't. Its entries
+  mark an unchanged side with `.` where v1 has a space.
+- **A deletion in git's index isn't a missing file:** after `git rm
+  --cached`, status says `D.` with working-tree mode `000000`, as for a file
+  really gone, and lists it as new (`?`) too. Not so below a folder git
+  lists as a whole, or an ignored one: `roundup-files` asks the disk for
+  those (at most 2,000; one not asked counts as there). A submodule is one
+  path with `S` in `<sub>`, not a file.
+- **`roundup-files` watches its whole folder**, on macOS `.git` and ignored
+  folders included. A batch touching only what git ignores outside the open
+  folders (a build in `node_modules` or `target`), or outside a repo only
+  closed folders, doesn't refresh (a new `.git` in the shown folder does);
+  the 10s timer still does. A tracked file an ignore rule matches isn't
+  ignored: its edits refresh. A refresh while one runs only marks another
+  due: while an agent keeps writing they run back to back, never two at
+  once. Ignored paths come from `ls-files
+  --directory`, not status: `--ignored=traditional` walks every ignored
+  folder in full on each refresh (about four times as long with a
+  23,000-file `node_modules`), and `--ignored=matching` lists a new folder
+  of only ignored files file by file, so it isn't dimmed. A folder reached
+  through a link (`/tmp`, a linked project) is reported resolved
+  (`/private/tmp`) while the pane keeps the link: the panel resolves it
+  once (`pwd -P`) and places the watch's paths against both, or every batch
+  would refresh and search would miss new files.
 - **A `roundup-files` refresh costs more git than `files`:** five reads at
-  once (status, ignored, forced, `check-ignore`, numstat) where Herdr's
-  `files` runs status alone. Measured 2026-11-07: 12 ms in a small repo,
-  136 ms with 38,000 files, 351 ms (about 580 ms CPU) with 68,000. Every 10s
-  that is about 6 % of a core for the largest; while an agent keeps
-  writing, refreshes run back to back (never two at once). Left as is:
-  caching `check-ignore` would save 9 ms; if the load shows, a minimum of
-  about 1 s between the watch's refreshes is the lever.
-- **A virtual list's rows can't hold handlers:** `on_click` inside the row
-  renderer throws. Clicks come from `on_item_click(key)` and
-  `on_item_secondary_click(key, event)` on the list, with the path as key.
-- **A popup's tasks end with it:** the context menu closes on a click, so
-  anything that waits (a timer restoring the clipboard, `open`) runs in the
-  panel.
+  once (status, ignored, forced, `check-ignore`, numstat) where `files` runs
+  status alone: 12 ms in a small repo, 351 ms (about 580 ms CPU, 6 % of a
+  core every 10s) with 68,000 files (2026-11-07). If that shows, a minimum
+  of about 1 s between the watch's refreshes is the lever.
+- **A virtual list's rows can't hold handlers:** `on_click` in the row
+  renderer throws, and the list draws nothing. Clicks come from
+  `on_item_click(key)` and `on_item_secondary_click(key, event)` on the
+  list, the path as key; the keyboard menu can't sit in a row either.
 - **Icon colors are fixed:** Symbols' SVGs carry their own colors
-  (`image()`), the one exception to theme colors. One set serves light and
-  dark themes.
+  (`image()`), the one exception to theme colors; one set serves both.
 - **Symbols leans on language ids:** `.css`, `.html`, `.php`, `.vue` and
-  more get their icons only through VS Code's languages, which Herdr
-  doesn't have. `scripts/build-icons.mjs` turns them into extensions from a
-  table of VS Code's associations; without it those files show the plain
-  document icon. It also drops the six rules of 0.0.26 that name icons the
-  release lacks (`less`, `folder-redux`), as VS Code ignores them.
-- **Search limits:** from the disk the index stops at 20,000 folders and
-  40,000 other paths and at 12 levels, from git at 40,000 files; a deeper or
-  larger folder is searched only in part, and the footer says so. Folders
-  show their first 500 entries: of the first 10,000 read, so in a larger
-  folder a few that sort early (folders, dotfiles) may be missing.
+  more get their icons only through VS Code's languages, which Herdr lacks.
+  `scripts/build-icons.mjs` turns them into extensions from a table of VS
+  Code's associations (without it those files get the plain document
+  icon), and drops the six rules of 0.0.26 that name icons the release
+  lacks (`less`, `folder-redux`), as VS Code ignores them.
+- **Limits:** a folder shows its first 500 entries of the first 10,000 it
+  reads and sorts, so a few that sort early (folders, dotfiles) may be
+  missing. Changed stops at 2,000 paths because its tree is built on every
+  render (about 70 ms for 5,000 in Herdr's runtime) and every arrow key
+  would wait for it. Past the search limits a folder is searched only in
+  part; the footer says which limit cut it.
 - **No search from the disk on Windows yet** (issue #10): `Get-ChildItem
   -Recurse` walks into `node_modules` and the other pruned folders before
-  it drops them, so it needs a walk of its own. Until then search reads
-  git's files there, and outside a repo it says it can't.
+  dropping them, so it needs a walk of its own.
 - **An overlap stops recording for a while:** an open that overlapped
   another and never saw its pane keeps `until: null`, so every later open
   within 10 s overlaps it and records none either: while files are opened
@@ -878,80 +842,77 @@ global `tab.close` and `pane.close`.
 - `herdr-app check` passes for every `roundup-` mod, `herdr-app status`
   shows no errors, and `layout.switch {"name": "Herdr-Roundup"}` shows the
   window.
-- The top left shows the sheep logo, "Herdr Roundup" and under it the
-  version; at 268px nothing truncates the name, and the window drags from
-  the name too without opening the menu.
-- Hovering logo or name shows the card with Installed, Based on `Herdr
-  0.1.13`, Latest and Checked; clicking opens the menu with the same facts
-  on top, and no card shows over the open menu.
-- With a release on GitHub newer than the installed version, the logo has
-  the point, the second line says `<version> available`, and exactly one
-  toast came; a reload or restart brings no second one. A copy at the
-  latest version shows neither.
-- Check for updates answers with "up to date", "<version> is out" or
-  "Couldn't check for updates" (before the first release: "No release on
-  GitHub yet"); the automatic check stays quiet on that.
+- The top left shows the logo, "Herdr Roundup" and the version under it; at
+  268px nothing truncates the name, and dragging the name moves the window
+  without opening the menu.
+- Hovering logo or name shows the card (Installed, Based on `Herdr 0.1.13`,
+  Latest, Checked); clicking opens the menu with those facts on top, and no
+  card shows over it.
+- With a newer release on GitHub, the logo has the point, the second line
+  says `<version> available`, and exactly one toast came; a reload or
+  restart brings no second. A copy at the latest version shows neither.
+- Check for updates answers "up to date", "<version> is out" or "Couldn't
+  check for updates" (before the first release: "No release on GitHub
+  yet"); the automatic check stays quiet on that.
 - The toast and "Update to <version> with an agent…" open a tab "Update
-  Herdr Roundup" in the app's folder with an installed agent and the
-  brief, versions and the app's folder filled in; with a space on another
-  machine shown, the tab opens in a space on this computer.
-- A check that finds a newer release while the menu is open changes the
-  version in its labels: the label names what the action installs. The
-  menu and the toast send that version with the command
-  (`update@<version>`, `notes@<version>`), so a check ending between the
-  click and the command doesn't change it.
+  Herdr Roundup" in the app's folder with an installed agent and the brief,
+  versions and app's folder filled in; with a space on another machine
+  shown, the tab opens in a space on this computer.
+- A check finding a newer release while the menu is open changes the
+  version in its labels: the label names what the action installs. Menu and
+  toast send that version with the command (`update@<version>`,
+  `notes@<version>`), so a check ending between click and command doesn't
+  change it.
 - Skip <version> keeps point, line and toast away until a newer version.
-- `lastCheck` changes at most once a day across reloads and restarts;
-  with Only when I ask it doesn't change at all.
-- Show details on hover off: hovering shows no card; the menu still shows
-  the facts.
-- A space in a repo whose name differs from the space, on branch `feat/x`,
-  shows `repo · feat/x` under its name in a 44px row. A space named after its
-  repo, clean on `main`, is a single 32px row.
+- `lastCheck` changes at most once a day across reloads and restarts, and
+  not at all with Only when I ask.
+- With Show details on hover off, hovering shows no card; the menu still
+  shows the facts.
+- A space in a repo of another name, on branch `feat/x`, shows `repo ·
+  feat/x` under its name in a 44px row. A space named after its repo, clean
+  on `main`, is a single 32px row.
 - Editing a file in that space's terminal shows `±1` within 10s (at once
   after an agent's turn or a longer command); editing it in an outside
-  editor shows `±1` when you switch back to Herdr.
-- With two worktree spaces of one repo and no space in its main checkout,
-  both sit on one card under a header with the repo's name, each with a
-  branch icon instead of an avatar. Opening a space in the main checkout
-  puts that space at the top of the card instead of the header.
-- Starting an agent in a space shows a badge with `1`: gray while it is
-  idle, in `working` while it works, in `blocked` while it waits for you.
+  editor shows `±1` on switching back to Herdr.
+- Two worktree spaces of one repo, with no space in its main checkout, sit
+  on one card under the repo's name, each with a branch icon for an avatar.
+  A space in the main checkout then heads the card instead of the header.
+- An agent started in a space shows a badge with `1`: gray while idle, in
+  `working` while it works, in `blocked` while it waits for you.
 - The sidebar toggle narrows to the rail (numbers and `●`/`·`) and widens
   back to the width it had.
-- Every pane header shows its terminal's address (`t5j`); double-clicking it
-  puts `t5j` on the clipboard. `hc label t5j roundup-pane.name=Build` shows
-  "Build" in that header within a second; renaming in the dialog does the
-  same, and saving an empty name shows the program's name again.
-- With "While an agent works", `cmd-w` on a tab whose agent is working asks
-  "Close tab …?" and Cancel keeps it; on a tab with only a shell it closes
-  at once. With "Always" the shell's tab asks too; with "Never" neither
-  asks.
+- Every pane header shows its terminal's address (`t5j`); double-clicking
+  it copies `t5j`. `hc label t5j roundup-pane.name=Build` shows "Build" in
+  that header within a second; so does renaming in the dialog, and saving
+  an empty name shows the program's name again.
+- With "While an agent works", `cmd-w` on a tab whose agent works asks
+  "Close tab …?" and Cancel keeps it; a tab with only a shell closes at
+  once. With "Always" the shell's tab asks too; with "Never" neither does.
 - With "While an agent works" for panes, in a tab split into an agent and a
-  shell, `cmd-shift-w` on the working agent's pane asks "Close pane …?", on
-  the shell's closes it at once. With "Never" for panes and "Always" for
-  tabs, a tab's only pane still asks. On a
-  space's last pane the question adds that the space closes too. Right-
-  clicking a terminal shows Close pane and "Ask before closing a pane";
-  choosing there leaves the tab menu's choice as it was.
+  shell, `cmd-shift-w` asks "Close pane …?" on the working agent's pane and
+  closes the shell's at once. With "Never" for panes and "Always" for tabs,
+  a tab's only pane still asks. On a space's last pane the question adds
+  that the space closes too. A terminal's right-click shows Close pane and
+  "Ask before closing a pane"; choosing there leaves the tabs' choice as it
+  was.
 - In the question, Enter right away cancels; Tab, then Enter closes.
-- In a light and a dark theme, every avatar's letter and every badge count
-  can be read.
-- The side panel's Files button shows `roundup-files`; Changes still shows
-  Herdr's diff and commit panel.
+- In a light and a dark theme, every avatar letter and badge count can be
+  read.
+- The Files button shows `roundup-files`; Changes still shows Herdr's diff
+  and commit panel.
 - In a repo with a modified, a new, a staged, a deleted and an ignored
   file, the branch row shows the branch and `↑n ↓n` as `git status -sb`
   does; the files show `M`, `?`, `A` and their `+N −N`, the ignored one is
-  dim, and their folders show the counts. Changed lists exactly what
-  `git status -s` lists, the deleted file struck through. Editing or
-  deleting a file shows the change within a second, without a restart.
+  dim, their folders show the counts. Changed lists exactly what `git
+  status -s` lists, the deleted file struck through. Editing or deleting a
+  file shows within a second, without a restart.
 - Files and folders, open ones too, show Symbols icons in light and dark
   themes (`package.json`, `Dockerfile`, `style.css`, `index.html`, `src/`,
   `.github/`).
-- Typing the name of a file in a folder that was never opened finds it;
+- Typing the name of a file in a never-opened folder finds it;
   `node_modules` stays out. Enter opens a file in a preview tab. In a repo,
-  an ignored `.env` is found only after the switch in the field goes to the
-  disk; a folder outside a repo is searched with the switch hidden.
+  an ignored `.env` is found only with the switch on the disk; outside a
+  repo, search works with the switch hidden.
 - ↑ ↓ → ← Enter and Esc work as described; right-clicking a file shows the
   menu, Preview in panel shows it in the panel and Esc goes back, and Copy
   relative path puts the path on the clipboard.
@@ -968,5 +929,5 @@ global `tab.close` and `pane.close`.
   in tab opens the tab even though the window closes at once, and the next
   Cmd-double-click on that file brings the tab back.
 - `node --test tests/` passes (Node 22 or later).
-- A folder without git shows "Not a git repository" and its files; a folder
-  with more than 500 entries says so in the footer.
+- A folder without git shows "Not a git repository" and its files; one with
+  more than 500 entries says so in the footer.
