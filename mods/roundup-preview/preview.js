@@ -9,12 +9,11 @@ import { div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { props, theme, notify, watchFolder, shared, setShared, exec, window, run, panes, focused, closeOverlay, nextCommand } from "herdr";
 import { viewerFor, basename } from "./kinds.js";
-import { codeState } from "./viewers/text.js";
 import { key } from "./cache-key.js";
 import { dirname, native, localPath, changedFile, normalize } from "./paths.js";
 import { VIEWERS } from "./viewers/index.js";
 import { openMenu } from "./menu.js";
-import { iconButton } from "./viewers/controls.js";
+import { iconButton, rawOn } from "./viewers/controls.js";
 import { MOVED, FLOAT, openTab, timerOf, newToken, fresh, answered, startFile, floatMoved, releasesFloat } from "./open-file.js";
 import { formatSize } from "./size.js";
 import { programs } from "./programs.js";
@@ -22,7 +21,9 @@ import { systemOf } from "./platform.js";
 
 // How often a file whose folder can't be watched is looked at (watch).
 const POLL = 3000;
-// What each copy shows, written on the "state" command, by file (scripts/smoke.sh reads it).
+// What each copy shows, written on the "state" command under "tab:<file>" or "float:<file>"
+// (scripts/smoke.sh reads it). One record per kind and file: two shown tab copies of the same
+// file would share one; the smoke test shows one at a time.
 const DEBUG = "roundup-preview.debug";
 // The language of Raw, per viewer that has one (as each viewer's rawToggle names it).
 const RAW = { markdown: "markdown", json: "json", table: "text" };
@@ -62,22 +63,21 @@ export class Preview {
 
   // Commands for scripts (scripts/smoke.sh): every shown copy gets them (keys bind none).
   // "to-tab": the floating window presses Open in tab. "raw": Raw on, where the viewer has it.
-  // "state": the copy writes what it shows under its file to shared DEBUG: how often it loaded,
-  // Raw, and the text's length and hash, so a script sees a reload without a picture.
+  // "state": the copy writes what it shows to shared DEBUG, under its kind and file: how often
+  // it loaded, Raw, and the text's length and hash, so a script sees a reload without a picture,
+  // and when (`at`), so it can tell a fresh record from an old one.
   commands(cx) {
     cx.spawn(async (cx) => {
       for (;;) {
         const c = await nextCommand();
         const state = this.state, raw = RAW[viewerFor(this.file ?? "")];
         if (c === "to-tab") { if (this.float) this.toTab(cx); }
-        else if (c === "raw" && state && raw && typeof state.text === "string") {
-          state.raw = true;
-          if (!state.editor) state.editor = codeState(state.text, raw, state.cut);
-        } else if (c === "state" && this.file) {
+        else if (c === "raw" && state && raw && typeof state.text === "string") rawOn(state, raw);
+        else if (c === "state" && this.file) {
           const text = typeof state?.text === "string" ? state.text : null;
-          setShared(DEBUG, { ...(shared(DEBUG) ?? {}), [this.file]: {
+          setShared(DEBUG, { ...(shared(DEBUG) ?? {}), [`${this.float ? "float" : "tab"}:${this.file}`]: {
             float: Boolean(this.float), loads: this.loads ?? 0, raw: Boolean(state?.raw),
-            length: text?.length ?? null, hash: text == null ? null : key(text), error: this.error } });
+            length: text?.length ?? null, hash: text == null ? null : key(text), error: this.error, at: Date.now() } });
         }
         cx.notify();
       }

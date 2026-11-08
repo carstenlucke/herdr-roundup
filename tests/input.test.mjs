@@ -2,7 +2,7 @@
 // roundup-files' clicks and keys: the context menu, the keyboard menu, the cursor's moves.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { menuItems, menuHeight, keyMenuAt, menuKey, moveIndex, clickAction, ROW } from "../mods/roundup-files/input.js";
+import { menuItems, menuHeight, keyMenuAt, menuKey, moveIndex, clickAction, scriptRel, ROW } from "../mods/roundup-files/input.js";
 
 const ids = (groups) => groups.map((g) => g.map(([id]) => id));
 const file = { dir: false, gone: false, local: true }, remote = { dir: false, gone: false, local: false };
@@ -106,4 +106,10 @@ test("A folder or a deleted file acts on the first press only", () => {
   assert.deepEqual(clickAction({ rel: "src", dir: true }, 2, false), []);
   assert.deepEqual(clickAction({ rel: "x", dir: false, gone: true }, 1, true), ["activate"]);
   assert.deepEqual(clickAction({ rel: "x", dir: false, gone: true }, 2, true), []);
+});
+
+test("scriptRel takes a path below the shown folder and refuses the rest", () => {
+  for (const rel of ["notes.md", "sub/a.md", "sub\\a.md", ".x", "..x", "a..b", "name with space "]) assert.equal(scriptRel(rel), rel, rel);
+  for (const rel of ["", "/etc/passwd", "\\x", "\\\\server\\share\\x", "C:x", "c:\\x", "..", "../x", "a/../b", "a\\..\\b", "a/..", null, undefined])
+    assert.equal(scriptRel(rel), null, String(rel));
 });

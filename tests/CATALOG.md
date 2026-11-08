@@ -319,6 +319,7 @@ Source keys: `PR #6 c <sha>` is a fix commit inside PR #6 whose message names th
 | FIL-109 | `iconFor`: case-insensitive; a path rule beats the name; a name beats its extension; the longest extension wins; the whole name counts as an extension; an open folder without its own open icon shows the closed one. | PR #6 body; icon.js | L1 | `iconFor: case doesn't matter`; `…a file's name beats its extension…`; `…the whole name counts…`; `…a rule naming a path…`; `…an open folder without an open icon…` | — | M |
 | FIL-110 | Every id in `icons.js` has `icons/<id>.svg`; `.css`, `.html`, `.php`, `.vue` get non-generic icons; `icons/LICENSE` exists. | PR #6 body; RECIPE now | L1 | `every icon the tables name is in icons/, with the licence beside them`; `web files get icons of their own` | static | M |
 | FIL-111 | `THIRD_PARTY_NOTICES.md` names `link.svg` (Lucide) and `fonts/Geist-Italic.ttf` with `fonts/OFL.txt`, and both files exist. | PR #18 rc 4506237521 | L1 | `THIRD_PARTY_NOTICES.md names the Lucide link icon and the Geist font with its licence, and they exist` | static | L |
+| FIL-112 | The script commands `tab:<rel>` / `float:<rel>` act only on a path below the shown folder: empty, absolute (`/`, `\`, UNC, `C:`) and `..` parts are refused, nothing is trimmed; without a shown folder nothing opens. | PR #22 rc 4507932269 | L1 | `scriptRel takes a path below the shown folder and refuses the rest` | — | M |
 
 ## Opening files: roundup-files → roundup-preview (OPN, FLT, WIN)
 

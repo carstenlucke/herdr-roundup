@@ -7,10 +7,8 @@
 // claude-code-filetree (MIT, (c) 2026 Kurt Buhler). See THIRD_PARTY_NOTICES.md.
 import { exec, home, window } from "herdr";
 import { listScript, parseListing, BLOCKED_AT_MOST } from "./listing.js";
-import * as rules from "./disk-rules.js";
-import { PER_FOLDER, INDEX_DIRS, INDEX_PATHS, PRUNE, HOME_PRUNE, psQuote, trimSlash, compare, sortEntries } from "./disk-rules.js";
-
-export { PER_FOLDER, INDEX_DIRS, INDEX_PATHS, psQuote, compare, sortEntries };
+import { PER_FOLDER, INDEX_DIRS, INDEX_PATHS, PRUNE, HOME_PRUNE, psQuote, trimSlash, sortEntries,
+  atHome as atHomeIn, prunedName as prunedNameIn, prunedAbove as prunedAboveIn, indexDepth as indexDepthIn } from "./disk-rules.js";
 
 // listDir reads at most this many entries of a folder: 100,000 took 5 s and 2.5 MB of output,
 // on every refresh, and past about 330,000 the output passes exec's 8 MiB.
@@ -39,9 +37,9 @@ async function learnHome(on) {
   if (r?.code === 0 && r.stdout) homes.set(on, trimSlash(r.stdout));
 }
 // The rules of disk-rules.js with this home: (root, rel, on) as before.
-const atHomeOf = (root, on) => rules.atHome(root, homeOf(on));
-export const prunedName = (root, rel, on) => rules.prunedName(root, rel, homeOf(on));
-export const prunedAbove = (root, rel, on) => rules.prunedAbove(root, rel, homeOf(on));
+const atHomeOf = (root, on) => atHomeIn(root, homeOf(on));
+export const prunedName = (root, rel, on) => prunedNameIn(root, rel, homeOf(on));
+export const prunedAbove = (root, rel, on) => prunedAboveIn(root, rel, homeOf(on));
 
 // One folder: [{ name, dir, link, broken, blocked }] (link: a link's target as written, ""
 // when it can't be read or didn't fit LIST_BUDGET, null for no link; broken: a link that
@@ -140,7 +138,7 @@ export async function realPath(root) {
 }
 
 // How many levels below root (on `on`) buildIndex reads.
-export const indexDepth = (root, on) => rules.indexDepth(root, homeOf(on));
+export const indexDepth = (root, on) => indexDepthIn(root, homeOf(on));
 
 // args in pieces of at most `max` characters (with a separator each).
 function pieces(args, max) {

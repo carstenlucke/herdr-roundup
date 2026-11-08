@@ -68,3 +68,11 @@ export function clickAction(r, n, tab, floats) {
   if (n === 2) return floats(r.rel) ? [] : ["openFloat"];
   return [];
 }
+
+// The path a script command (`tab:<rel>`, `float:<rel>`) names, or null: one relative to the
+// shown folder, with "/" (or "\") between its parts. Empty, absolute (`/x`, `\x`, `C:x`, UNC)
+// and anything with a ".." part is refused; nothing is trimmed (a name may end in a space).
+export function scriptRel(rel) {
+  if (typeof rel !== "string" || rel === "" || /^[\\/]/.test(rel) || /^[A-Za-z]:/.test(rel)) return null;
+  return rel.split(/[\\/]/).some((part) => part === "..") ? null : rel;
+}

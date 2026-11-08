@@ -13,14 +13,15 @@ import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, InputState, Input, Scrollbar, Popup, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { spaces, panes, focused, readTextFile, watchFolder, theme, settings, window, props, notify, openOverlay, closeOverlay, shared, setShared, nextCommand, run } from "herdr";
 import { iconFor, rootIcon } from "./icon.js";
-import { listDir, buildIndex, diskSearch, kinds, prunedName, realPath, homeOf, INDEX_PATHS } from "./disk.js";
+import { listDir, buildIndex, diskSearch, kinds, prunedName, realPath, homeOf } from "./disk.js";
+import { INDEX_PATHS } from "./disk-rules.js";
 import { readGit, listFiles, emptyGit, NEW, MODIFIED, DELETED } from "./git.js";
 import { openExternal, revealExternal, copy, sendToAgent } from "./actions.js";
 import { dirOf, baseOf, ancestors, relTo, join } from "./tree.js";
 import { diskRows, hitRows, changedRows, rowStatus } from "./rows.js";
 import { match, cursorAfter, outdated, classify, applyRecheck, STALE_AGE } from "./search.js";
 import { location } from "./location.js";
-import { ROW, menuItems, menuHeight, keyMenuAt, menuKey, moveIndex, clickAction } from "./input.js";
+import { ROW, menuItems, menuHeight, keyMenuAt, menuKey, moveIndex, clickAction, scriptRel } from "./input.js";
 import { listNote, footerLines, linkTip, statusColor, changeColors, gitReason, noRepo, GIT_FAILED } from "./panel-text.js";
 // A copy of roundup-preview's: how it opens and which pane already shows a file. sync.sh
 // checks that the two copies match.
@@ -95,11 +96,21 @@ export default class Files extends View {
         else if (c === "menu") { const r = this.shown.find((x) => x.rel === this.cursor); if (r && !this.file) this.openKeyMenu(r); }
         // For scripts (scripts/smoke.sh), with a path below the shown folder: what Enter on a
         // file does (its tab in roundup-preview) and what a double-click does (the floating window).
-        else if (c.startsWith("tab:")) this.openPreview(c.slice(4), cx);
-        else if (c.startsWith("float:")) this.openFloat(c.slice(6));
+        // Every shown panel gets them: a script shows one panel, already on the right folder.
+        else if (c.startsWith("tab:") || c.startsWith("float:")) this.scriptOpen(c, cx);
         cx.notify();
       }
     });
+  }
+
+  // tab:<rel> / float:<rel>: a path the panel's folder has (input.js scriptRel), with the cursor
+  // on it as the context menu's REQUEST does. Without a folder yet, or for any other path, nothing.
+  scriptOpen(c, cx) {
+    const tab = c.startsWith("tab:"), rel = scriptRel(c.slice(tab ? 4 : 6));
+    if (!this.root || rel === null) return;
+    this.cursor = rel;
+    if (tab) this.openPreview(rel, cx);
+    else this.openFloat(rel);
   }
 
   setView(view, cx) {

@@ -45,15 +45,12 @@ APP_ID=roundup-smoke-$$
 USER_APP_HOME=$HOME/.config/herdr-app
 # Your core, read before anything points at ours: cleanup only stops a core that isn't this one.
 USER_CORE=$(hc server status 2>/dev/null | jq -r '.core.id // empty' || true)
-[ ! -e "$TH" ] || die "$TH exists already"
-WORK=$(mktemp -d "${TMPDIR:-/tmp}/herdr-smoke.XXXXXX")
-WORK=$(cd "$WORK" && pwd -P)
-mkdir "$WORK/home" "$WORK/fx"
-ln -s "$WORK/home" "$TH"
 OUT=${OUT:-${TMPDIR:-/tmp}/herdr-smoke-$(date +%Y%m%d-%H%M%S)}
 mkdir -p "$OUT"
 OUT=$(cd "$OUT" && pwd -P)
-PID="" STARTED=0
+# WORK and the test home come only after the trap below (cleanup removes them); OWN_TH says the
+# symlink at $TH is ours, so cleanup never touches one that was there before.
+WORK="" PID="" STARTED=0 OWN_TH=0
 
 # Everything below that could reach Herdr reaches the test instance, even a call that forgot app().
 export HERDR_APP_HOME=$TH HC_SESSION=$SESSION
@@ -187,8 +184,8 @@ cleanup() {
   local rc=$?
   trap - EXIT INT TERM
   set +e
-  if [ -L "$TH" ]; then
-    quit_app
+  if [ "$OWN_TH" = 1 ] && [ -L "$TH" ]; then
+    [ "$STARTED" = 1 ] && quit_app
     # Its core: only when this session's core isn't yours (another id) and the session is ours.
     if [ "$STARTED" = 1 ] && [ "$HC_SESSION" = "$SESSION" ]; then
       local core
@@ -205,12 +202,22 @@ cleanup() {
     fi
     rm -f "$TH"
   fi
-  if [ "$KEEP" = 1 ]; then echo "test home kept: $WORK/home"; else rm -rf "$WORK"; fi
+  if [ -n "$WORK" ]; then
+    if [ "$KEEP" = 1 ]; then echo "test home kept: $WORK/home"; else rm -rf "$WORK"; fi
+  fi
   echo "shots and logs: $OUT"
   exit "$rc"
 }
 trap cleanup EXIT
 trap 'exit 130' INT TERM
+
+# The test home: a symlink at $TH (also a dangling one counts as taken) to a folder in $WORK.
+[ ! -e "$TH" ] && [ ! -L "$TH" ] || die "$TH exists already"
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/herdr-smoke.XXXXXX")
+WORK=$(cd "$WORK" && pwd -P)
+mkdir "$WORK/home" "$WORK/fx"
+ln -s "$WORK/home" "$TH"
+OWN_TH=1
 
 # ── results ───────────────────────────────────────────────────────────────────────────────
 FAILS=0
@@ -410,13 +417,18 @@ cmd space.select --id "$SP_REPO" >/dev/null
 show_files || die "the Files panel didn't show"
 sleep 2
 t_fil103() {
-  local c bad=""
+  local c bad="" i
   for c in focus search view:all view:changed source:git source:disk menu; do
     cmd "roundup-files.$c" >/dev/null 2>&1 || bad="$bad $c(do)"
     sleep 0.5
     clean || bad="$bad $c(errors: $(errors))"
     # menu (and maybe search) open popups: close them again.
-    status_json | jq -r '.overlays[]? | (.id // empty)' | while read -r o; do cmd overlay.close --id "$o" >/dev/null 2>&1 || true; done
+    # status names overlays by their mod, not by id: close the top one while any is open.
+    for i in 1 2 3; do
+      [ "$(status_json | jq '.overlays // [] | length')" -gt 0 ] || break
+      cmd overlay.close >/dev/null 2>&1 || true
+      sleep 0.25
+    done
   done
   [ -z "$bad" ] || { fail "$bad"; return; }
   cmd roundup-files.focus >/dev/null 2>&1 || true
@@ -480,8 +492,24 @@ sleep 2
 # The OPEN entry for a file: {pane, file, on} or empty.
 open_entry() { sh_get "$OPEN_KEY" | jq -c --arg f "$1" '[(. // {}) | to_entries[] | .value | select(.file == $f)][0] // empty'; }
 float_get() { sh_get "$FLOAT_KEY"; }
-# The preview's own readout of a file, after asking every shown copy for it.
-debug_of() { sh_get "$DEBUG_KEY" | jq -c --arg f "$1" '(. // {})[$f] // empty'; }
+# debug_of <tab|float> <file>: the preview's own readout of a file in a tab or in the floating
+# window, as last written on roundup-preview.state. One record per kind and file: these tests show
+# one tab copy of a file at a time.
+debug_of() { sh_get "$DEBUG_KEY" | jq -c --arg k "$1:$2" '(. // {})[$k] // empty'; }
+now_ms() { python3 -I -c 'import time; print(int(time.time() * 1000))'; }
+# wait_debug <seconds> <tab|float> <file> <jq condition>: asks the shown copies for their state
+# about once a second until the record, written after the wait began, meets the condition. A
+# record is written only on the command, so one ask can't show a reload that ends after it.
+wait_debug() {
+  local end=$((SECONDS + $1)) since next=0
+  since=$(now_ms)
+  while :; do
+    if [ "$SECONDS" -ge "$next" ]; then cmd roundup-preview.state >/dev/null 2>&1 || true; next=$((SECONDS + 1)); fi
+    debug_of "$2" "$3" | jq -e --argjson t "$since" "(.at // 0) >= \$t and ($4)" >/dev/null 2>&1 && return 0
+    [ "$SECONDS" -lt "$end" ] || return 1
+    sleep 0.25
+  done
+}
 
 t_opn14() {
   local n0 n1 pane
@@ -506,15 +534,13 @@ t_chg08() {
   local before after l0
   cmd roundup-preview.raw >/dev/null || { fail "roundup-preview.raw failed"; return; }
   cmd roundup-preview.state >/dev/null || { fail "roundup-preview.state failed"; return; }
-  wait_for 5 '[ "$(debug_of "$P/notes.md" | jq -r .raw)" = true ]' || { fail "Raw isn't on: $(debug_of "$P/notes.md")"; return; }
-  before=$(debug_of "$P/notes.md"); l0=$(echo "$before" | jq .loads)
+  wait_debug 5 tab "$P/notes.md" '.raw == true' || { fail "Raw isn't on: $(debug_of tab "$P/notes.md")"; return; }
+  before=$(debug_of tab "$P/notes.md"); l0=$(echo "$before" | jq .loads)
   shot 36-notes-raw || true
   printf '\nA line added on disk.\n' >> "$P/notes.md"
-  sleep 1.5
-  cmd roundup-preview.state >/dev/null || true
-  wait_for 5 'after=$(debug_of "$P/notes.md"); [ "$(echo "$after" | jq .loads)" -gt "$l0" ]' ||
-    { fail "no reload within ~1.5 s: $before -> $(debug_of "$P/notes.md")"; return; }
-  after=$(debug_of "$P/notes.md")
+  wait_debug 7 tab "$P/notes.md" ".loads > $l0" ||
+    { fail "no reload within ~7 s: $before -> $(debug_of tab "$P/notes.md")"; return; }
+  after=$(debug_of tab "$P/notes.md")
   [ "$(echo "$after" | jq -r .hash)" != "$(echo "$before" | jq -r .hash)" ] || { fail "reloaded, but the same text: $after"; return; }
   [ "$(echo "$after" | jq -r .raw)" = true ] || { fail "Raw was lost on the reload: $after"; return; }
   shot 37-notes-raw-reloaded || true

@@ -1,22 +1,18 @@
 // node --test 'tests/*.test.mjs'
 // The right-click popups are opened at a fixed height: it must hold every row the menu can
-// have, or the last one (the pane menu's ninth, "Send back to …") is cut off. menu.js imports
-// Herdr, so its heights are read from its source rather than imported.
-import { test } from "node:test";
+// have, or the last one (the pane menu's ninth, "Send back to …") is cut off. menu.js is loaded
+// with herdr stubbed (L2), so the test reads its heights and the sizes its render draws with.
+import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { reset, walk, byText } from "./support/harness.mjs";
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const menu = read("mods/roundup-pane/menu.js");
+const M = await import("../mods/roundup-pane/menu.js");
+const { PAD, ROW, LINE, HEAD } = M;
 
-// PAD, ROW, LINE, HEAD from `export const PAD = …, ROW = …;`.
-function heights(source) {
-  const decl = source.match(/^export const PAD = [^;]+;/m)?.[0];
-  assert.ok(decl, "mods/roundup-pane/menu.js: no `export const PAD = …, ROW = …, LINE = …, HEAD = …;`");
-  assert.match(decl, /^export const [\w\s=+,\d]+;$/, `menu.js: heights are sums of numbers, got ${decl}`);
-  return new Function(`${decl.replace(/^export /, "")} return { PAD, ROW, LINE, HEAD };`)();
-}
-const { PAD, ROW, LINE, HEAD } = heights(menu);
+beforeEach(reset);
 const MODES = (read("mods/roundup-pane/close.js").match(/export const MODES = \[([\s\S]*?)\];/)?.[1].match(/\[\s*"/g) ?? []).length;
 
 // The rows a menu can show at most: each `{ label: … }` of its list, a ternary's two choices
@@ -31,10 +27,21 @@ const height = ({ rows, seps }) => 2 * PAD + rows * ROW + seps * LINE + HEAD;
 
 test("the menu draws with the heights it exports", () => {
   assert.equal(read("mods/roundup-tabs/menu.js"), menu, "roundup-tabs' menu.js is a copy of roundup-pane's");
-  assert.match(menu, /\.p\(PAD\)/);
-  assert.match(menu, /\.h\(ROW\)/);
-  assert.match(menu, /\.my\(4\)\.h\(1\)/, "a separator: 4 + 1 + 4 = LINE");
-  assert.match(menu, /\.pt\(3\)\.pb\(2\)\.text_size\(11\)/, "the heading: LINE + 3 + 14 + 2 = HEAD");
+  assert.equal(LINE, M.SEP_M + M.SEP_H + M.SEP_M);
+  assert.equal(HEAD, LINE + M.HEAD_PT + M.HEAD_LINE + M.HEAD_PB);
+  const act = () => {};
+  const tree = M.menuView({ at: 0, handle: {} }, [{ label: "One", icon: "x", act }, { label: "Two", icon: "x", sep: true, act }], "pane");
+  assert.deepEqual(tree.style("p"), [PAD], "the padding");
+  const rows = [...walk(tree)].filter((e) => /^mi-\d+$/.test(e.elementId ?? ""));
+  assert.equal(rows.length, 2 + MODES);
+  for (const r of rows) assert.deepEqual(r.style("h"), [ROW], `row ${r.elementId}`);
+  // The separators: one above the `sep` row, one over the heading.
+  const lines = [...walk(tree)].filter((e) => e.has("my"));
+  assert.equal(lines.length, 2);
+  for (const l of lines) assert.deepEqual([l.style("my"), l.style("h")], [[M.SEP_M], [M.SEP_H]], "a separator: SEP_M + SEP_H + SEP_M = LINE");
+  const head = byText(tree, "Ask before closing a pane");
+  assert.deepEqual([head.style("pt"), head.style("pb"), head.style("text_size")], [[M.HEAD_PT], [M.HEAD_PB], [M.HEAD_FONT]],
+    "the heading: LINE + HEAD_PT + HEAD_LINE + HEAD_PB = HEAD");
   assert.equal(MODES, 3);
 });
 

@@ -13,9 +13,10 @@ import { clock, flush } from "./clock.mjs";
 import { makeCx } from "./cx.mjs";
 import { fake as fetchFake, response } from "./fetch.mjs";
 
-// In this thread where Node has it (22.15+); the older off-thread register() otherwise.
-if (nodeModule.registerHooks) nodeModule.registerHooks({ resolve: resolveSync });
-else nodeModule.register("./loader.mjs", import.meta.url);
+// In this thread: module.registerHooks, from Node 22.15 on (README, CI), which the tests are written for.
+if (typeof nodeModule.registerHooks !== "function")
+  throw new Error(`the tests need Node 22.15 or later (module.registerHooks); this is Node ${process.versions.node}`);
+nodeModule.registerHooks({ resolve: resolveSync });
 
 // localStorage: per mod copy in Herdr; here one for the test, emptied by reset().
 class MemoryStorage {

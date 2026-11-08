@@ -13,10 +13,16 @@ export function segmented(options) {
       .on_click((_e, cx) => { action(); cx.notify(); }).child(label)));
 }
 
-/** "<view> | Raw": state.raw switches to the file's source, made once into state.editor. */
+/** Raw on: the file's source, made once into state.editor (the toggle and the "raw" command). */
+export function rawOn(state, language) {
+  state.raw = true;
+  if (!state.editor) state.editor = codeState(state.text, language, state.cut);
+}
+
+/** "<view> | Raw": state.raw switches to the file's source. */
 export const rawToggle = (state, view, language) => segmented([
   ["view", view, !state.raw, () => { state.raw = false; }],
-  ["raw", "Raw", state.raw, () => { state.raw = true; if (!state.editor) state.editor = codeState(state.text, language, state.cut); }],
+  ["raw", "Raw", state.raw, () => rawOn(state, language)],
 ]);
 
 /** A 28px icon button from this mod's folder; `on` draws it pressed. */

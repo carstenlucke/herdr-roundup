@@ -554,8 +554,9 @@ images, after the click), `find`/`mv`/`rm` in its cache only, `git
 rev-parse`, the login shell for `$EDITOR`, `open`. Key commands, for scripts
 (`scripts/smoke.sh`; none bound), reach every shown copy: `to-tab` (the floating
 window's Open in tab), `raw` (Raw on, where the viewer has it), `state` (each copy
-writes `{float, loads, raw, length, hash, error}` of its text under its file to
-shared `roundup-preview.debug`).
+writes `{float, loads, raw, length, hash, error, at}` of its text under `tab:<file>`
+or `float:<file>` to shared `roundup-preview.debug`; two shown tabs of one file
+share a record).
 
 **`roundup-files`** (clone of `files` 0.1.13, `place: "none"`, title
 "Files", `focusable: true`). `main.js` draws the panel and, with
@@ -686,7 +687,9 @@ and Reveal `open` / `open -R` (PowerShell `Invoke-Item` / `explorer.exe
 /select` on Windows, `xdg-open` elsewhere). Key commands (none bound):
 `focus`, `search`, `view:all`, `view:changed`, `source:git`,
 `source:disk`, `menu`, and for scripts (`scripts/smoke.sh`) `tab:<rel>` (as
-Enter) and `float:<rel>` (as a double-click), `rel` below the shown folder. Own art: Symbols 0.0.26 by Miguel Solorio in
+Enter) and `float:<rel>` (as a double-click): every shown panel runs them, so a
+script shows one, on the right folder; `rel` is a path below it, anything else
+(absolute, `..`, no folder yet) does nothing. Own art: Symbols 0.0.26 by Miguel Solorio in
 `icons/` (245 SVGs, with `icons/LICENSE`) and `icons.js`, all written by
 `scripts/build-icons.mjs` (`docs/adr/0002-file-icon-set.md`); Herdr's
 `chevron-right`, `chevron-down`, `chevron-left`, `branch` and `search`.

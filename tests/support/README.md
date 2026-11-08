@@ -2,7 +2,7 @@
 
 Mod code that imports `herdr`, `gpui-kit` or `gpui-base` runs in Node with `node --test 'tests/*.test.mjs'`, no flags. Importing `harness.mjs` installs module hooks (`loader.mjs`) that send those three imports to the stubs here. Nothing in this folder runs as a test: the files don't match Node's test-file patterns.
 
-The hooks need Node 22.15 or later (`module.registerHooks`; older Nodes fall back to `module.register`). Run the suite with `node --test 'tests/*.test.mjs'`: `node --test tests/` with a folder works only from Node 26.8 on.
+The hooks need Node 22.15 or later (`module.registerHooks`); on an older Node `harness.mjs` stops with that message. Run the suite with `node --test 'tests/*.test.mjs'`: `node --test tests/` with a folder works only from Node 26.8 on.
 
 ## Writing a test
 
@@ -39,7 +39,7 @@ test("the shown tab's × closes it", () => {
 - `exec(command, args, {cwd, on})` runs the real program (`child_process.spawn`, 30 s, 8 MiB), resolves `{code, stdout, stderr}` and rejects when it can't start (no such program or folder), as Herdr's does. `on` runs here too. `herdr.onExec(call => answer)`: `undefined` runs the real process, `{code, stdout, stderr}` (partial) resolves, an `Error` rejects, a function or promise is awaited first. `herdr.failExec("git")` makes a program fail to start. Hooks run newest first; `{ times: n }` limits one. **Hook every program with side effects** (`open`, `xdg-open`, an editor): exec is real.
 - `hc()` never runs: it answers `{code: 0}` unless `herdr.onHc` says otherwise. `run`, `notify`, `openOverlay`, `closeOverlay` only record; `herdr.onRun` can throw or change fixtures.
 - `readTextFile` reads real files (null when absent); `writeTextFile` writes real files but only below the system temp folder, with the `expected` check.
-- `nextCommand()`: `await herdr.command("close")` delivers one and resolves once the mod's loop has handled it (asked for the next one).
+- `nextCommand()`: `await herdr.command("close")` delivers one and resolves once the mod's loop has handled it (asked for the next one). It reaches one waiting loop, not every copy: Herdr sends `<mod>.<command>` to each shown copy, so a test with two mounted copies can't show a command running twice.
 - `watchFolder(path)` waits until `herdr.change(path, paths)`; `herdr.failWatch(path)` rejects it; `herdr.watching(path)` counts the waiting loops.
 
 **gpui stubs** (`gpui-kit.mjs`, `gpui-base.mjs`, tree in `gpui-tree.mjs`): builders return an `El` that records everything: `el.elementId`, `el.kids` (elements and strings), `el.styles` (`[name, ...args]`, read with `el.style("bg")`, `el.has("truncate")`), `el.handlers` (`click`, `mouse_down:left`, `key_down`, …), `el.hovered`. Any builder method the stub doesn't know is recorded as a style, so new calls in mods need no change here. `.when(cond, fn)` behaves as GPUI's. Finders: `byId`, `hasId`, `ids`, `byText` (string or RegExp), `find`/`findAll(root, pred)`, `walk`, `texts`; `click(el, cx, event)` and `fire(el, "mouse_down:right", event, cx)` call handlers. `InputState` keeps its value: `input.set_value("x")`, `input.emit("submit")`. `v_virtual_list(...)` keeps its row renderer: `el.rows(start, end)`. `View` is a plain base class: `mount(Class, { props })` constructs it, runs `init(props, cx)`, and returns `{ view, cx, render }`.

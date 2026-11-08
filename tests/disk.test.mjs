@@ -8,7 +8,8 @@ import { herdr, reset } from "./support/harness.mjs";
 import { tempDir, cleanup, write, link } from "./support/git-repo.mjs";
 
 const disk = await import("../mods/roundup-files/disk.js");
-const { listDir, kinds, buildIndex, PER_FOLDER, INDEX_DIRS, INDEX_PATHS } = disk;
+const { listDir, kinds, buildIndex } = disk;
+const { PER_FOLDER, INDEX_DIRS, INDEX_PATHS } = await import("../mods/roundup-files/disk-rules.js");
 
 beforeEach(reset);
 after(cleanup);

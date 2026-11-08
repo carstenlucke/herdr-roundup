@@ -4,7 +4,7 @@
 // Adapted from cybertron288/herdr-mods `filetree` (MIT, (c) 2026 cybertron288).
 // See THIRD_PARTY_NOTICES.md.
 import { agents, exec, focused, notify, panes, run, window } from "herdr";
-import { psQuote } from "./disk.js";
+import { psQuote } from "./disk-rules.js";
 import { relTo } from "./tree.js";
 
 // This computer only.

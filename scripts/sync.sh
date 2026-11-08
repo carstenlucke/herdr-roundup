@@ -55,4 +55,4 @@ status=$(herdr-app status) ||
   { echo "Installed, but herdr-app status failed: is Herdr App running?" >&2; exit 1; }
 printf '%s\n' "$status" | jq '.errors'
 [ "$(printf '%s\n' "$status" | jq '.errors | length')" -eq 0 ] ||
-  { echo "Installed, but Herdr App reports the errors above" >&2; exit 1; }
+  { echo "Files installed and mod checks passed, but Herdr App reports the errors above (possibly from another mod or file)" >&2; exit 1; }
