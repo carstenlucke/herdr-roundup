@@ -20,6 +20,7 @@ The layout is called `Herdr-Roundup`: Herdr's Settings show a layout by its file
 | `keys.json` | The `layout:Herdr-Roundup` section: keys that apply only while this layout shows |
 | `assets/` | Files for this README, such as the logo |
 | `docs/ARCHITECTURE_DECISIONS.md` | The few decisions whose reasons need keeping, and when to write one: an index, details in `docs/adr/` |
+| `docs/GITHUB_PAGES.md` | How the project page is made and published |
 | `scripts/sync.sh` | Installs all of the above into `~/.config/herdr-app` |
 | `site/` | The project's web page (GitHub Pages): `index.html`, `style.css` and its pictures in `site/img/` |
 | `scripts/preview.py` | Draws the layout's preview picture, and with a scene name the site's pictures |
