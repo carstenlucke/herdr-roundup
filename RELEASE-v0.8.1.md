@@ -18,5 +18,6 @@ For the person, or the agent, installing this release:
 
 - `scripts/sync.sh` replaces the layout file, every `roundup-*` mod, the repo's themes and the `layout:Herdr-Roundup` section of `keys.json`, as in 0.8.0. Edits you made to those files are lost. Your global keys, other layouts and Herdr's own mods stay untouched.
 - No new mods and no key changes in this release.
+- **A font comes with it:** `roundup-files` now brings `fonts/Geist-Italic.ttf` (Geist 1.8.2, SIL Open Font License), because Herdr ships its UI font without an italic. Herdr loads it on its next start or the next theme change; until then, link names show upright.
 - **What changes in what the panel runs:** when it lists a folder, `roundup-files` now also runs `readlink` for each link it finds, to learn the target. On Windows, PowerShell reads the target itself. Nothing else is read or written.
 - `readlink` comes with macOS and Linux. Where it is missing, links are still marked, only without a target in the hover.
