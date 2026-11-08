@@ -64,12 +64,13 @@ export const herdr = {
   // Delivers a command to the mod's nextCommand() loop. Resolves once the loop asks for the next
   // one, i.e. has handled this one (or after `wait` ms, failing then).
   command(c, wait = 2000) {
+    let done;
     const handled = new Promise((resolve, reject) => {
       const t = setTimeout(() => reject(new Error(`command ${c} wasn't handled: no loop asked for the next command`)), wait);
-      stub.consumedWaiters.push(() => { clearTimeout(t); resolve(); });
+      done = () => { clearTimeout(t); resolve(); };
     });
     const w = stub.commandWaiters.shift();
-    if (w) w.resolve(c); else stub.commandQueue.push(c);
+    if (w) { stub.commandsTaken.push(done); w.resolve(c); } else stub.commandQueue.push({ command: c, handled: done });
     return handled;
   },
   // Resolves the watchFolder(path) calls waiting now with `paths`.

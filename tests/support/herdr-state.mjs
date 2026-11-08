@@ -50,10 +50,11 @@ function defaults() {
     // Every call, in order: { fn, args }. Per function: calls.<fn> (the same entries).
     log: [],
     calls: {},
-    // nextCommand(): commands not taken yet, and loops waiting for one.
+    // nextCommand(): commands not taken yet ({ command, handled }), loops waiting for one, and the
+    // `handled` callbacks of commands taken, called when the loop asks again.
     commandQueue: [],
     commandWaiters: [],
-    consumedWaiters: [],
+    commandsTaken: [],
     // watchFolder(): folder → waiting loops.
     watchers: new Map(),
     ids: 0,

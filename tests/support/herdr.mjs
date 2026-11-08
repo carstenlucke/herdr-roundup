@@ -162,9 +162,14 @@ export function setShared(key, v) {
 }
 
 // The next command for this mod: what the test queued with harness `command()`, else it waits for one.
+// A command the loop took counts as handled when the loop asks for the next one.
 export function nextCommand() {
-  for (const w of stub.consumedWaiters.splice(0)) w();
-  if (stub.commandQueue.length) return Promise.resolve(stub.commandQueue.shift());
+  for (const handled of stub.commandsTaken.splice(0)) handled();
+  if (stub.commandQueue.length) {
+    const { command, handled } = stub.commandQueue.shift();
+    stub.commandsTaken.push(handled);
+    return Promise.resolve(command);
+  }
   return new Promise((resolve, reject) => stub.commandWaiters.push({ resolve, reject }));
 }
 
