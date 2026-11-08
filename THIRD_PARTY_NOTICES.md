@@ -12,6 +12,7 @@ its top.
 | `mods/roundup-workspace-chrome/` `refresh.svg`, `bot.svg`, `notes.svg`, `skip.svg`, `check.svg`, `circle-alert.svg` | [Lucide](https://lucide.dev) icons | ISC | (c) Lucide Contributors 2022, portions (c) Cole Bemis 2013-2022 (Feather, MIT) |
 | `mods/roundup-files/main.js`, `disk.js`, `git.js`, `actions.js`, `icon.js` (git parsing, search index, rows in a virtual list, keys, context menu, sending a path to an agent, icon matching) | `filetree` and `file-icons` from [cybertron288/herdr-mods](https://github.com/cybertron288/herdr-mods) at `34e7c33` | MIT | (c) 2026 cybertron288 |
 | the same parts of `mods/roundup-files/`, through `filetree` | claude-code-filetree, which `filetree` ports | MIT | (c) 2026 Kurt Buhler |
+| `mods/roundup-preview/` (all of it), and its copies `mods/roundup-files/open-file.js` and `paths.js` | `file-preview` (the `cria-file-preview` mod) from [gsydler/herdr-cria](https://github.com/gsydler/herdr-cria) at `82ce1eb` | Apache-2.0 | gsydler |
 
 ## MIT licence text (Symbols, cybertron288/herdr-mods, claude-code-filetree)
 
@@ -46,8 +47,11 @@ LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
 OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 PERFORMANCE OF THIS SOFTWARE.
 
-## Apache-2.0 (Herdr App's shipped mods)
+## Apache-2.0 (Herdr App's shipped mods, herdr-cria)
 
 Licensed under the Apache License, Version 2.0, the licence of this repository
-(see `LICENSE`). The `roundup-*` mods are modified copies: restyled and given
-new features.
+(see `LICENSE`). The `roundup-*` mods cloned from Herdr's are modified copies:
+restyled and given new features. `roundup-preview` is a modified copy of
+herdr-cria's `cria-file-preview`: renamed throughout (asset paths, the menu's
+overlay, the cache folder, the shared keys) and given a floating-window mode
+(Open in tab, Close), as its `main.js` says.

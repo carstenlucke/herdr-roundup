@@ -1,21 +1,19 @@
-# Draws the Herdr-Roundup window as an SVG, with made-up spaces, agents and terminals:
+# Draws the Herdr-Roundup window as an SVG, with made-up spaces, agents, terminals and files:
 # no one's real spaces, paths or sessions. Sizes come from layouts/Herdr-Roundup.json and
-# the roundup- mods, colors from the graphite theme. A newer release is out (the brand row
-# says so), and the side panel shows roundup-files in its All or Changed view. Run from the repo:
-#   python3 scripts/preview.py . layouts/Herdr-Roundup.svg all
+# the roundup- mods, colors from the graphite theme. The active tab has two panes side by
+# side, the side panel shows roundup-files, and roundup-preview's floating window shows the
+# project's README. Run from the repo:
+#   python3 scripts/preview.py . layouts/Herdr-Roundup.svg
 #   rsvg-convert -z 2 layouts/Herdr-Roundup.svg -o preview.png
-#   python3 scripts/preview.py . /tmp/changed.svg changed
-#   rsvg-convert -z 2 /tmp/changed.svg -o preview-changed.png
-# Settings shows the SVG (All); RECIPE.md shows both PNGs.
+# Settings shows the SVG; README.md and RECIPE.md show the PNG.
 import base64, json, os, re, sys
 from html import escape
 
 REPO, OUT = sys.argv[1], sys.argv[2]
-VIEW = sys.argv[3] if len(sys.argv) > 3 else "all"
-INSTALLED, RELEASE = "0.7.0", "0.8.0"
+VERSION = json.load(open(f"{REPO}/layouts/Herdr-Roundup.json"))["version"]
 # Program icons come from the install, as Herdr draws them.
 HOME = os.environ.get("HERDR_APP_HOME", os.path.expanduser("~/.config/herdr-app"))
-W, H = 1440, 900
+W, H = 1920, 1200
 
 T = {
     "accent": "#96b2d7", "background": "#17191d", "blocked": "#f0705f", "border": "#ffffff18",
@@ -36,17 +34,17 @@ ICON = {
     "clock": '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
     "files": '<path d="M20 7h-3a2 2 0 0 1-2-2V2"/><path d="M9 18a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h7l4 4v10a2 2 0 0 1-2 2Z"/><path d="M3 7.6v12.8A1.6 1.6 0 0 0 4.6 22h9.8"/>',
     "compare": '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M11 18H8a2 2 0 0 1-2-2V9"/>',
-    "terminal": '<path d="M12 19h8"/><path d="m4 17 6-6-6-6"/>',
     "search": '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/>',
     "sidebar": '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9.5 4v16"/>',
     "settings": '<path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/>',
     "bot": '<rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 4v4"/><circle cx="9" cy="14" r="1" fill="currentColor"/><circle cx="15" cy="14" r="1" fill="currentColor"/>',
-    "split-right": '<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M12 4v16"/>',
-    "split-down": '<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 12h18"/>',
-    "zoom": '<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>',
     "close": '<path d="M18 6 6 18M6 6l12 12"/>',
     "chevron-down": '<path d="m6 9 6 6 6-6"/>',
     "chevron-right": '<path d="m9 18 6-6-6-6"/>',
+    # roundup-preview's own icons (toc.svg and more.svg drawn at 16, here at 24).
+    "toc": '<path d="M3.75 6h16.5M7.5 12h12.75M7.5 18h12.75"/>',
+    "more": '<circle cx="5.25" cy="12" r="1.95" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.95" fill="currentColor" stroke="none"/><circle cx="18.75" cy="12" r="1.95" fill="currentColor" stroke="none"/>',
+    "to-tab": '<rect x="3" y="5" width="18" height="15" rx="2"/><path d="M3 10h18M9 5v5"/>',
 }
 
 # Helvetica's widths (1/1000 em) for placing text that follows other text.
@@ -60,6 +58,10 @@ _HW = dict(zip(" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]
 def tw(s, size, weight=400):
     return sum(_HW.get(ch, 556) for ch in s) * size / 1000 * (1.05 if weight >= 600 else 1.02 if weight >= 500 else 1)
 
+def mw(s, size):
+    """A monospaced text's width: JetBrains Mono advances 0.6 em."""
+    return len(s) * size * 0.6
+
 out = []
 def add(s): out.append(s)
 
@@ -70,6 +72,9 @@ def paint(c):
         return c[:7], int(c[7:], 16) / 255
     return c, 1.0
 
+def r(v):
+    return round(v, 1)
+
 def rect(x, y, w, h, fill, rx=0, op=None, stroke=None):
     f, o = paint(fill)
     o = o if op is None else op
@@ -78,32 +83,32 @@ def rect(x, y, w, h, fill, rx=0, op=None, stroke=None):
         sc, so = paint(stroke)
         s = f' stroke="{sc}" stroke-opacity="{so:.3f}" stroke-width="1"'
     fo = f' fill-opacity="{o:.3f}"' if o < 1 else ""
-    add(f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="{rx}" fill="{f}"{fo}{s}/>')
+    add(f'<rect x="{r(x)}" y="{r(y)}" width="{r(w)}" height="{r(h)}" rx="{rx}" fill="{f}"{fo}{s}/>')
 
 def frame(x, y, w, h, stroke, rx=0):
     sc, so = paint(stroke)
-    add(f'<rect x="{x + .5}" y="{y + .5}" width="{w - 1}" height="{h - 1}" rx="{rx}" fill="none" stroke="{sc}" stroke-opacity="{so:.3f}"/>')
+    add(f'<rect x="{r(x + .5)}" y="{r(y + .5)}" width="{r(w - 1)}" height="{r(h - 1)}" rx="{rx}" fill="none" stroke="{sc}" stroke-opacity="{so:.3f}"/>')
 
 def line(x1, y1, x2, y2, color):
     c, o = paint(color)
-    add(f'<path d="M{x1} {y1}L{x2} {y2}" stroke="{c}" stroke-opacity="{o:.3f}" stroke-width="1"/>')
+    add(f'<path d="M{r(x1)} {r(y1)}L{r(x2)} {r(y2)}" stroke="{c}" stroke-opacity="{o:.3f}" stroke-width="1"/>')
 
 def text(x, y, s, size=13, fill="foreground", weight=400, anchor="start", family=UI, spaces=False):
     c, o = paint(fill)
     fo = f' fill-opacity="{o:.3f}"' if o < 1 else ""
     ws = ' xml:space="preserve"' if spaces else ""
-    add(f'<text x="{x}" y="{y}" font-family="{family}" font-size="{size}" font-weight="{weight}" fill="{c}"{fo} text-anchor="{anchor}"{ws}>{escape(s)}</text>')
+    add(f'<text x="{r(x)}" y="{r(y)}" font-family="{family}" font-size="{size}" font-weight="{weight}" fill="{c}"{fo} text-anchor="{anchor}"{ws}>{escape(s)}</text>')
 
 def spans(x, y, parts, size=13, family=MONO):
     """One line of text in several colors: [(text, color, weight), ...]."""
     inner = "".join(
         f'<tspan fill="{paint(c)[0]}" font-weight="{w}">{escape(s)}</tspan>' for s, c, w in parts)
-    add(f'<text x="{x}" y="{y}" font-family="{family}" font-size="{size}" xml:space="preserve">{inner}</text>')
+    add(f'<text x="{r(x)}" y="{r(y)}" font-family="{family}" font-size="{size}" xml:space="preserve">{inner}</text>')
 
 def icon(name, x, y, size, color, sw=1.5):
     c, o = paint(color)
     k = size / 24
-    add(f'<g transform="translate({x} {y}) scale({k:.4f})" fill="none" stroke="{c}" stroke-opacity="{o:.3f}" '
+    add(f'<g transform="translate({r(x)} {r(y)}) scale({k:.4f})" fill="none" stroke="{c}" stroke-opacity="{o:.3f}" '
         f'stroke-width="{sw}" stroke-linecap="round" stroke-linejoin="round" color="{c}">{ICON[name]}</g>')
 
 # Herdr's program table (built into the app): tint true is a one-color glyph drawn in the
@@ -120,7 +125,7 @@ def program(key, x, y, size, color):
         if not re.search(r'<svg[^>]*\sfill=', src):
             src = src.replace("<svg", f'<svg fill="{c}"', 1)
     data = base64.b64encode(src.encode()).decode()
-    add(f'<image x="{x}" y="{y}" width="{size}" height="{size}" href="data:image/svg+xml;base64,{data}"/>')
+    add(f'<image x="{r(x)}" y="{r(y)}" width="{size}" height="{size}" href="data:image/svg+xml;base64,{data}"/>')
 
 # roundup-files' icons (Symbols), picked as its icon.js does; they carry their own colors.
 _src = open(f"{REPO}/mods/roundup-files/icons.js").read()
@@ -146,7 +151,7 @@ def icon_for(rel, folder, open_):
 def file_icon(id_, x, y, size, op=1.0):
     data = base64.b64encode(open(f"{REPO}/mods/roundup-files/icons/{id_}.svg", "rb").read()).decode()
     o = f' opacity="{op}"' if op < 1 else ""
-    add(f'<image x="{x}" y="{y}" width="{size}" height="{size}"{o} href="data:image/svg+xml;base64,{data}"/>')
+    add(f'<image x="{r(x)}" y="{r(y)}" width="{size}" height="{size}"{o} href="data:image/svg+xml;base64,{data}"/>')
 
 def avatar(x, y, letter, color):
     rect(x, y, 22, 22, color, rx=6, op=0x2e / 255)  # dark themes tint with alpha 2e
@@ -164,9 +169,15 @@ def badge(right, cy, n, status):
     icon("bot", x + 6, cy - 5.5, 11, color, sw=2)
     text(x + 6 + 11 + 4, cy + 4, str(n), 11, color, 600)
 
+def spinner(cx, cy, color, radius=4.5):
+    c, _ = paint(color)
+    add(f'<circle cx="{r(cx)}" cy="{r(cy)}" r="{radius}" fill="none" stroke="{paint("raised")[0]}" stroke-width="1.5"/>')
+    add(f'<path d="M{r(cx)} {r(cy - radius)}a{radius} {radius} 0 0 1 {radius} {radius}" fill="none" stroke="{c}" stroke-width="1.5" stroke-linecap="round"/>')
+
 # ---- window ----
 add(f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}">')
-add(f'<defs><clipPath id="win"><rect width="{W}" height="{H}" rx="12"/></clipPath></defs>')
+add(f'<defs><clipPath id="win"><rect width="{W}" height="{H}" rx="12"/></clipPath>'
+    '<filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="22"/></filter></defs>')
 add('<g clip-path="url(#win)">')
 rect(0, 0, W, H, "canvas")
 
@@ -175,20 +186,18 @@ SB = 268
 rect(0, 0, SB, H, "chrome")
 line(SB + .5, 0, SB + .5, H, "border")
 
-# Brand row, 46px: traffic lights at [12, 16], then the sheep, the name, search and toggle.
+# Brand row, 46px: traffic lights at [12, 16], then the sheep, the name and its version, search and toggle.
 for i, c in enumerate(["#ff5f57", "#febc2e", "#28c840"]):
     add(f'<circle cx="{18 + 20 * i}" cy="22" r="6" fill="{c}"/>')
 logo = base64.b64encode(open(f"{REPO}/mods/roundup-workspace-chrome/logo.png", "rb").read()).decode()
 add(f'<clipPath id="logo"><rect x="76" y="13" width="20" height="20" rx="5"/></clipPath>')
 add(f'<image x="76" y="13" width="20" height="20" clip-path="url(#logo)" href="data:image/png;base64,{logo}"/>')
-# A newer release: a point on the logo's corner (10px, a 2px chrome ring) and "<version> available" under the name.
-add(f'<circle cx="94" cy="15" r="5" fill="{paint("chrome")[0]}"/><circle cx="94" cy="15" r="3" fill="{paint("accent")[0]}"/>')
 text(104, 21.5, "Herdr Roundup", 13, "foreground", 600)
-text(104, 35, f"{RELEASE} available", 11, "accent")
+text(104, 35, VERSION, 11, "dim")
 icon("search", 207.5, 15.5, 15, "muted")
 icon("sidebar", 237.5, 15.5, 15, "muted")
 
-# Spaces, 46..490: a header row, then the rows.
+# Spaces and agents share the height between the brand row and the footer.
 text(16, 66, "Spaces", 11.5, "dim")
 icon("plus", 237, 54.5, 14, "dim", sw=2)
 
@@ -226,43 +235,40 @@ def row(x, y, w, name, letter=None, color=None, tree=False, git=None, crew=None,
         badge(x + w - 8, cy, *crew)
     return h
 
-y = 77
+y = 77 + 6
 # A repo and two worktrees on one card.
-y += 6
 cx, cw = 8, 252
 card_top = y
-inner = []
-inner.append(dict(name="search-filters", tree=True, git=("", 3, 0, 5), crew=(2, "working"), active=True))
-inner.append(dict(name="fix-login", tree=True, git=("fix/login-redirect", 0, 0, 1), crew=(1, "blocked")))
-inner.append(dict(name="release-2.4", tree=True, git=("release/2.4", 0, 2, 0)))
+inner = [
+    dict(name="search-filters", tree=True, git=("", 3, 0, 5), crew=(2, "working"), active=True),
+    dict(name="fix-login", tree=True, git=("fix/login-redirect", 0, 0, 1), crew=(1, "blocked")),
+    dict(name="release-2.4", tree=True, git=("release/2.4", 0, 2, 0)),
+]
 # No space in the main checkout (Herdr makes each worktree its own space): the repo's name heads the card.
 icon("folder", cx + 3 + 9, y + 3 + 6, 12, "dim", sw=2)
 text(cx + 3 + 9 + 12 + 7, y + 3 + 16, "atlas", 11.5, "muted", 500)
 ry = y + 3 + 24 + 2
-for r in inner:
-    ry += row(cx + 3, ry, cw - 6, **r) + 2
+for it in inner:
+    ry += row(cx + 3, ry, cw - 6, **it) + 2
 card_h = ry - 2 + 3 - card_top
 frame(cx, card_top, cw, card_h, "border", rx=10)
 y = card_top + card_h + 6 + 2
-for r in [
+for it in [
     dict(name="website", letter="W", color="ansi3", git=("acme-site · feat/pricing", 1, 0, 0), crew=(1, "done")),
     dict(name="api-gateway", letter="A", color="ansi4", git=("", 0, 4, 0), crew=(1, "idle")),
     dict(name="notes", letter="N", color="ansi5"),
     dict(name="dotfiles", letter="D", color="ansi2", git=("", 0, 0, 7), crew=(1, "idle")),
     dict(name="research", letter="R", color="ansi1", git=("papers · draft-v2", 0, 0, 0), crew=(1, "working")),
+    dict(name="mobile-app", letter="M", color="ansi6", git=("", 0, 0, 2), crew=(1, "idle")),
+    dict(name="infra", letter="I", color="ansi8", git=("terraform · main", 0, 1, 0), crew=(1, "idle")),
 ]:
-    y += row(8, y, 252, **r) + 2
+    y += row(8, y, 252, **it) + 2
 
-# Agents (Herdr's shipped list), 490..831.
-AY = 490
+# Agents (Herdr's shipped list).
+AY = 46 + (H - 46 - 69) // 2
 text(16, AY + 20, "Agents", 11.5, "dim")
 icon("clock", 238, AY + 9, 13, "dim", sw=2)
 ay = AY + 31
-
-def spinner(cx, cy, color):
-    c, _ = paint(color)
-    add(f'<circle cx="{cx}" cy="{cy}" r="4.5" fill="none" stroke="{paint("raised")[0]}" stroke-width="1.5"/>')
-    add(f'<path d="M{cx} {cy - 4.5}a4.5 4.5 0 0 1 4.5 4.5" fill="none" stroke="{c}" stroke-width="1.5" stroke-linecap="round"/>')
 
 def agent(y, prog, space, task, when, status, active=False):
     if active:
@@ -291,10 +297,12 @@ def group(label, n, color, items):
 
 group("Needs you", 1, "blocked", [("codex", "fix-login", "Run the migration?", "4m", "blocked")])
 group("Done", 1, "done", [("claude", "website", "Pricing page", "12m", "done")])
-group("Working", 2, "working", [("claude", "search-filters", "Facet filters", "1m", "working", True),
+group("Working", 3, "working", [("claude", "search-filters", "Facet filters", "1m", "working", True),
+                                ("codex", "search-filters", "Review facets", "2m", "working"),
                                 ("pi", "research", "Benchmarks", "3m", "working")])
-group("Idle", 3, "dim", [("codex", "search-filters", "Tests", "18m", "idle"),
+group("Idle", 4, "dim", [("claude", "mobile-app", "Onboarding flow", "40m", "idle"),
                          ("pi", "dotfiles", "brew bundle", "1h", "idle"),
+                         ("codex", "infra", "Terraform plan", "3h", "idle"),
                          ("claude", "api-gateway", "Rate limits", "1d", "idle")])
 
 # Footer, 69px.
@@ -316,90 +324,138 @@ program("shell", WX + 171, 14, 14, "muted")
 text(WX + 189, 25.5, "zsh", 13, "muted")
 program("vite", WX + 227, 14, 14, "muted")
 text(WX + 245, 25.5, "dev server", 13, "muted")
+# Files opened in roundup-preview tabs: a mod's pane has no program, so its tab shows the name alone.
+tx_ = WX + 245 + tw("dev server", 13)
+for name in ["CONTRIBUTING.md", "query.ts", "package.json"]:
+    tx_ += 26
+    text(tx_, 25.5, name, 13, "muted")
+    tx_ += tw(name, 13)
 # The panel buttons (26px, 8px sides, 14px icon, 5px gap), 3px apart, 10px from the edge; Files is on.
 bx = W - 10
 for name, label, glyph, on in reversed([("files", "Files", "files", True), ("changes", "Changes", "compare", False)]):
     bw = 8 + 14 + 5 + tw(label, 12) + 8
     bx -= bw
     if on:
-        rect(round(bx, 1), 8, round(bw, 1), 26, "selected", rx=6)
-    icon(glyph, round(bx + 8, 1), 14, 14, "foreground" if on else "muted", sw=2)
-    text(round(bx + 27, 1), 25.5, label, 12, "foreground" if on else "muted")
+        rect(bx, 8, bw, 26, "selected", rx=6)
+    icon(glyph, bx + 8, 14, 14, "foreground" if on else "muted", sw=2)
+    text(bx + 27, 25.5, label, 12, "foreground" if on else "muted")
     bx -= 3
-icon("plus", round(bx - 22, 1), 15, 12, "dim", sw=2)
+icon("plus", bx - 22, 15, 12, "dim", sw=2)
 
-# The active tab's pane and the side panel, 8px padding and gap, rounded 10px. The panel is 368px.
+# The active tab's two panes, left and right, and the side panel: 8px padding and gap, rounded 10px.
 PY, PH = 50, H - 28 - 8 - 50
 PW = 368
 PX = W - 8 - PW
-panes = [(WX + 8, PX - 8 - (WX + 8), True)]
-add(f'<defs><clipPath id="left"><rect x="{WX + 9}" y="{PY + 31}" width="{panes[0][1] - 2}" height="{PH - 32}"/></clipPath></defs>')
-for px, pw, focus in panes:
-    rect(px, PY, pw, PH, "background", rx=10)
-    frame(px, PY, pw, PH, "accent" if focus else "border", rx=10)
-    line(px + 1, PY + 30.5, px + pw - 1, PY + 30.5, "border")
-    for k, name in enumerate(["close", "zoom", "split-down", "split-right"]):
-        icon(name, px + pw - 22 - 26 * k, PY + 9, 12, "dim", sw=2)
+LX = WX + 8
+LW = (PX - 8 - LX - 8) // 2
+RX = LX + LW + 8
+RW = PX - 8 - RX
+LH = 21  # terminal line height
+TOP = PY + 30 + 12 + 14  # first baseline: header, padding, ascent
+ROWS = (PY + PH - 12 - TOP) // LH + 1
 
-lx, lw = panes[0][0], panes[0][1]
-program("claude", lx + 12, PY + 8, 14, "dim")
-text(lx + 32, PY + 19.5, "Claude Code", 12.5, "foreground", 600)
-text(lx + 112, PY + 19.5, "~/code/atlas-search-filters", 12, "dim")
-
-def term(x, y, lines, clip):
+def pane(x, w, prog, name, address, status, focus, lines, bottom):
+    """A pane: roundup-pane's header (icon, name, id chip, folder, status), then the terminal.
+    `lines` run from the top, `bottom` sits on the last rows."""
+    rect(x, PY, w, PH, "background", rx=10)
+    frame(x, PY, w, PH, "accent" if focus else "border", rx=10)
+    line(x + 1, PY + 30.5, x + w - 1, PY + 30.5, "border")
+    hx = x + 10
+    program(prog, hx, PY + 8, 14, "dim")
+    hx += 14 + 8
+    text(hx, PY + 19.5, name, 12, "foreground", 500)
+    hx += tw(name, 12, 500) + 8
+    chip = mw(address, 10.5) + 10
+    rect(hx, PY + 6, chip, 18, "hover", rx=4)
+    text(hx + 5, PY + 18.5, address, 10.5, "dim", family=MONO)
+    hx += chip + 8
+    text(hx, PY + 19.5, "~/code/atlas-search-filters", 12, "dim")
+    if status == "working":
+        spinner(x + w - 16, PY + 15, "working", 5)
+    clip = f"term-{address}"
+    add(f'<defs><clipPath id="{clip}"><rect x="{x + 1}" y="{PY + 31}" width="{w - 2}" height="{PH - 32}"/></clipPath></defs>')
     add(f'<g clip-path="url(#{clip})">')
     for i, parts in enumerate(lines):
         if parts:
-            spans(x, y + 21 * i, parts, 13)
+            spans(x + 14, TOP + LH * i, parts, 13)
+    for i, parts in enumerate(bottom):
+        if parts:
+            spans(x + 14, TOP + LH * (ROWS - len(bottom) + i), parts, 13)
     add('</g>')
 
-F, D, M = "terminal", "dim", "muted"
-term(lx + 14, PY + 30 + 12 + 14, [
+F, D, M, G = "terminal", "dim", "muted", "ansi2"
+pane(LX, LW, "claude", "Claude Code", "t4", "working", True, [
     [("● ", F, 400), ("I'll add facet filters to the search endpoint, then", F, 400)],
     [("  the filter chips above the results.", F, 400)],
     [],
-    [("● ", "ansi2", 400), ("Read ", F, 600), ("src/search/query.ts", D, 400)],
-    [("● ", "ansi2", 400), ("Read ", F, 600), ("src/search/facets.ts", D, 400)],
-    [("● ", "ansi2", 400), ("Update ", F, 600), ("src/search/facets.ts", D, 400)],
-    [("   14 ", D, 400), ("+ export function facetCounts(hits, fields) {", "ansi2", 400)],
-    [("   15 ", D, 400), ("+   const counts = new Map();", "ansi2", 400)],
-    [("   16 ", D, 400), ("+   for (const hit of hits) {", "ansi2", 400)],
-    [("   17 ", D, 400), ("+     for (const f of fields) bump(counts, f, hit[f]);", "ansi2", 400)],
-    [("   18 ", D, 400), ("+   }", "ansi2", 400)],
-    [("   19 ", D, 400), ("+   return counts;", "ansi2", 400)],
-    [("   20 ", D, 400), ("+ }", "ansi2", 400)],
+    [("● ", G, 400), ("Read ", F, 600), ("src/search/query.ts", D, 400)],
+    [("● ", G, 400), ("Read ", F, 600), ("src/search/facets.ts", D, 400)],
+    [("● ", G, 400), ("Update ", F, 600), ("src/search/facets.ts", D, 400)],
+    [("   14 ", D, 400), ("+ export function facetCounts(hits, fields) {", G, 400)],
+    [("   15 ", D, 400), ("+   const counts = new Map();", G, 400)],
+    [("   16 ", D, 400), ("+   for (const hit of hits) {", G, 400)],
+    [("   17 ", D, 400), ("+     for (const f of fields) bump(counts, f, hit[f]);", G, 400)],
+    [("   18 ", D, 400), ("+   }", G, 400)],
+    [("   19 ", D, 400), ("+   return counts;", G, 400)],
+    [("   20 ", D, 400), ("+ }", G, 400)],
     [],
-    [("● ", "ansi2", 400), ("Bash ", F, 600), ("npm test -- search", D, 400)],
-    [("  ✓ 42 tests passed ", "ansi2", 400), ("(1.8s)", D, 400)],
+    [("● ", G, 400), ("Bash ", F, 600), ("npm test -- search", D, 400)],
+    [("  ✓ 42 tests passed ", G, 400), ("(1.8s)", D, 400)],
     [],
     [("● ", F, 400), ("Every search now returns facet counts. Next: the", F, 400)],
     [("  chips in the results header, and a test for an", F, 400)],
     [("  empty hit list.", F, 400)],
     [],
-    [("● ", "ansi2", 400), ("Update ", F, 600), ("src/ui/ResultsHeader.tsx", D, 400)],
-    [("   31 ", D, 400), ("+ <div className=\"chips\">", "ansi2", 400)],
-    [("   32 ", D, 400), ("+   {facets.map((f) => <FilterChip {...f} />)}", "ansi2", 400)],
-    [("   33 ", D, 400), ("+ </div>", "ansi2", 400)],
+    [("● ", G, 400), ("Update ", F, 600), ("src/ui/ResultsHeader.tsx", D, 400)],
+    [("   31 ", D, 400), ("+ <div className=\"chips\">", G, 400)],
+    [("   32 ", D, 400), ("+   {facets.map((f) => <FilterChip {...f} />)}", G, 400)],
+    [("   33 ", D, 400), ("+ </div>", G, 400)],
     [],
+    [("● ", G, 400), ("Write ", F, 600), ("test/facets.test.ts", D, 400)],
+    [("   1 ", D, 400), ("+ test(\"an empty hit list keeps its facets\", () => {", G, 400)],
+    [("   2 ", D, 400), ("+   expect(facetCounts([], [\"brand\"])).toEqual(", G, 400)],
+    [("   3 ", D, 400), ("+     new Map([[\"brand\", new Map()]]));", G, 400)],
+    [("   4 ", D, 400), ("+ });", G, 400)],
     [],
+    [("● ", G, 400), ("Bash ", F, 600), ("npm test -- facets", D, 400)],
+    [("  ✓ 13 tests passed ", G, 400), ("(0.9s)", D, 400)],
     [],
-    [],
+    [("● ", F, 400), ("The README now documents the facets option.", F, 400)],
+], [
     [("✻ ", "working", 400), ("Wiring the chips… ", "working", 400), ("(1m 12s · esc to interrupt)", D, 400)],
     [],
-    [("› ", M, 400), ("", F, 400)],
+    [("› ", M, 400)],
     [],
     [("  ? for shortcuts", D, 400)],
-], "left")
+])
 # The prompt's box and cursor.
-add(f'<path d="M{lx + 14} {PY + 30 + 12 + 14 + 21 * 30 - 15}h{lw - 28}" stroke="{paint("raised")[0]}"/>')
-add(f'<path d="M{lx + 14} {PY + 30 + 12 + 14 + 21 * 32 - 15}h{lw - 28}" stroke="{paint("raised")[0]}"/>')
-rect(lx + 30, PY + 30 + 12 + 14 + 21 * 31 - 13, 8, 17, "terminal", op=0.85)
+pb = TOP + LH * (ROWS - 3)
+for ry_ in (pb - 15 - LH, pb - 15 + LH):
+    add(f'<path d="M{LX + 14} {ry_}h{LW - 28}" stroke="{paint("raised")[0]}"/>')
+rect(LX + 30, pb - 13, 8, 17, "terminal", op=0.85)
+
+pane(RX, RW, "codex", "Codex", "t7", "working", False, [
+    [("› ", M, 400), ("Review src/search/facets.ts: does an empty hit list", F, 400)],
+    [("  still return every facet, at zero?", F, 400)],
+    [],
+    [("• ", D, 400), ("Explored", F, 600)],
+    [("  └ ", D, 400), ("Read facets.ts, query.ts, facets.test.ts", D, 400)],
+    [],
+    [("• ", D, 400), ("Ran ", F, 600), ("npm test -- facets", D, 400)],
+    [("  └ ", D, 400), ("13 passed", G, 400)],
+    [],
+    [("• ", F, 400), ("facetCounts keeps a field with no hits, but the", F, 400)],
+    [("  route drops empty maps before it answers.", F, 400)],
+], [
+    [("• ", "working", 400), ("Working ", "working", 400), ("(38s • esc to interrupt)", D, 400)],
+    [],
+    [("› ", M, 400), ("Ask for a follow-up", D, 400)],
+    [],
+    [("  ⏎ send   ⌃J newline", D, 400)],
+])
 
 # ---- side panel: roundup-files, 368px ----
-# The same folder as the pane: three files modified, two new, three commits ahead.
-def r(v):
-    return round(v, 1)
-
+# The same folder as the panes: three files modified, two new, three commits ahead.
 rect(PX, PY, PW, PH, "background", rx=10)
 frame(PX, PY, PW, PH, "border", rx=10)
 X0, X1 = PX + 1, PX + PW - 1  # inside the 1px border
@@ -411,17 +467,14 @@ sx = X0 + 12 + tw("Files", 13, 600) + 8
 CHANGED = 5
 w_all = 8 + tw("All", 12) + 8
 w_ch = 8 + tw("Changed", 12) + 5 + tw(str(CHANGED), 11) + 8
-rect(r(sx), hcy - 12, r(2 + w_all + 2 + w_ch + 2), 24, "raised", rx=7)
-for view, label, bw, bx_ in [("all", "All", w_all, sx + 2), ("changed", "Changed", w_ch, sx + 2 + w_all + 2)]:
-    on = VIEW == view
-    if on:
-        rect(r(bx_), hcy - 10, r(bw), 20, "background", rx=5)
-    text(r(bx_ + 8), hcy + 4, label, 12, "foreground" if on else "dim")
-    if view == "changed":
-        text(r(bx_ + 8 + tw(label, 12) + 5), hcy + 4, str(CHANGED), 11, "muted" if on else "dim")
+rect(sx, hcy - 12, 2 + w_all + 2 + w_ch + 2, 24, "raised", rx=7)
+rect(sx + 2, hcy - 10, w_all, 20, "background", rx=5)
+text(sx + 2 + 8, hcy + 4, "All", 12, "foreground")
+text(sx + 4 + w_all + 8, hcy + 4, "Changed", 12, "dim")
+text(sx + 4 + w_all + 8 + tw("Changed", 12) + 5, hcy + 4, str(CHANGED), 11, "dim")
 folder = "atlas-search-filters"
 text(X1 - 12, hcy + 4, folder, 12, "dim", anchor="end")
-file_icon(ICONS["rootFolder"], r(X1 - 12 - tw(folder, 12) - 6 - 14), hcy - 7, 14)
+file_icon(ICONS["rootFolder"], X1 - 12 - tw(folder, 12) - 6 - 14, hcy - 7, 14)
 line(X0, PY + 1 + 41.5, X1, PY + 1 + 41.5, "border")
 
 # Branch row, 46px: the branch, ↑ahead, the lines changed; under it the bar of modified and new paths.
@@ -429,29 +482,28 @@ by = PY + 1 + 42
 l1 = by + 14.5
 icon("branch", X0 + 12, l1 - 6, 12, "muted")
 text(X0 + 30, l1 + 4, "search-filters", 12, "foreground", 500)
-text(r(X0 + 30 + tw("search-filters", 12, 500) + 6), l1 + 4, "↑3", 12, "muted")
+text(X0 + 30 + tw("search-filters", 12, 500) + 6, l1 + 4, "↑3", 12, "muted")
 text(X1 - 12, l1 + 4, "−14", 11.5, "ansi1", anchor="end")
-text(r(X1 - 12 - tw("−14", 11.5) - 6), l1 + 4, "+48", 11.5, "ansi2", anchor="end")
+text(X1 - 12 - tw("−14", 11.5) - 6, l1 + 4, "+48", 11.5, "ansi2", anchor="end")
 bar = by + 6.5 + 16 + 7 + 3
 room = PW - 26 - 26 * 2 - 2 * 2
 xb = X0 + 12
 for n, col in [(3, "ansi3"), (2, "ansi2")]:
     w_ = max(3, room * n / 5)
-    rect(r(xb), bar, r(w_), 4, col, rx=2)
+    rect(xb, bar, w_, 4, col, rx=2)
     xb += w_ + 2
 text(X1 - 12 - 26, bar + 4.5, "3", 10.5, "ansi3", anchor="end")
 text(X1 - 12, bar + 4.5, "2", 10.5, "ansi2", anchor="end")
 line(X0, by + 45.5, X1, by + 45.5, "border")
 
-# Search field, 28px; in All the source switch at its end, lit: search reads git's files.
+# Search field, 28px, with the source switch at its end, lit: search reads git's files.
 sy = by + 46 + 8
 rect(X0 + 8, sy, X1 - X0 - 16, 28, "canvas", rx=7)
 frame(X0 + 8, sy, X1 - X0 - 16, 28, "border", rx=7)
 icon("search", X0 + 16, sy + 7.5, 13, "dim")
 text(X0 + 16 + 13 + 6, sy + 18, "Search files", 12, "dim")
-if VIEW == "all":
-    rect(X1 - 16 - 20, sy + 4, 20, 20, "raised", rx=5)
-    icon("branch", X1 - 16 - 20 + 3.5, sy + 7.5, 13, "accent")
+rect(X1 - 16 - 20, sy + 4, 20, 20, "raised", rx=5)
+icon("branch", X1 - 16 - 20 + 3.5, sy + 7.5, 13, "accent")
 
 # The tree: 26px rows, 14px a level. Names in their status color, files end with +N −N and their
 # letter, folders with a dot and count for new, modified and deleted below them, and their +N −N.
@@ -479,51 +531,41 @@ def frow(y, rel, depth, folder=False, open_=False, st=None, lines=(0, 0), counts
     parts += [(f"−{lines[1]}", "ansi1", False)] if lines[1] else []
     for s, col, dot in reversed(parts):
         rr -= 6
-        text(r(rr), cy + 4, s, 11, col, anchor="end")
+        text(rr, cy + 4, s, 11, col, anchor="end")
         rr -= tw(s, 11)
         if dot:
             add(f'<circle cx="{r(rr - 6)}" cy="{cy}" r="3" fill="{paint(col)[0]}"/>')
             rr -= 3 + 6
 
-if VIEW == "all":
-    tree = [
-        (".github", 0, dict(folder=True)),
-        ("node_modules", 0, dict(folder=True, ignored=True)),
-        ("public", 0, dict(folder=True)),
-        ("src", 0, dict(folder=True, open_=True, counts=(1, 3, 0), lines=(48, 14))),
-        ("src/search", 1, dict(folder=True, open_=True, counts=(0, 2, 0), lines=(31, 9))),
-        ("src/search/facets.ts", 2, dict(st="M", lines=(24, 3), selected=True)),
-        ("src/search/index.ts", 2, {}),
-        ("src/search/query.ts", 2, dict(st="M", lines=(7, 6))),
-        ("src/search/ranking.ts", 2, {}),
-        ("src/ui", 1, dict(folder=True, open_=True, counts=(1, 1, 0), lines=(17, 5))),
-        ("src/ui/FilterChip.tsx", 2, dict(st="?")),
-        ("src/ui/ResultsHeader.tsx", 2, dict(st="M", lines=(17, 5))),
-        ("src/ui/SearchBox.tsx", 2, {}),
-        ("src/main.ts", 1, {}),
-        ("test", 0, dict(folder=True, open_=True, counts=(1, 0, 0))),
-        ("test/facets.test.ts", 1, dict(st="?")),
-        ("test/query.test.ts", 1, {}),
-        (".gitignore", 0, {}),
-        ("index.html", 0, {}),
-        ("package.json", 0, {}),
-        ("package-lock.json", 0, {}),
-        ("README.md", 0, {}),
-        ("tsconfig.json", 0, {}),
-        ("vite.config.ts", 0, {}),
-    ]
-else:
-    tree = [
-        ("src", 0, dict(folder=True, open_=True, counts=(1, 3, 0), lines=(48, 14))),
-        ("src/search", 1, dict(folder=True, open_=True, counts=(0, 2, 0), lines=(31, 9))),
-        ("src/search/facets.ts", 2, dict(st="M", lines=(24, 3), selected=True)),
-        ("src/search/query.ts", 2, dict(st="M", lines=(7, 6))),
-        ("src/ui", 1, dict(folder=True, open_=True, counts=(1, 1, 0), lines=(17, 5))),
-        ("src/ui/FilterChip.tsx", 2, dict(st="?")),
-        ("src/ui/ResultsHeader.tsx", 2, dict(st="M", lines=(17, 5))),
-        ("test", 0, dict(folder=True, open_=True, counts=(1, 0, 0))),
-        ("test/facets.test.ts", 1, dict(st="?")),
-    ]
+tree = [
+    (".github", 0, dict(folder=True)),
+    ("docs", 0, dict(folder=True)),
+    ("node_modules", 0, dict(folder=True, ignored=True)),
+    ("public", 0, dict(folder=True)),
+    ("src", 0, dict(folder=True, open_=True, counts=(1, 3, 0), lines=(48, 14))),
+    ("src/search", 1, dict(folder=True, open_=True, counts=(0, 2, 0), lines=(31, 9))),
+    ("src/search/facets.ts", 2, dict(st="M", lines=(24, 3))),
+    ("src/search/index.ts", 2, {}),
+    ("src/search/query.ts", 2, dict(st="M", lines=(7, 6))),
+    ("src/search/ranking.ts", 2, {}),
+    ("src/ui", 1, dict(folder=True, open_=True, counts=(1, 1, 0), lines=(17, 5))),
+    ("src/ui/FilterChip.tsx", 2, dict(st="?")),
+    ("src/ui/ResultsHeader.tsx", 2, dict(st="M", lines=(17, 5))),
+    ("src/ui/SearchBox.tsx", 2, {}),
+    ("src/main.ts", 1, {}),
+    ("test", 0, dict(folder=True, open_=True, counts=(1, 0, 0))),
+    ("test/facets.test.ts", 1, dict(st="?")),
+    ("test/query.test.ts", 1, {}),
+    (".gitignore", 0, {}),
+    ("CONTRIBUTING.md", 0, {}),
+    ("index.html", 0, {}),
+    ("LICENSE", 0, {}),
+    ("package.json", 0, {}),
+    ("package-lock.json", 0, {}),
+    ("README.md", 0, dict(selected=True)),
+    ("tsconfig.json", 0, {}),
+    ("vite.config.ts", 0, {}),
+]
 ly = sy + 28 + 4
 for i, (rel, depth, kw) in enumerate(tree):
     frow(ly + 26 * i, rel, depth, **kw)
@@ -537,8 +579,138 @@ icon("branch", WX + 128, SY + 8, 12, "dim")
 text(WX + 145, SY + 18, "search-filters", 11.5, "muted")
 # Herdr's workspace-status mod: a dim dot, the count, and the blocked ones in their color.
 add(f'<circle cx="{WX + 243}" cy="{SY + 14}" r="3" fill="{paint("dim")[0]}"/>')
-spans(WX + 252, SY + 18, [("7 agents", "muted", 400), ("  · 1 needs you", "blocked", 400)], 11.5, UI)
+spans(WX + 252, SY + 18, [("9 agents", "muted", 400), ("  · 1 needs you", "blocked", 400)], 11.5, UI)
 text(W - 14, SY + 18, "⌘⇧P  commands", 11, "dim", anchor="end")
+
+# ---- roundup-preview's floating window: README.md, rendered ----
+# floatSpec: 0.6 of the window's width, 0.75 of its height; dragged up a little, so the
+# panes' last lines show below it.
+FW, FH = round(W * 0.6), round(H * 0.75)
+FX, FT = (W - FW) // 2, (H - FH) // 2 - 22
+rect(FX - 6, FT + 14, FW + 12, FH + 10, "#000000", rx=16, op=0.6)
+out[-1] = out[-1].replace("/>", ' filter="url(#shadow)"/>')
+rect(FX, FT, FW, FH, "background", rx=10)
+frame(FX, FT, FW, FH, "border", rx=10)
+
+# Header, 42px: name, folder and size; at the right the viewer's ToC and Preview | Raw, then
+# ⋯ (the menu), Open in tab and Close.
+hy = FT + 21
+text(FX + 14, hy + 4.5, "README.md", 13, "foreground", 600)
+px_ = FX + 14 + tw("README.md", 13, 600) + 8
+text(px_, hy + 4, "/Users/sam/code/atlas-search-filters", 12, "dim")
+px_ += tw("/Users/sam/code/atlas-search-filters", 12) + 8
+text(px_, hy + 4, "3.1 KB", 12, "dim")
+line(FX + 1, FT + 41.5, FX + FW - 1, FT + 41.5, "border")
+
+def button(x, glyph, color="muted"):
+    rect(x, hy - 14, 28, 28, "chrome", rx=7)
+    icon(glyph, x + 7, hy - 7, 14, color, sw=2)
+
+bx = FX + FW - 10 - 28
+button(bx, "close")
+bx -= 8 + 28
+button(bx, "to-tab")
+bx -= 8 + 28
+button(bx, "more")
+# Preview | Raw: 2px padding, buttons 10px aside, Preview on.
+seg = [("Preview", True), ("Raw", False)]
+sw_ = 2 + sum(10 + tw(l, 12) + 10 for l, _ in seg) + 2 * (len(seg) - 1) + 2
+bx -= 8 + sw_
+rect(bx, hy - 12.5, sw_, 25, "chrome", rx=7)
+sx_ = bx + 2
+for label, on in seg:
+    bw = 10 + tw(label, 12) + 10
+    if on:
+        rect(sx_, hy - 10.5, bw, 21, "raised", rx=5)
+    text(sx_ + 10, hy + 4, label, 12, "foreground" if on else "muted")
+    sx_ += bw + 2
+bx -= 6 + 28
+button(bx, "toc")
+
+# The document: a 920px column, 40px aside, 28px from the top, 14.5px text.
+add(f'<defs><clipPath id="doc"><rect x="{FX + 1}" y="{FT + 42}" width="{FW - 2}" height="{FH - 43}" rx="9"/></clipPath></defs>')
+add('<g clip-path="url(#doc)">')
+DX = FX + (FW - min(920, FW)) / 2 + 40
+DW = min(920, FW) - 80
+BODY, LEAD = 14.5, 23
+
+def flow(x, y, width, runs, size=BODY, lead=LEAD, color="foreground"):
+    """Runs of text wrapped to `width` from baseline `y`: [(text, kind)], kind t (text), b (bold),
+    c (inline code) or a (link). Returns the baseline after the last line."""
+    pieces = []  # (text, kind), a space being (" ", None)
+    for s, kind in runs:
+        for part in ([s] if kind == "c" else re.findall(r"\s+|\S+", s)):
+            pieces.append((" ", None) if part.isspace() else (part, kind))
+    cx_ = x
+    for word, kind in pieces:
+        if kind is None:
+            cx_ += tw(" ", size) if cx_ > x else 0
+            continue
+        width_ = mw(word, 13) + 8 if kind == "c" else tw(word, size, 600 if kind == "b" else 400)
+        if cx_ > x and cx_ + width_ > x + width:
+            cx_, y = x, y + lead
+        if kind == "c":
+            rect(cx_, y - 13.5, width_, 19, "raised", rx=4)
+            text(cx_ + 4, y, word, 13, "foreground", family=MONO)
+        else:
+            text(cx_, y, word, size, "accent" if kind == "a" else color, 600 if kind == "b" else 400)
+        cx_ += width_
+    return y + lead
+
+def code(y, rows):
+    """A fenced block: one line per row of [(text, color)], on the chrome color."""
+    h = 14 + 19 * len(rows) + 10
+    rect(DX, y, DW, h, "chrome", rx=6)
+    frame(DX, y, DW, h, "border", rx=6)
+    for i, parts in enumerate(rows):
+        spans(DX + 14, y + 14 + 13 + 19 * i, [(s, c, 400) for s, c in parts], 13)
+    return y + h
+
+K, S, N, C, P = "ansi5", "ansi2", "ansi1", "dim", "terminal"
+y = FT + 42 + 28
+y += 26
+text(DX, y, "Atlas Search", 26, "foreground", 600)
+y += 14 + LEAD
+y = flow(DX, y, DW, [("Atlas is the search service behind the Acme storefront: one endpoint that takes a query and a "
+                      "set of filters and returns ranked hits with their facet counts, fast enough to run on every keystroke.", "t")])
+y += 16 + 20
+text(DX, y, "Facet filters", 20, "foreground", 600)
+y += 12 + LEAD
+y = flow(DX, y, DW, [("Every search counts the hits for each field it names in ", "t"), ("facets", "c"),
+                     (", so the results header can show how many hits each filter chip would leave.", "t")])
+y += 6
+for item in [
+    [("brand", "c"), (", ", "t"), ("color", "c"), (" and ", "t"), ("size", "c"), (" are counted on every request", "t")],
+    [("Counts follow the other active filters, ", "t"), ("not", "b"), (" the whole index", "t")],
+    [("An empty hit list still returns its facets, all at zero", "t")],
+]:
+    text(DX + 6, y, "•", BODY, "muted")
+    y = flow(DX + 22, y, DW - 22, item)
+y += 2
+y = code(y - 14, [
+    [("const ", K), ("res ", P), ("= ", P), ("await ", K), ("search", "ansi4"), ("({", P)],
+    [("  query: ", P), ('"trail shoes"', S), (",", P)],
+    [("  filters: { color: [", P), ('"blue"', S), ("] },", P)],
+    [("  facets: [", P), ('"brand"', S), (", ", P), ('"size"', S), ("],", P)],
+    [("});", P)],
+    [("// res.facets.get(", C), ('"size"', C), (") → Map { 42 → 12, 43 → 9, … }", C)],
+])
+y += 16 + 16 + 20
+text(DX, y, "Getting started", 20, "foreground", 600)
+y += 12 + LEAD
+y = flow(DX, y, DW, [("Install the dependencies and start the dev server. It reloads on every change under ", "t"),
+                     ("src/", "c"), (" and serves the demo storefront on port 5173.", "t")])
+y = code(y - 8, [
+    [("npm ", "ansi4"), ("install", P)],
+    [("npm ", "ansi4"), ("run dev", P)],
+])
+y += 16 + 16 + 20
+text(DX, y, "Tests", 20, "foreground", 600)
+y += 12 + LEAD
+y = flow(DX, y, DW, [("npm test", "c"), (" runs the unit tests in ", "t"), ("test/", "c"), ("; ", "t"),
+                     ("npm run e2e", "c"), (" drives a browser against the dev server. Read ", "t"),
+                     ("CONTRIBUTING.md", "a"), (" before you open a pull request.", "t")])
+add('</g>')
 
 add('</g></svg>')
 open(OUT, "w").write("\n".join(out) + "\n")
