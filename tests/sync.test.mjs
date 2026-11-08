@@ -1,4 +1,4 @@
-// node --test tests/ (Node 22 or later).
+// node --test 'tests/*.test.mjs' (Node 22.15 or later).
 // scripts/sync.sh runs for real, but into a temp folder that is both HERDR_APP_HOME and HOME, with a
 // herdr-app stub first on PATH: the person's Herdr App is never touched and the real herdr-app never runs.
 import { test, describe, beforeEach, afterEach } from "node:test";
@@ -36,7 +36,8 @@ printf '%s\\n' "$*" >> "$HERDR_STUB_LOG"
 if [ -n "\${HERDR_STUB_FAIL:-}" ]; then
   case "$*" in *"$HERDR_STUB_FAIL"*) exit "\${HERDR_STUB_CODE:-1}" ;; esac
 fi
-[ "$1" = status ] && echo '{"errors":[]}'
+none='{"errors":[]}'
+[ "$1" = status ] && printf '%s\\n' "\${HERDR_STUB_STATUS:-$none}"
 exit 0
 `;
 
@@ -67,6 +68,7 @@ function sync(src = repo, stub = {}) {
     HERDR_APP_HOME: app,
     HERDR_STUB_LOG: log,
     ...(stub.fail ? { HERDR_STUB_FAIL: stub.fail, HERDR_STUB_CODE: String(stub.code ?? 1) } : {}),
+    ...(stub.status ? { HERDR_STUB_STATUS: stub.status } : {}),
   };
   assert.ok(app.startsWith(tmp + "/"), "HERDR_APP_HOME is a temp folder");
   const found = spawnSync("sh", ["-c", "command -v herdr-app"], { env, encoding: "utf8" }).stdout.trim();
@@ -210,5 +212,19 @@ describe("scripts/sync.sh", { skip: process.platform === "win32" && "sync.sh is 
     const r = sync(repo, { fail: `/mods/${second}/`, code: 3 });
     assert.equal(r.status, 3);
     assert.deepEqual(calls(), [`check ${app}/mods/${first}/`, `check ${app}/mods/${second}/`]);
+  });
+
+  test("LAY-17: sync.sh fails when herdr-app status fails, though jq would succeed", () => {
+    const r = sync(repo, { fail: "status", code: 7 });
+    assert.notEqual(r.status, 0);
+    assert.match(r.stderr, /herdr-app status failed/);
+    assert.ok(existsSync(join(app, "layouts/Herdr-Roundup.json")), "the files are installed all the same");
+  });
+
+  test("LAY-17: sync.sh prints the errors Herdr App reports and fails", () => {
+    const r = sync(repo, { status: '{"errors":["layout.error: bad"]}' });
+    assert.notEqual(r.status, 0);
+    assert.match(r.stdout, /layout\.error: bad/);
+    assert.match(r.stderr, /reports the errors above/);
   });
 });

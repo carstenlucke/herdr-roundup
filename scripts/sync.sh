@@ -49,4 +49,10 @@ for d in "$app"/mods/roundup-*/; do
   [ -d "$d" ] || continue
   herdr-app check "$d"
 done
-herdr-app status | jq '.errors'
+# Fails when Herdr App doesn't answer or reports errors: the install then isn't known to work.
+# No pipe: without pipefail, a failing status would end in jq's exit code.
+status=$(herdr-app status) ||
+  { echo "Installed, but herdr-app status failed: is Herdr App running?" >&2; exit 1; }
+printf '%s\n' "$status" | jq '.errors'
+[ "$(printf '%s\n' "$status" | jq '.errors | length')" -eq 0 ] ||
+  { echo "Installed, but Herdr App reports the errors above" >&2; exit 1; }
