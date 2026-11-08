@@ -472,11 +472,11 @@ mod pane's is in shared `roundup-pane.names` (pane id → name). See
 same mod, `openOverlay({ mod: "roundup-pane", kind: "dialog", width: 380,
 height: 196, props: { rename: { pane, terminal, value, fallback } } })`,
 shaped like Herdr's `prompt`. It is also the `terminal_menu`: a popup
-(`mod.json` `overlay` 240×296), `props()` `{tab: "pane", target: {pane,
+(`mod.json` `overlay` 240×332), `props()` `{tab: "pane", target: {pane,
 terminal}, overlay}`, Herdr's pane menu item for item, drawn by `menu.js`.
-Closing is `closePane(pane, name)` from `close.js` (see `roundup-tabs`). Its
-key command `close` reaches every shown header; only the copy whose pane is
-`focused().pane` acts. Commands: `pane.focus`, `pane.split`, `pane.zoom`,
+Closing is `closePane(pane)` from `close.js` (see `roundup-tabs`). It has no
+key command: `cmd-shift-w` goes to `roundup-tabs.close-pane`, since a command
+of this mod would reach every shown header. Commands: `pane.focus`, `pane.split`, `pane.zoom`,
 `pane.close`, `tab.close`, `terminal.right_click`, `terminal.park`. Its own
 art: `rename.svg` (a pencil) and the shipped header's `split-right`,
 `split-down`, `zoom`, `unzoom`, `close`; the working spinner is Herdr's
@@ -690,7 +690,7 @@ and Reveal `open` / `open -R` (PowerShell `Invoke-Item` / `explorer.exe
 `picker`, `menu` and `machine-add` as overlays.
 
 **Keys:** the `layout:Herdr-Roundup` section binds `cmd-w` to
-`roundup-tabs.close` and `cmd-shift-w` to `roundup-pane.close`, in place of
+`roundup-tabs.close` and `cmd-shift-w` to `roundup-tabs.close-pane`, in place of
 global `tab.close` and `pane.close`.
 
 ## Watch out
