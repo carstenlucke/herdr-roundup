@@ -6,11 +6,15 @@
 // cybertron288/herdr-mods `filetree` (MIT, (c) 2026 cybertron288), itself a port of
 // claude-code-filetree (MIT, (c) 2026 Kurt Buhler). See THIRD_PARTY_NOTICES.md.
 import { exec, home, window } from "herdr";
+import { listScript, parseListing, BLOCKED_AT_MOST } from "./listing.js";
 
 export const PER_FOLDER = 500;
 // listDir reads at most this many entries of a folder: 100,000 took 5 s and 2.5 MB of output,
 // on every refresh, and past about 330,000 the output passes exec's 8 MiB.
 const READ_AT_MOST = 10000;
+// And prints at most this many bytes: names are short, but a link's target may take 4 KB.
+// Past it the entries end (more) and a target that doesn't fit is left out ("").
+const LIST_BUDGET = 7 * 1024 * 1024;
 // Search: folders it never enters, how deep and how much it reads.
 const PRUNE = [".git", "node_modules", "target", ".venv", "venv", "__pycache__", "dist", "build", ".next", ".nuxt", ".cache", ".gradle", ".idea", "vendor", "Pods", ".tox", ".mypy_cache", ".pytest_cache", "coverage"];
 const HOME_PRUNE = ["Library", "AppData", ".Trash"];
@@ -65,39 +69,49 @@ export function compare(a, b) {
 }
 export const sortEntries = (list) => list.sort((a, b) => Number(b.dir) - Number(a.dir) || compare(a.name, b.name));
 
-// One folder: [{ name, dir }], folders first, the first PER_FOLDER of them in that order.
-// `more`: it held more. Up to READ_AT_MOST entries are read and sorted first: a cut while
-// reading drops in the shell's order (dotfiles come last) rather than the shown one, so only
-// a folder larger than that may miss a few of its first PER_FOLDER.
+// One folder: [{ name, dir, link, broken, blocked }] (link: a link's target as written, ""
+// when it can't be read or didn't fit LIST_BUDGET, null for no link; broken: a link that
+// points nowhere; blocked: one whose target is out of reach, so whether it's there can't be
+// told), folders first, the first PER_FOLDER of them in that order.
+// `more`: it held more. Up to READ_AT_MOST entries (and LIST_BUDGET bytes) are read and
+// sorted first: a cut while reading drops in the shell's order (dotfiles come last) rather
+// than the shown one, so only a folder larger than that may miss a few of its first PER_FOLDER.
 export async function listDir(path, on) {
   const windowsDirectory = async () => {
     // Windows PowerShell otherwise uses the console code page; exec decodes UTF-8.
     // Links keep directory attributes even when dangling; check their target.
-    // Other reparse points (OneDrive's folders) have no LinkType and are folders.
+    // Only symlinks and junctions are links: other reparse points (OneDrive's folders) are
+    // folders, and a hard link (PowerShell 5.1 gives it a LinkType and a Target too) is a
+    // file. LinkType is read only on reparse points: reading it opens the file.
     // PowerShell reads curly single quotes as quotes too, so they're doubled like '.
-    const r = await exec("powershell", ["-NoProfile", "-Command", `[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); & { param($p) @(Get-ChildItem -LiteralPath $p -Force -ErrorAction Stop | Where-Object Name -ne '.git' | Select-Object -First ${READ_AT_MOST} | ForEach-Object { @{ name=$_.Name; dir=($_.PSIsContainer -and (-not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -or -not $_.LinkType -or ($_.Target -and [IO.Directory]::Exists(([IO.Path]::Combine([IO.Path]::GetDirectoryName($_.FullName), $_.Target[0])))))) } }) | ConvertTo-Json -Compress } ${psQuote(path)}`], { on });
+    // link: a link's target as written ("" when it can't be read); broken: it points nowhere.
+    // LIST_BUDGET: JSON takes at most 6 bytes per UTF-16 unit of a string (\uXXXX; else at
+    // most 3 in UTF-8), 128 cover an entry's keys, values and commas, 64 the frame. An entry
+    // past the budget ends the list (cut); a target that doesn't fit becomes "", after dir and
+    // broken came from it. A target Test-Path doesn't find is asked once more, for the first
+    // BLOCKED_AT_MOST: no access to it makes the link blocked, not broken.
+    const r = await exec("powershell", ["-NoProfile", "-Command", `[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); & { param($p) $rem = ${LIST_BUDGET} - 64; $cut = $false; $nb = 0; $e = [Collections.Generic.List[object]]::new(); foreach ($i in @(Get-ChildItem -LiteralPath $p -Force -ErrorAction Stop | Where-Object Name -ne '.git' | Select-Object -First ${READ_AT_MOST})) { $c = 128 + 6 * $i.Name.Length; if ($c -gt $rem) { $cut = $true; break }; $rem -= $c; $rp = [bool]($i.Attributes -band [IO.FileAttributes]::ReparsePoint); $isLink = $rp -and ($i.LinkType -in 'SymbolicLink','Junction'); $t = if ($isLink) { $tg = $i.Target; if ($tg) { @($tg)[0] } else { '' } } else { $null }; $at = if ($t) { [IO.Path]::Combine([IO.Path]::GetDirectoryName($i.FullName), $t) } else { $null }; $dir = [bool]($i.PSIsContainer -and (-not $isLink -or ($at -and [IO.Directory]::Exists($at)))); $broken = $false; $blocked = $false; if ($at -and -not (Test-Path -LiteralPath $at)) { if ($nb -lt ${BLOCKED_AT_MOST}) { $nb++; try { $null = [IO.File]::GetAttributes($at) } catch [UnauthorizedAccessException] { $blocked = $true } catch { $broken = $true } } else { $broken = $true } }; if ($t) { if (6 * $t.Length -le $rem) { $rem -= 6 * $t.Length } else { $t = '' } }; $e.Add(@{ name=$i.Name; dir=$dir; link=$t; broken=$broken; blocked=$blocked }) }; ConvertTo-Json -InputObject @{ e = $e; cut = $cut } -Compress -Depth 4 } ${psQuote(path)}`], { on });
     if (r.code !== 0) throw new Error(r.stderr || "Cannot list this folder");
-    const result = JSON.parse(r.stdout || "[]");
-    return Array.isArray(result) ? result : [result];
+    const result = JSON.parse(r.stdout || "{}"), e = result.e ?? [];
+    return { entries: (Array.isArray(e) ? e : [e]).map((x) => ({ name: x.name, dir: Boolean(x.dir), link: x.link ?? null, broken: Boolean(x.broken), blocked: Boolean(x.blocked) })), cut: Boolean(result.cut) };
   };
-  let list;
-  if (windows(on)) list = await windowsDirectory();
+  let read;
+  if (windows(on)) read = await windowsDirectory();
   else {
-    const script = `n=0; for p in "$1"/* "$1"/.[!.]* "$1"/..?*; do [ -e "$p" ] || [ -L "$p" ] || continue; name=\${p##*/}; [ "$name" = .git ] && continue; if [ -d "$p" ]; then kind=d; else kind=f; fi; printf "%s\\0%s\\0" "$kind" "$name"; n=$((n+1)); [ "$n" -ge ${READ_AT_MOST} ] && break; done; test -d "$1"`;
+    const script = listScript(READ_AT_MOST, LIST_BUDGET);
     let r;
     try { r = await exec("sh", ["-c", script, "roundup-files", path], { on }); }
     catch (e) {
-      if (noSh(e, on)) list = await windowsDirectory();
+      if (noSh(e, on)) read = await windowsDirectory();
       else throw e;
     }
-    if (!list) {
+    if (!read) {
       if (r.code !== 0) throw new Error(r.stderr || "Cannot list this folder");
-      const fields = r.stdout.split("\0");
-      list = [];
-      for (let i = 0; i + 1 < fields.length; i += 2) list.push({ name: fields[i + 1], dir: fields[i] === "d" });
+      read = parseListing(r.stdout);
     }
   }
-  return { entries: sortEntries(list).slice(0, PER_FOLDER), more: list.length > PER_FOLDER };
+  const list = read.entries;
+  return { entries: sortEntries(list).slice(0, PER_FOLDER), more: read.cut || list.length > PER_FOLDER };
 }
 
 // Every path below root, "/"-separated and relative: { dirs: Set, all: [], full, cut }.

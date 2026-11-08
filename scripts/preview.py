@@ -1,7 +1,7 @@
 # Draws the Herdr-Roundup window as an SVG, with made-up spaces, agents, terminals and files:
 # no one's real spaces, paths or sessions. Sizes come from layouts/Herdr-Roundup.json and
 # the roundup- mods, colors from the graphite theme. The active tab has two panes side by
-# side, the side panel shows roundup-files, and roundup-preview's floating window shows the
+# side, the side panel shows roundup-files (with a symlink, AGENTS.md), and roundup-preview's floating window shows the
 # project's README. Run from the repo:
 #   python3 scripts/preview.py . layouts/Herdr-Roundup.svg
 #   rsvg-convert -z 2 layouts/Herdr-Roundup.svg -o preview.png
@@ -41,6 +41,8 @@ ICON = {
     "close": '<path d="M18 6 6 18M6 6l12 12"/>',
     "chevron-down": '<path d="m6 9 6 6 6-6"/>',
     "chevron-right": '<path d="m9 18 6-6-6-6"/>',
+    # roundup-files' link.svg: the arrow after a symlink's name.
+    "link": '<path d="M7 7h10v10"/><path d="M7 17 17 7"/>',
     # roundup-preview's own icons (toc.svg and more.svg drawn at 16, here at 24).
     "toc": '<path d="M3.75 6h16.5M7.5 12h12.75M7.5 18h12.75"/>',
     "more": '<circle cx="5.25" cy="12" r="1.95" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.95" fill="currentColor" stroke="none"/><circle cx="18.75" cy="12" r="1.95" fill="currentColor" stroke="none"/>',
@@ -93,11 +95,12 @@ def line(x1, y1, x2, y2, color):
     c, o = paint(color)
     add(f'<path d="M{r(x1)} {r(y1)}L{r(x2)} {r(y2)}" stroke="{c}" stroke-opacity="{o:.3f}" stroke-width="1"/>')
 
-def text(x, y, s, size=13, fill="foreground", weight=400, anchor="start", family=UI, spaces=False):
+def text(x, y, s, size=13, fill="foreground", weight=400, anchor="start", family=UI, spaces=False, italic=False):
     c, o = paint(fill)
     fo = f' fill-opacity="{o:.3f}"' if o < 1 else ""
     ws = ' xml:space="preserve"' if spaces else ""
-    add(f'<text x="{r(x)}" y="{r(y)}" font-family="{family}" font-size="{size}" font-weight="{weight}" fill="{c}"{fo} text-anchor="{anchor}"{ws}>{escape(s)}</text>')
+    it = ' font-style="italic"' if italic else ""
+    add(f'<text x="{r(x)}" y="{r(y)}" font-family="{family}" font-size="{size}" font-weight="{weight}"{it} fill="{c}"{fo} text-anchor="{anchor}"{ws}>{escape(s)}</text>')
 
 def spans(x, y, parts, size=13, family=MONO):
     """One line of text in several colors: [(text, color, weight), ...]."""
@@ -507,9 +510,10 @@ icon("branch", X1 - 16 - 20 + 3.5, sy + 7.5, 13, "accent")
 
 # The tree: 26px rows, 14px a level. Names in their status color, files end with +N −N and their
 # letter, folders with a dot and count for new, modified and deleted below them, and their +N −N.
+# A symlink: its name in italics and a 14px arrow in accent after it.
 STATUS = {"M": "ansi3", "?": "ansi2", "A": "ansi2", "D": "ansi1"}
 
-def frow(y, rel, depth, folder=False, open_=False, st=None, lines=(0, 0), counts=None, ignored=False, selected=False):
+def frow(y, rel, depth, folder=False, open_=False, st=None, lines=(0, 0), counts=None, ignored=False, selected=False, link=False):
     x0, x1 = X0 + 4, X1 - 4
     if selected:
         rect(x0, y, x1 - x0, 26, "selected", rx=6)
@@ -521,7 +525,10 @@ def frow(y, rel, depth, folder=False, open_=False, st=None, lines=(0, 0), counts
     file_icon(icon_for(rel, folder, open_), x, cy - 8, 16, 0.5 if ignored else 1)
     x += 16 + 6
     color = "dim" if ignored else STATUS.get(st, "foreground")
-    text(x, cy + 4.5, rel.split("/")[-1], 13, color)
+    name = rel.split("/")[-1]
+    text(x, cy + 4.5, name, 13, color, italic=link)
+    if link:
+        icon("link", x + tw(name, 13) + 6, cy - 7, 14, "accent", sw=2.5)
     rr = x1 - 10
     if st and not folder:
         text(rr, cy + 4, st, 11, color, 600, anchor="end")
@@ -557,6 +564,7 @@ tree = [
     ("test/facets.test.ts", 1, dict(st="?")),
     ("test/query.test.ts", 1, {}),
     (".gitignore", 0, {}),
+    ("AGENTS.md", 0, dict(link=True)),
     ("CONTRIBUTING.md", 0, {}),
     ("index.html", 0, {}),
     ("LICENSE", 0, {}),
