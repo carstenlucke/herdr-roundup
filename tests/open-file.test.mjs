@@ -3,7 +3,7 @@ import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  OPEN, MOVED, OPENING, FLOAT, previewId, shownIn, remember, marked, madePane, openTab, openCommand, isOpen, fresh, answered, unanswered, placed,
+  OPEN, OPEN_V2, MOVED, OPENING, FLOAT, previewId, upgraded, shownIn, remember, marked, madePane, openTab, openCommand, isOpen, fresh, answered, unanswered, placed,
 } from "../mods/roundup-preview/open-file.js";
 
 test("roundup-files' open-file.js is a copy of roundup-preview's", () => {
@@ -137,6 +137,31 @@ test("openTab: overlapping opens with a late second pane give no pane a wrong fi
   until(12000); openTab(h.api, "/r/d.md", null, wait);
   until(12100); h.add("pD"); until(13000);
   assert.deepEqual(Object.values(h.state[OPEN]).map((e) => e.pane), ["pD"]);
+});
+
+test("upgraded: tabs recorded under open.v2 count beside open.v3's", () => {
+  const v2 = { [previewId("/r/a.md")]: { pane: "p1", token: "t1" }, [previewId("C:\\R\\B.md", "vps")]: { pane: "p2", token: "t2" }, bad: { pane: "p3", token: "t3" } };
+  assert.deepEqual(upgraded(undefined, v2), { t1: entry("p1", "/r/a.md"), t2: entry("p2", "c:/r/b.md", "vps") });
+  assert.equal(shownIn(upgraded(undefined, v2), {}, "C:\\r\\b.md", "vps", new Set(["p2"])), "p2");
+  assert.deepEqual(upgraded({ t9: entry("p9", "/r/x.md"), t1: entry("p1", "/r/z.md") }, v2),
+    { t1: entry("p1", "/r/z.md"), t2: entry("p2", "c:/r/b.md", "vps"), t9: entry("p9", "/r/x.md") }, "open.v3's entries win, v2's are added");
+  assert.deepEqual(upgraded({ t9: entry("p9", "/r/x.md") }, null), { t9: entry("p9", "/r/x.md") });
+  assert.deepEqual(upgraded(undefined, undefined), {});
+});
+
+test("openTab after the upgrade: an open.v2 tab is focused, and keeps its MOVED once open.v3 is written", () => {
+  const h = herdr();
+  h.add("pOld");
+  h.state[OPEN_V2] = { [previewId("/r/a.md")]: { pane: "pOld", token: "tOld" } };
+  h.state[MOVED] = { tOld: "/r/b.md" };
+  openTab(h.api, "/r/b.md", null, wait);
+  assert.deepEqual(h.calls.at(-1), ["pane.focus", { pane: "pOld" }], "found by the file it moved to");
+  openTab(h.api, "/r/c.md", null, wait);
+  const token = h.calls.at(-1)[1].props.token;
+  until(300); h.add("pC"); until(1000);
+  assert.deepEqual(h.state[OPEN], { tOld: entry("pOld", "/r/a.md"), [token]: entry("pC", "/r/c.md") });
+  assert.deepEqual(h.state[MOVED], { tOld: "/r/b.md" });
+  assert.equal(h.state[OPEN_V2], null, "open.v2 goes once open.v3 holds its tabs");
 });
 
 test("openCommand: split modes and the props a tab gets", () => {

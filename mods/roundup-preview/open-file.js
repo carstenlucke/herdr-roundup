@@ -9,6 +9,7 @@ import { pathKey } from "./paths.js";
 // ".v3": before, OPEN was previewId(file, on) -> { pane, token }, which found a tab only by the
 // file it opened with; ".v2" before that: "<on>:<file>" -> pane and "<on>:<file>" -> file.
 export const OPEN = "roundup-preview.open.v3", MOVED = "roundup-preview.moved.v2";
+export const OPEN_V2 = "roundup-preview.open.v2";
 /** One key per file and machine, whichever way the path is written (C:\x and c:/X are one). */
 export const previewId = (file, on) => JSON.stringify([on ?? null, pathKey(file)]);
 /** A token unique enough to tell one open, window or panel copy from another. */
@@ -22,6 +23,22 @@ export function shownIn(open, moved, file, on, alive) {
     if (e?.file && alive.has(e.pane) && previewId(moved?.[token] ?? e.file, e.on) === want) return e.pane;
   }
   return null;
+}
+
+/** OPEN with the tabs `v2` (OPEN_V2's map) recorded added, `open`'s own entries first, so tabs
+ *  opened before ".v3" are still found, and remember keeps their MOVED (openTab then clears
+ *  OPEN_V2). A v2 id names the machine and the path's key, which serves as the file: previewId
+ *  gives the same id for it. */
+export function upgraded(open, v2) {
+  if (!v2) return open ?? {};
+  const out = {};
+  for (const [id, e] of Object.entries(v2)) {
+    try {
+      const [on, file] = JSON.parse(id);
+      if (e?.token && e.pane && typeof file === "string") out[e.token] = { pane: e.pane, file, on: on ?? null };
+    } catch {}
+  }
+  return { ...out, ...(open ?? {}) };
 }
 
 /** OPEN and MOVED once `pane` (props.token `token`) was made for `file`. Entries for panes no
@@ -69,7 +86,8 @@ const TRIES = 5, STEP = 200;
  *  Herdr's { panes, run, shared, setShared }; `wait`: timerOf(cx); `done()` once it is settled. */
 export function openTab(api, file, on, wait, done = () => {}, space = null) {
   const { panes, run, shared, setShared } = api, ids = () => new Set(panes().map((p) => p.pane));
-  const shown = shownIn(shared(OPEN), shared(MOVED), file, on, ids());
+  const open = () => upgraded(shared(OPEN), shared(OPEN_V2));
+  const shown = shownIn(open(), shared(MOVED), file, on, ids());
   if (shown) { run("pane.focus", { pane: shown }); done(); return; }
   const token = newToken(), since = Date.now(), before = ids();
   setShared(OPENING, marked(shared(OPENING), token, { since, until: null }, since));
@@ -78,8 +96,9 @@ export function openTab(api, file, on, wait, done = () => {}, space = null) {
     const got = madePane(shared(OPENING), token, before, panes());
     if (got.wait && tries > 0) { wait(STEP, (wait) => attempt(tries - 1, wait)); return; }
     if (got.pane) {
-      const next = remember(shared(OPEN), shared(MOVED), file, on, got.pane, token, ids());
+      const next = remember(open(), shared(MOVED), file, on, got.pane, token, ids());
       setShared(OPEN, next.open); setShared(MOVED, next.moved);
+      if (shared(OPEN_V2) != null) setShared(OPEN_V2, null);
       setShared(OPENING, marked(shared(OPENING), token, { since, until: Date.now() }, Date.now()));
     }
     done();

@@ -597,7 +597,9 @@ A Cmd-double-click, Enter or the menu's Open in tab on a file runs `tab.new {nam
 nothing it made and a mod pane doesn't learn its own id (issue #17), so the
 opener takes the one `roundup-preview` pane that wasn't in `panes()` before
 (looking again every 200ms, five times) and records it in shared
-`roundup-preview.open.v3` (token → `{pane, file, on}`, the file it opened with). Opens in flight sit in
+`roundup-preview.open.v3` (token → `{pane, file, on}`, the file it opened with). Tabs
+recorded under `roundup-preview.open.v2` (`previewId` → `{pane, token}`) count beside
+them (`upgraded`) until the next record, which takes them over and clears that key. Opens in flight sit in
 shared `roundup-preview.opening` (token → `{since, until}`): when another
 open overlapped this one in time, or two new panes came, it records none, so
 the next click opens another tab rather than focusing a wrong one.
