@@ -551,7 +551,11 @@ when its first record has more `;` than `,` outside quoted cells. Programs on ma
 `sh` (`wc -c`, `head -c`, `stat`, `cp`), `sips` (sizes), `osascript -l
 JavaScript` with PDFKit (pages, 1600px wide), `curl` and `file` (web
 images, after the click), `find`/`mv`/`rm` in its cache only, `git
-rev-parse`, the login shell for `$EDITOR`, `open`.
+rev-parse`, the login shell for `$EDITOR`, `open`. Key commands, for scripts
+(`scripts/smoke.sh`; none bound), reach every shown copy: `to-tab` (the floating
+window's Open in tab), `raw` (Raw on, where the viewer has it), `state` (each copy
+writes `{float, loads, raw, length, hash, error}` of its text under its file to
+shared `roundup-preview.debug`).
 
 **`roundup-files`** (clone of `files` 0.1.13, `place: "none"`, title
 "Files", `focusable: true`). `main.js` draws the panel and, with
@@ -681,7 +685,8 @@ closes it. Copy uses `cx.write_to_clipboard` and `notify`; Send `focused()`,
 and Reveal `open` / `open -R` (PowerShell `Invoke-Item` / `explorer.exe
 /select` on Windows, `xdg-open` elsewhere). Key commands (none bound):
 `focus`, `search`, `view:all`, `view:changed`, `source:git`,
-`source:disk`, `menu`. Own art: Symbols 0.0.26 by Miguel Solorio in
+`source:disk`, `menu`, and for scripts (`scripts/smoke.sh`) `tab:<rel>` (as
+Enter) and `float:<rel>` (as a double-click), `rel` below the shown folder. Own art: Symbols 0.0.26 by Miguel Solorio in
 `icons/` (245 SVGs, with `icons/LICENSE`) and `icons.js`, all written by
 `scripts/build-icons.mjs` (`docs/adr/0002-file-icon-set.md`); Herdr's
 `chevron-right`, `chevron-down`, `chevron-left`, `branch` and `search`.
@@ -944,6 +949,6 @@ global `tab.close` and `pane.close`.
   jumps there; in a code file or Raw, a selection copies with Cmd-C. Open
   in tab opens the tab even though the window closes at once, and the next
   Cmd-double-click on that file brings the tab back.
-- `node --test tests/` passes (Node 22 or later).
+- `node --test 'tests/*.test.mjs'` passes (Node 22.15 or later).
 - A folder without git shows "Not a git repository" and its files; one with
   more than 500 entries says so in the footer.

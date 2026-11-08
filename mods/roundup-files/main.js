@@ -93,6 +93,10 @@ export default class Files extends View {
         else if (c.startsWith("view:")) this.setView(c.slice(5), cx);
         else if (c.startsWith("source:")) this.setSource(c.slice(7), cx);
         else if (c === "menu") { const r = this.shown.find((x) => x.rel === this.cursor); if (r && !this.file) this.openKeyMenu(r); }
+        // For scripts (scripts/smoke.sh), with a path below the shown folder: what Enter on a
+        // file does (its tab in roundup-preview) and what a double-click does (the floating window).
+        else if (c.startsWith("tab:")) this.openPreview(c.slice(4), cx);
+        else if (c.startsWith("float:")) this.openFloat(c.slice(6));
         cx.notify();
       }
     });

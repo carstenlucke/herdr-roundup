@@ -466,6 +466,99 @@ t_vw27() {
 }
 case_ VW-27 t_vw27
 
+# ── opening files from the panel (the mods' script commands) ──────────────────────────────
+# roundup-files.tab:<rel> is Enter on a file, roundup-files.float:<rel> a double-click;
+# roundup-preview.to-tab / .raw / .state act in the shown preview copies (preview.js commands()).
+OPEN_KEY=roundup-preview.open.v3 FLOAT_KEY=roundup-preview.float DEBUG_KEY=roundup-preview.debug
+show_files >/dev/null 2>&1 || true
+sleep 2
+# The OPEN entry for a file: {pane, file, on} or empty.
+open_entry() { sh_get "$OPEN_KEY" | jq -c --arg f "$1" '[(. // {}) | to_entries[] | .value | select(.file == $f)][0] // empty'; }
+float_get() { sh_get "$FLOAT_KEY"; }
+# The preview's own readout of a file, after asking every shown copy for it.
+debug_of() { sh_get "$DEBUG_KEY" | jq -c --arg f "$1" '(. // {})[$f] // empty'; }
+
+t_opn14() {
+  local n0 n1 pane
+  n0=$(tabs_of "$SP_PV" | jq length)
+  cmd roundup-files.tab:notes.md >/dev/null || { fail "roundup-files.tab:notes.md failed"; return; }
+  wait_for 8 '[ "$(tabs_of "$SP_PV" | jq length)" -gt "$n0" ]' || { fail "no new tab (still $n0)"; return; }
+  wait_for 8 '[ -n "$(open_entry "$P/notes.md")" ]' || { fail "OPEN names no pane for notes.md: $(sh_get "$OPEN_KEY")"; return; }
+  pane=$(open_entry "$P/notes.md" | jq -r .pane)
+  n1=$(tabs_of "$SP_PV" | jq length)
+  cmd space.select --id "$SP_PV" >/dev/null
+  cmd roundup-files.tab:notes.md >/dev/null || { fail "the second roundup-files.tab:notes.md failed"; return; }
+  sleep 2
+  [ "$(tabs_of "$SP_PV" | jq length)" = "$n1" ] || { fail "a second open made another tab"; return; }
+  wait_for 5 '[ "$(status_json | jq -r ".focused_pane // empty")" = "$pane" ]' ||
+    { fail "focus is on $(status_json | jq -r .focused_pane), not the recorded $pane"; return; }
+  WHY="tab for notes.md recorded as $pane; the second open focused it"
+}
+case_ OPN-14 t_opn14
+
+# The notes.md tab from OPN-14 is in front: Raw on, then the file changes on disk.
+t_chg08() {
+  local before after l0
+  cmd roundup-preview.raw >/dev/null || { fail "roundup-preview.raw failed"; return; }
+  cmd roundup-preview.state >/dev/null || { fail "roundup-preview.state failed"; return; }
+  wait_for 5 '[ "$(debug_of "$P/notes.md" | jq -r .raw)" = true ]' || { fail "Raw isn't on: $(debug_of "$P/notes.md")"; return; }
+  before=$(debug_of "$P/notes.md"); l0=$(echo "$before" | jq .loads)
+  shot 36-notes-raw || true
+  printf '\nA line added on disk.\n' >> "$P/notes.md"
+  sleep 1.5
+  cmd roundup-preview.state >/dev/null || true
+  wait_for 5 'after=$(debug_of "$P/notes.md"); [ "$(echo "$after" | jq .loads)" -gt "$l0" ]' ||
+    { fail "no reload within ~1.5 s: $before -> $(debug_of "$P/notes.md")"; return; }
+  after=$(debug_of "$P/notes.md")
+  [ "$(echo "$after" | jq -r .hash)" != "$(echo "$before" | jq -r .hash)" ] || { fail "reloaded, but the same text: $after"; return; }
+  [ "$(echo "$after" | jq -r .raw)" = true ] || { fail "Raw was lost on the reload: $after"; return; }
+  shot 37-notes-raw-reloaded || true
+  WHY="reloaded ($l0 -> $(echo "$after" | jq .loads) loads), new text, Raw kept"
+}
+case_ CHG-08 t_chg08
+
+t_opn15() {
+  local f id
+  cmd roundup-files.float:data.json >/dev/null || { fail "roundup-files.float:data.json failed"; return; }
+  wait_for 8 'float_get | jq -e ".id and .token and .copy" >/dev/null' || { fail "FLOAT: $(float_get)"; return; }
+  status_json | jq -e '.overlays | index("roundup-preview")' >/dev/null ||
+    { fail "status lists no roundup-preview overlay: $(status_json | jq -c .overlays)"; return; }
+  f=$(float_get)
+  [ "$(echo "$f" | jq -r .file)" = "$P/data.json" ] || { fail "FLOAT shows $(echo "$f" | jq -r .file)"; return; }
+  shot 38-float || true
+  id=$(echo "$f" | jq -r .id)
+  cmd overlay.close --id "$id" >/dev/null || { fail "overlay.close $id failed"; return; }
+  wait_for 5 '[ "$(float_get)" = null ]' || { fail "FLOAT after overlay.close: $(float_get)"; return; }
+}
+case_ OPN-15 t_opn15
+
+t_win06() {
+  local n0
+  n0=$(tabs_of "$SP_PV" | jq length)
+  cmd roundup-files.float:code.ts >/dev/null || { fail "roundup-files.float:code.ts failed"; return; }
+  wait_for 8 'float_get | jq -e ".copy" >/dev/null' || { fail "no window: $(float_get)"; return; }
+  cmd roundup-preview.to-tab >/dev/null || { fail "roundup-preview.to-tab failed"; return; }
+  wait_for 8 '! status_json | jq -e ".overlays | index(\"roundup-preview\")" >/dev/null' || { fail "the window stayed: $(status_json | jq -c .overlays)"; return; }
+  wait_for 5 '[ "$(float_get)" = null ]' || { fail "FLOAT after Open in tab: $(float_get)"; return; }
+  [ "$(tabs_of "$SP_PV" | jq length)" -gt "$n0" ] || { fail "no tab opened"; return; }
+  wait_for 5 '[ -n "$(open_entry "$P/code.ts")" ]' || { fail "OPEN names no pane for code.ts: $(sh_get "$OPEN_KEY")"; return; }
+}
+case_ WIN-06 t_win06
+
+# FLT-10, first half: the window outlives a reload of roundup-files; it stays open into restart 1.
+t_flt10a() {
+  cmd space.select --id "$SP_PV" >/dev/null
+  cmd roundup-files.float:data.csv >/dev/null || { fail "roundup-files.float:data.csv failed"; return; }
+  wait_for 8 'float_get | jq -e ".copy" >/dev/null' || { fail "no window: $(float_get)"; return; }
+  # A save of the installed mod reloads every copy of it (the panel's too), as an update would.
+  echo "// smoke: reload $(date +%s)" >> "$TH/mods/roundup-files/main.js"
+  wait_for 8 'float_get | jq -e ".probe and .alive == .probe" >/dev/null' ||
+    { fail "the reloaded panel's probe wasn't answered: $(float_get)"; return; }
+  sleep 2
+  [ "$(float_get | jq -r .file)" = "$P/data.csv" ] || { fail "FLOAT after the reload: $(float_get)"; return; }
+}
+case_ FLT-10 t_flt10a
+
 # ── restart 1: what has to outlive it ─────────────────────────────────────────────────────
 PREFS_BEFORE=$(jq -c '.prefs // empty' "$TH/data/roundup-files/store.json" 2>/dev/null || true)
 quit_app
@@ -474,6 +567,19 @@ start_app
 [ "$(sh_get roundup-tabs.confirm-close)" = '"always"' ] || res seed FAIL "confirm-close \"always\" didn't survive the start"
 cmd space.select --id "$SP_LINKS" >/dev/null 2>&1 || true
 show_files >/dev/null 2>&1 || true
+
+# FLT-10, second half: the window open at the quit. If Herdr brings it back, FLOAT stays and is
+# answered; if not, the panel's probe goes unanswered and FLOAT is cleared within ~1.5 s.
+t_flt10b() {
+  if status_json | jq -e '.overlays | index("roundup-preview")' >/dev/null; then
+    wait_for 8 'float_get | jq -e ".probe and .alive == .probe" >/dev/null' || { fail "window back, FLOAT unanswered: $(float_get)"; return; }
+    WHY="Herdr brought the window back; FLOAT kept and answered"
+  else
+    wait_for 6 '[ "$(float_get)" = null ]' || { fail "no window after the restart, FLOAT still $(float_get)"; return; }
+    WHY="no window after the restart; the stale FLOAT was cleared"
+  fi
+}
+case_ FLT-10 t_flt10b
 sleep 2
 
 t_fil103b() {
@@ -541,6 +647,25 @@ t_cnf07() {
 }
 case_ CNF-07 t_cnf07
 
+# TAB-05, live: what the dialog calls a tab nobody named. herdr.d.ts says its name is its
+# position ("2"), while close.js (as Herdr's own tabs mod) looks for "tb<n>" to show the program.
+t_tab05() {
+  local extra open name
+  extra=$(cmd tab.new --space "$SP_TABS" | jq -r '.tab // empty') || { fail "tab.new failed"; return; }
+  wait_for 5 'tabs_of "$SP_TABS" | jq -e --arg t "$extra" "index(\$t)" >/dev/null' || { fail "no tab"; return; }
+  name=$(ls_json | jq -r --arg t "$extra" '.spaces[].tabs[] | select(.id == $t) | .name')
+  cmd "roundup-tabs.close:$extra" >/dev/null || { fail "roundup-tabs.close failed"; return; }
+  wait_for 5 '[ "$(sh_get roundup-confirm.open)" != null ]' || { fail "no dialog"; return; }
+  sleep 1
+  shot 51-confirm-unnamed-tab || true
+  open=$(sh_get roundup-confirm.open | jq -r '.')
+  cmd overlay.close --id "$open" >/dev/null 2>&1 || true
+  cmd tab.close --id "$extra" --confirmed true >/dev/null 2>&1 || true
+  WHY="unnamed tab's name in ls: \"$name\"; shot 51 shows the dialog's title"
+  return 2
+}
+case_ TAB-05 t_tab05
+
 # ── restart 2 ─────────────────────────────────────────────────────────────────────────────
 restart_app
 t_chr34b() {
@@ -582,7 +707,6 @@ case_ CHR-34 t_chr34c
 clean || res status FAIL "errors at the end: $(errors)"
 status_json > "$OUT/status-end.json" || true
 
-for id in OPN-14 OPN-15 FLT-10 WIN-06 CHG-08; do res "$id" skip "needs a debug command in the mod"; done
 echo
 if [ "$FAILS" = 0 ]; then echo "smoke: no failures"; else echo "smoke: $FAILS failed"; fi
 [ "$FAILS" = 0 ]
