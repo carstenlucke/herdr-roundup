@@ -6,6 +6,7 @@
 // cybertron288/herdr-mods `filetree` (MIT, (c) 2026 cybertron288), itself a port of
 // claude-code-filetree (MIT, (c) 2026 Kurt Buhler). See THIRD_PARTY_NOTICES.md.
 import { exec, home, window } from "herdr";
+import { listScript, parseListing } from "./listing.js";
 
 export const PER_FOLDER = 500;
 // listDir reads at most this many entries of a folder: 100,000 took 5 s and 2.5 MB of output,
@@ -74,10 +75,12 @@ export async function listDir(path, on) {
   const windowsDirectory = async () => {
     // Windows PowerShell otherwise uses the console code page; exec decodes UTF-8.
     // Links keep directory attributes even when dangling; check their target.
-    // Other reparse points (OneDrive's folders) have no LinkType and are folders.
+    // Only symlinks and junctions are links: other reparse points (OneDrive's folders) are
+    // folders, and a hard link (PowerShell 5.1 gives it a LinkType and a Target too) is a
+    // file. LinkType is read only on reparse points: reading it opens the file.
     // PowerShell reads curly single quotes as quotes too, so they're doubled like '.
-    // link: a link's target as written (junctions and symlinks); broken: it points nowhere.
-    const r = await exec("powershell", ["-NoProfile", "-Command", `[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); & { param($p) @(Get-ChildItem -LiteralPath $p -Force -ErrorAction Stop | Where-Object Name -ne '.git' | Select-Object -First ${READ_AT_MOST} | ForEach-Object { $t = if ($_.LinkType -and $_.Target) { @($_.Target)[0] } else { $null }; $at = if ($t) { [IO.Path]::Combine([IO.Path]::GetDirectoryName($_.FullName), $t) } else { $null }; @{ name=$_.Name; dir=($_.PSIsContainer -and (-not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -or -not $_.LinkType -or ($at -and [IO.Directory]::Exists($at)))); link=$t; broken=[bool]($at -and -not (Test-Path -LiteralPath $at)) } }) | ConvertTo-Json -Compress } ${psQuote(path)}`], { on });
+    // link: a link's target as written ("" when it can't be read); broken: it points nowhere.
+    const r = await exec("powershell", ["-NoProfile", "-Command", `[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); & { param($p) @(Get-ChildItem -LiteralPath $p -Force -ErrorAction Stop | Where-Object Name -ne '.git' | Select-Object -First ${READ_AT_MOST} | ForEach-Object { $rp = [bool]($_.Attributes -band [IO.FileAttributes]::ReparsePoint); $isLink = $rp -and ($_.LinkType -in 'SymbolicLink','Junction'); $t = if ($isLink) { $tg = $_.Target; if ($tg) { @($tg)[0] } else { '' } } else { $null }; $at = if ($t) { [IO.Path]::Combine([IO.Path]::GetDirectoryName($_.FullName), $t) } else { $null }; @{ name=$_.Name; dir=($_.PSIsContainer -and (-not $isLink -or ($at -and [IO.Directory]::Exists($at)))); link=$t; broken=[bool]($at -and -not (Test-Path -LiteralPath $at)) } }) | ConvertTo-Json -Compress } ${psQuote(path)}`], { on });
     if (r.code !== 0) throw new Error(r.stderr || "Cannot list this folder");
     const result = JSON.parse(r.stdout || "[]");
     return (Array.isArray(result) ? result : [result]).map((e) => ({ name: e.name, dir: Boolean(e.dir), link: e.link ?? null, broken: Boolean(e.broken) }));
@@ -85,9 +88,7 @@ export async function listDir(path, on) {
   let list;
   if (windows(on)) list = await windowsDirectory();
   else {
-    // Per entry: its kind (d, f; a link: D, F, or B when it points nowhere), its name and a
-    // link's target as written (readlink: macOS, Linux, BusyBox; empty where it is missing).
-    const script = `n=0; for p in "$1"/* "$1"/.[!.]* "$1"/..?*; do [ -e "$p" ] || [ -L "$p" ] || continue; name=\${p##*/}; [ "$name" = .git ] && continue; if [ -d "$p" ]; then kind=d; else kind=f; fi; to=; if [ -L "$p" ]; then to=$(readlink "$p" 2>/dev/null); if [ ! -e "$p" ]; then kind=B; elif [ $kind = d ]; then kind=D; else kind=F; fi; fi; printf "%s\\0%s\\0%s\\0" "$kind" "$name" "$to"; n=$((n+1)); [ "$n" -ge ${READ_AT_MOST} ] && break; done; test -d "$1"`;
+    const script = listScript(READ_AT_MOST);
     let r;
     try { r = await exec("sh", ["-c", script, "roundup-files", path], { on }); }
     catch (e) {
@@ -96,12 +97,7 @@ export async function listDir(path, on) {
     }
     if (!list) {
       if (r.code !== 0) throw new Error(r.stderr || "Cannot list this folder");
-      const fields = r.stdout.split("\0");
-      list = [];
-      for (let i = 0; i + 2 < fields.length; i += 3) {
-        const kind = fields[i], link = "DFB".includes(kind);
-        list.push({ name: fields[i + 1], dir: kind === "d" || kind === "D", link: link ? fields[i + 2] : null, broken: kind === "B" });
-      }
+      list = parseListing(r.stdout);
     }
   }
   return { entries: sortEntries(list).slice(0, PER_FOLDER), more: list.length > PER_FOLDER };

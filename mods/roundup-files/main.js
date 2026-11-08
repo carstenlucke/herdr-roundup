@@ -600,7 +600,8 @@ export default class Files extends View {
 
   // ── rows ─────────────────────────────────────────────────────────────────────────────
   // Every row: { rel, name, dir, depth, open, gone, disk, link, broken }. gone: not on disk
-  // (deleted). link, broken: as listDir has them, on rows read from disk (null, false otherwise).
+  // (deleted). link, broken: as listDir has them, on rows read from disk; other rows (search,
+  // a folder only git lists) leave them out, so test them with != null and as booleans.
   // disk: a folder that opens from disk (this.folders); in Changed, the others fold (this.shut).
   rows() {
     const out = [], q = this.query.trim().toLowerCase();
@@ -672,13 +673,13 @@ export default class Files extends View {
     // that isn't there (a file deleted next to new ones). During a search it opens for what
     // the search found in it, and shows what is on disk once opened.
     const mixed = (p, depth) => {
-      const disk = this.folders.has(p) ? this.entries.get(p) ?? [] : [], here = new Map(), links = new Map();
-      for (const e of disk) { here.set(`${p}/${e.name}`, e.dir); if (e.link != null) links.set(`${p}/${e.name}`, e); }
-      const list = new Map(here);
+      const disk = this.folders.has(p) ? this.entries.get(p) ?? [] : [], here = new Map();
+      for (const e of disk) here.set(`${p}/${e.name}`, e);
+      const list = new Map([...here].map(([rel, e]) => [rel, e.dir]));
       for (const rel of kids.get(p) ?? []) if (!list.has(rel)) list.set(rel, dirs.has(rel));
       for (const [rel, dir] of order([...list])) {
-        const name = baseOf(rel), onDisk = here.has(rel), gone = !onDisk && g.gone.has(rel);
-        const link = links.get(rel)?.link ?? null, broken = links.get(rel)?.broken ?? false;
+        const e = here.get(rel), name = baseOf(rel), onDisk = Boolean(e), gone = !onDisk && g.gone.has(rel);
+        const link = e?.link ?? null, broken = e?.broken ?? false;
         if (dir && onDisk) {
           const open = this.folders.has(rel) || (Boolean(q) && kids.has(rel));
           out.push({ rel, name, dir, depth, open, gone, disk: true, link, broken });
@@ -997,13 +998,16 @@ export default class Files extends View {
       .when(selected, (el) => el.bg(t.selected)).when(!selected, (el) => el.hover((s) => s.bg(t.hover)))
       .child(r.dir ? svg(ICON(`chevron-${r.open ? "down" : "right"}`)).size(12).flex_none().text_color(t.dim) : div().w(12).flex_none())
       .child(image(iconFor(rel, r.dir, r.open)).size(16).flex_none().when(ignored || r.gone || r.broken, (el) => el.opacity(0.5)))
-      .child(div().flex_1().min_w(0).truncate().text_color(ignored || r.broken ? t.dim : color ?? t.foreground)
-        .when(r.gone, (el) => el.line_through()).when(r.link != null, (el) => el.italic()).child(r.name))
-      // A link: its name in italics and an arrow after it, red when it points nowhere; its
-      // target on hover. Herdr ships Geist upright only, and gpui doesn't slant a font that
-      // has no italic: fonts/Geist-Italic.ttf is that italic.
-      .when(r.link != null, (el) => el.child(div().id(`rf-link-${rel}`).flex_none().tooltip(linkTip(r))
-        .child(svg(ICON("link")).size(14).text_color(r.broken ? t.ansi1 : t.accent))))
+      // The name takes what it needs and shrinks first; the room left goes after it, so a
+      // link's arrow stays right behind the name.
+      .child(h_flex().flex_1().min_w(0).gap(6).items_center()
+        .child(div().flex_shrink_1().min_w(0).truncate().text_color(ignored || r.broken ? t.dim : color ?? t.foreground)
+          .when(r.gone, (el) => el.line_through()).when(r.link != null, (el) => el.italic()).child(r.name))
+        // A link: its name in italics and an arrow after it, red when it points nowhere; its
+        // target on hover. Herdr ships Geist upright only, and gpui doesn't slant a font that
+        // has no italic: fonts/Geist-Italic.ttf is that italic.
+        .when(r.link != null, (el) => el.child(div().id(`rf-link-${rel}`).flex_none().tooltip(linkTip(r))
+          .child(svg(ICON("link")).size(14).text_color(r.broken ? t.ansi1 : t.accent)))))
       .when(Boolean(counts), (el) => el.children(counts.map((n, i) => n
         ? h_flex().flex_none().gap(3).items_center().text_size(11).text_color(changeColors(t)[i]).child(div().size(6).rounded(3).bg(changeColors(t)[i])).child(String(n))
         : null).filter(Boolean)))
