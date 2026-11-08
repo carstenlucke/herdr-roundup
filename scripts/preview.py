@@ -23,9 +23,6 @@ if SCENE != "window" and SCENE not in SCENES:
     sys.exit(f"preview.py: unknown scene {SCENE!r}; the scenes are: window, {', '.join(SCENES)}")
 LAYOUT = json.load(open(f"{REPO}/layouts/Herdr-Roundup.json"))
 VERSION = LAYOUT["version"]
-# The release the update scene offers: the next minor one.
-_v = VERSION.split(".")
-NEXT = f"{_v[0]}.{int(_v[1]) + 1}.0"
 # Program icons come from the install, as Herdr draws them.
 HOME = os.environ.get("HERDR_APP_HOME", os.path.expanduser("~/.config/herdr-app"))
 # Scenes about one pane draw a smaller window, so their crop needs less scaling down on the site.
@@ -233,6 +230,11 @@ line(SB + .5, 0, SB + .5, H, "border")
 for i, c in enumerate(["#ff5f57", "#febc2e", "#28c840"]):
     add(f'<circle cx="{18 + 20 * i}" cy="22" r="6" fill="{c}"/>')
 UPDATE = SCENE == "update"
+if UPDATE:
+    # The release the update scene offers: the next minor one. Only this scene needs it, so a
+    # version of another shape can't stop the other pictures.
+    _v = VERSION.split(".")
+    NEXT = f"{_v[0]}.{int(_v[1]) + 1}.0"
 second = f"{NEXT} available" if UPDATE else VERSION
 if UPDATE:
     # The pointer rests on logo and name: their 36px area, rounded 8px, lights up.
@@ -456,6 +458,10 @@ def pane(x, w, prog, name, address, status, focus, lines, bottom, hover=False):
     clip = f"term-{address}"
     add(f'<defs><clipPath id="{clip}"><rect x="{x + 1}" y="{PY + 31}" width="{w - 2}" height="{PH - 32}"/></clipPath></defs>')
     add(f'<g clip-path="url(#{clip})">')
+    # Like a terminal, it scrolls: the lines that don't fit above the bottom rows leave at the top.
+    room = max(0, ROWS - len(bottom))
+    if len(lines) > room:
+        lines = lines[-room:] if room else []
     for i, parts in enumerate(lines):
         if parts:
             spans(x + 14, TOP + LH * i, parts, 13)
