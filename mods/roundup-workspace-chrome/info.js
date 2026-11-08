@@ -3,18 +3,7 @@
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { get, newer, available } from "./update.js";
-
-const pad = (n) => String(n).padStart(2, "0");
-// "today 09:12", "yesterday 18:40", else "Nov 3 09:12".
-function when(ms) {
-  const d = new Date(ms), day = (x) => new Date(x).toDateString(), time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  if (day(ms) === day(Date.now())) return `today ${time}`;
-  if (day(ms) === day(Date.now() - 24 * 60 * 60 * 1000)) return `yesterday ${time}`;
-  return `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()]} ${d.getDate()} ${time}`;
-}
-
-// A line under the facts only when it says something they don't: a check under way, or why the last one failed.
-const status = (checking, error) => checking ? "checking" : error ? "error" : null;
+import { when, status, headHeight } from "./brand.js";
 
 // `herdr`: the Herdr version the layout was cloned from, or null. `error`: the last check's failure, the shared one
 // unless given (the menu passes the one its height was summed from).
@@ -30,16 +19,12 @@ export function info(t, { installed, herdr, checking, error = get("error") }) {
     .when(Boolean(herdr), el => el.child(kv("Based on", `Herdr ${herdr}`)))
     .child(kv("Latest", latest ? `${latest.version}${skipped ? " · skipped" : ""}` : "–",
       release ? t.accent : t.foreground))
-    .child(kv("Checked", checked ? when(checked) : "–"))
+    .child(kv("Checked", checked ? when(checked, Date.now()) : "–"))
     .when(Boolean(s), el => el.child(h_flex().pt(4).gap(6).items_start().line_height("15px").text_size(11.5).text_color(s === "error" ? t.working : t.muted)
       .child(svg(`mods/roundup-workspace-chrome/${s === "error" ? "circle-alert" : "spinner"}.svg`).size(12).mt("1.5px").flex_none()
         .text_color(s === "error" ? t.working : t.muted).when(s === "checking", el => el.spin(900)))
       .child(div().flex_1().min_w(0).max_h("30px").overflow_hidden().child(s === "error" ? `Couldn't check: ${error}` : "Checking for updates…"))));
 }
 
-// Its height in px: the name (16 + 3), each fact 15, 3 between lines, and the status line (4 + 15) if there is one.
-// A reason wraps, at most to a second line (cut there): the menu leaves room for it.
-export function infoHeight({ herdr, checking, error = get("error") }) {
-  const facts = herdr ? 4 : 3, s = status(checking, error);
-  return 19 + facts * 15 + facts * 3 + (s ? 3 + 19 + (s === "error" ? 15 : 0) : 0);
-}
+// Its height in px (brand.js's headHeight), with the shared error unless given.
+export const infoHeight = ({ herdr, checking, error = get("error") }) => headHeight({ herdr, checking, error });
