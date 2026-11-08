@@ -5,7 +5,8 @@ import { readLongText, codeState, codeView } from "./text.js";
 export default {
   id: "code",
   async load(file, env) {
-    return { editor: codeState((await readLongText(file, env.on)).text, languageOf(file)) };
+    const { text, cut } = await readLongText(file, env.on);
+    return { editor: codeState(text, languageOf(file), cut) };
   },
   render: (state, env) => codeView(state.editor, env),
   release: (state) => state.editor?.release(),

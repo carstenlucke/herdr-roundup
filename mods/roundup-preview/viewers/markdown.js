@@ -14,7 +14,7 @@ import { resolveLink } from "../links.js";
 import { readText, codeState, codeView } from "./text.js";
 import { rawToggle, iconButton } from "./controls.js";
 import { splitBlocks, imageNote } from "../markdown-blocks.js";
-import { stageImage, fetchImage } from "../media.js";
+import { stageImage, fetchImage, pruneCache } from "../media.js";
 
 let views = 0;
 
@@ -51,6 +51,7 @@ export default {
   id: "markdown",
   async load(file, env, previous) {
     const text = await readText(file, env.on), blocks = splitBlocks(text);
+    if (blocks.some((b) => b.image)) await pruneCache(); // web images land in the local cache too
     for (const block of blocks) {
       if (!block.image) continue;
       const to = resolveLink(file, block.image.src);

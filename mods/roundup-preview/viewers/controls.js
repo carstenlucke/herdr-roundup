@@ -16,7 +16,7 @@ export function segmented(options) {
 /** "<view> | Raw": state.raw switches to the file's source, made once into state.editor. */
 export const rawToggle = (state, view, language) => segmented([
   ["view", view, !state.raw, () => { state.raw = false; }],
-  ["raw", "Raw", state.raw, () => { state.raw = true; if (!state.editor) state.editor = codeState(state.text, language); }],
+  ["raw", "Raw", state.raw, () => { state.raw = true; if (!state.editor) state.editor = codeState(state.text, language, state.cut); }],
 ]);
 
 /** A 28px icon button from this mod's folder; `on` draws it pressed. */

@@ -5,7 +5,7 @@
 // { level, title, slug } with GitHub's anchor names. Fenced code is left whole,
 // and reference definitions ([id]: url) are repeated in every text block so a
 // reference link still resolves when its definition sits in another block.
-// Pure (no Herdr imports); this repo has no tests for it yet.
+// Pure (no Herdr imports), so tests/markdown-blocks.test.mjs runs it in node.
 import { GONE } from "./text-file.js";
 
 const IMAGE = /\[!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)\]\(\s*<?([^)\s>]+)>?\s*\)|!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/g;
@@ -23,7 +23,7 @@ export const slugify = (title) => title.toLowerCase().replace(/[`*_~]|<[^>]*>/g,
   .replace(/[^\p{L}\p{N}\s-]/gu, "").trim().replace(/\s/g, "-");
 
 export function splitBlocks(text) {
-  const blocks = [], seen = {};
+  const blocks = [], seen = Object.create(null); // keys come from the document: "constructor" too
   let buffer = "", heading = null, fence = null;
   const flush = () => { if (buffer.trim() || heading) blocks.push(heading ? { text: buffer, heading } : { text: buffer }); buffer = ""; heading = null; };
   for (const line of text.split(/(?<=\n)/)) {

@@ -11,8 +11,8 @@ export default {
   id: "image",
   async load(file, env, previous) {
     if (env.on) throw new Error("Image previews work for files on this computer only");
+    await pruneCache();
     const picture = await stageImage(file);
-    pruneCache();
     return { picture, zoom: previous?.zoom ?? null };
   },
 

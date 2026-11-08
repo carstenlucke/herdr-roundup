@@ -45,12 +45,12 @@ test("MOVED is per tab: a second tab of the same file doesn't change the recorde
   assert.equal(shownIn(open, { t1: "/r/b.md", t2: "/r/a.md" }, "/r/a.md", null, alive), null);
 });
 
-test("remember: drops dead panes and unknown tokens, keeps the new tab's early MOVED", () => {
+test("remember: drops dead panes with their MOVED, keeps unrecorded tabs' and the new tab's early MOVED", () => {
   const open = { tx: entry("dead", "/r/x.md"), ty: entry("p9", "/r/y.md") };
   const moved = { tx: "/r/z.md", ty: "/r/w.md", stray: "/r/s.md", tnew: "/r/b.md" };
   const next = remember(open, moved, "/r/a.md", null, "p1", "tnew", new Set(["p1", "p9"]));
   assert.deepEqual(next.open, { ty: entry("p9", "/r/y.md"), tnew: entry("p1", "/r/a.md") });
-  assert.deepEqual(next.moved, { ty: "/r/w.md", tnew: "/r/b.md" });
+  assert.deepEqual(next.moved, { ty: "/r/w.md", stray: "/r/s.md", tnew: "/r/b.md" }, "stray: a live tab an overlap left unrecorded");
 });
 
 test("remember: a tab that moved on stays when its first file opens again", () => {

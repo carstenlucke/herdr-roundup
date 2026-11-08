@@ -42,12 +42,17 @@ export function upgraded(open, v2) {
 }
 
 /** OPEN and MOVED once `pane` (props.token `token`) was made for `file`. Entries for panes no
- *  longer in `alive` are dropped, and MOVED keeps only the tokens OPEN names: neither map only
- *  grows. The new token's MOVED stays: its tab may have followed a link before it was recorded. */
+ *  longer in `alive` are dropped, with their MOVED. A token OPEN never named keeps its MOVED:
+ *  its tab may be alive, unrecorded after an overlap, and restores from it (only a tab can tell
+ *  its token is gone, and it can't). So MOVED entries of tabs never recorded stay after their
+ *  tab closed, for good: rare, as it takes an overlap and a link followed. The new token's MOVED
+ *  stays too: its tab may have followed a link before it was recorded. */
 export function remember(open, moved, file, on, pane, token, alive) {
-  const live = Object.entries(open ?? {}).filter(([t, e]) => t !== token && e?.pane !== pane && alive.has(e?.pane));
+  const entries = Object.entries(open ?? {});
+  const live = entries.filter(([t, e]) => t !== token && e?.pane !== pane && alive.has(e?.pane));
   const nextOpen = Object.fromEntries([...live, [token, { pane, file, on: on ?? null }]]);
-  return { open: nextOpen, moved: Object.fromEntries(Object.entries(moved ?? {}).filter(([t]) => Object.hasOwn(nextOpen, t))) };
+  const gone = new Set(entries.map(([t]) => t).filter((t) => !Object.hasOwn(nextOpen, t)));
+  return { open: nextOpen, moved: Object.fromEntries(Object.entries(moved ?? {}).filter(([t]) => !gone.has(t))) };
 }
 
 // Opens in flight. run() doesn't name the pane it made, so an open takes the one new

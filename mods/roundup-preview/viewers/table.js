@@ -17,8 +17,8 @@ export default {
     const { text, cut } = await readLongText(file, env.on);
     const { rows, truncated } = parseDelimited(text, delimiterOf(extension(file), text), LIMIT + 1);
     const raw = previous?.raw ?? false;
-    return { text, header: rows[0] ?? [], body: rows.slice(1), truncated: truncated || cut, widths: columnWidths(rows),
-      raw, editor: raw ? codeState(text, "text") : null, id: `roundup-preview-table-${++views}` };
+    return { text, cut, header: rows[0] ?? [], body: rows.slice(1), truncated: truncated || cut, widths: columnWidths(rows),
+      raw, editor: raw ? codeState(text, "text", cut) : null, id: `roundup-preview-table-${++views}` };
   },
 
   toolbar: (state) => h_flex().gap(8).items_center().text_size(12).text_color(theme().dim)

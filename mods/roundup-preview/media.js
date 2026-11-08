@@ -40,9 +40,11 @@ export async function stageImage(file) {
   return picture(r.stdout.trim());
 }
 
-/** The same for a web image: downloaded, then kept only when it is an image. */
+/** The same for a web image: downloaded, then kept only when it is an image. Each download
+ *  has names of its own: two previews fetching the same URL would overwrite each other's file. */
 export async function fetchImage(url) {
-  const k = key(url), r = await exec(...here().fetch(url, DIR(), k));
+  const k = `${key(url)}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  const r = await exec(...here().fetch(url, DIR(), k));
   if (r.code !== 0) throw new Error(r.stderr.trim() || "Download failed");
   const ext = imageExtension(r.stdout.trim()), tmp = `${DIR()}/${k}.download`;
   if (!ext) { await exec(...here().remove(tmp)); throw new Error(`Not an image (${r.stdout.trim()})`); }
@@ -51,7 +53,9 @@ export async function fetchImage(url) {
   return picture(`${k}.${ext}`).catch(async (e) => { await exec(...here().remove(kept)); throw e; });
 }
 
-/** Drops cached pages and pictures older than two weeks. */
+/** Drops cached pages and pictures older than two weeks. Await it before staging or rendering:
+ *  with that, and the scripts in programs.js touching a cache hit, no prune deletes what was
+ *  just picked. */
 export function pruneCache() {
   return exec(...here().prune(DIR())).catch(() => null);
 }

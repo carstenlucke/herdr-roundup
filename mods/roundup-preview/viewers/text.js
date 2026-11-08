@@ -32,10 +32,11 @@ export async function readLongText(file, on) {
   return { text: checked(wholeLines(r.stdout)), cut: true };
 }
 
-export function codeState(text, language) {
+/** `cut`: the text is only the file's head (readLongText), however short it came back. */
+export function codeState(text, language, cut = false) {
   const t = theme();
   return EditorState.new({ language, readonly: true,
-    value: text.length > LIMIT ? text.slice(0, LIMIT) + "\n… (file truncated)" : text,
+    value: text.length > LIMIT || cut ? text.slice(0, LIMIT) + "\n… (file truncated)" : text,
     font_family: settings().font_family, font_size: 13,
     syntax: { keyword: t.ansi5, string: t.ansi2, comment: t.dim, function: t.ansi4, type: t.ansi3, number: t.ansi1, constant: t.ansi6 } });
 }
