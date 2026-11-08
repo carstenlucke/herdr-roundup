@@ -24,9 +24,7 @@ import { ROW, menuItems, menuHeight, keyMenuAt, menuKey, moveIndex, clickAction 
 import { listNote, footerLines, linkTip, statusColor, changeColors, gitReason, noRepo, GIT_FAILED } from "./panel-text.js";
 // A copy of roundup-preview's: how it opens and which pane already shows a file. sync.sh
 // checks that the two copies match.
-import { FLOAT, openTab, timerOf, floatSpec, newToken, isOpen, unanswered, placed } from "./open-file.js";
-// Also roundup-preview's: the window writes a followed link's path in its own form (/ on Windows).
-import { samePath } from "./paths.js";
+import { FLOAT, openTab, timerOf, floatSpec, newToken, isOpen, unanswered, placed, floatShows } from "./open-file.js";
 
 const NAME = "roundup-files";
 const ICON = (name) => `mods/${NAME}/${name}.svg`;
@@ -521,8 +519,7 @@ export default class Files extends View {
 
   // The window shows `rel` of this folder now.
   floats(rel) {
-    const f = shared(FLOAT);
-    return isOpen(f) && Boolean(f.file) && samePath(f.file, join(this.root, rel)) && (f.on ?? null) === (this.on ?? null);
+    return floatShows(shared(FLOAT), join(this.root, rel), this.on);
   }
 
   // While the window is open it follows the cursor, as Quick Look follows the selection. From
