@@ -7,8 +7,10 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 
 const TMP = realpathSync(tmpdir());
-const emptyConfig = join(mkdtempSync(join(TMP, "roundup-gitconfig-")), "config");
+const configDir = mkdtempSync(join(TMP, "roundup-gitconfig-"));
+const emptyConfig = join(configDir, "config");
 writeFileSync(emptyConfig, "");
+process.on("exit", () => rmSync(configDir, { recursive: true, force: true }));
 
 Object.assign(process.env, {
   GIT_CONFIG_GLOBAL: emptyConfig,

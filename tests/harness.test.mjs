@@ -2,6 +2,7 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { tmpdir } from "node:os";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { herdr, reset, mount, makeCx, clock, fetch, byId, byText, hasId, ids, click, fire, texts, space, tab } from "./support/harness.mjs";
 
@@ -110,6 +111,7 @@ test("writeTextFile writes only below the temp folder", async () => {
   await h.writeTextFile(path, "two", "one");
   assert.equal(await h.readTextFile(path), "two");
   assert.equal(await h.readTextFile(path + ".missing"), null);
+  rmSync(path);
 });
 
 test("the README's example: the shown tab's × closes it", async () => {
