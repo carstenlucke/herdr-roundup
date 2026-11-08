@@ -1,4 +1,4 @@
-// node --test tests/
+// node --test 'tests/*.test.mjs'
 // roundup-files' file icons: how iconFor matches a path against the Symbols tables, and that
 // every icon the tables name is there.
 import { test } from "node:test";

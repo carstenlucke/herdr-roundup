@@ -1,4 +1,4 @@
-// node --test tests/
+// node --test 'tests/*.test.mjs'
 // The JSON viewer's tree: rows for the open nodes, JSON Pointers as paths, alt-click on a branch.
 import { test } from "node:test";
 import assert from "node:assert/strict";

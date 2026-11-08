@@ -1,4 +1,4 @@
-// node --test tests/
+// node --test 'tests/*.test.mjs'
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { splitBlocks, slugify, imageNote } from "../mods/roundup-preview/markdown-blocks.js";

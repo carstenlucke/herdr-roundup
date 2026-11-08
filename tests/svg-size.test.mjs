@@ -1,4 +1,4 @@
-// node --test tests/
+// node --test 'tests/*.test.mjs'
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { svgSize } from "../mods/roundup-preview/svg-size.js";

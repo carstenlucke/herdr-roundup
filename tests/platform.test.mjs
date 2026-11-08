@@ -1,4 +1,4 @@
-// node --test tests/
+// node --test 'tests/*.test.mjs'
 // The ⋯ menu's commands per system, and how values reach PowerShell.
 import { test } from "node:test";
 import assert from "node:assert/strict";

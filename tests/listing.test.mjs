@@ -1,4 +1,4 @@
-// node --test tests/ (Node 22 or later: it loads the mods' files as ES modules without a package.json).
+// node --test 'tests/*.test.mjs' (Node 22.15 or later: it loads the mods' files as ES modules without a package.json).
 // Runs roundup-files' folder listing in a real sh, on links made in a temporary folder.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";

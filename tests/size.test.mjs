@@ -1,4 +1,4 @@
-// node --test tests/
+// node --test 'tests/*.test.mjs'
 // A file's size as the preview's header shows it.
 import { test } from "node:test";
 import assert from "node:assert/strict";

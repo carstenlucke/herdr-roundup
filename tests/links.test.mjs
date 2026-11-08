@@ -1,4 +1,4 @@
-// node --test tests/
+// node --test 'tests/*.test.mjs'
 // Where a link in a Markdown preview goes: the web, a heading, another file, or nowhere.
 import { test } from "node:test";
 import assert from "node:assert/strict";

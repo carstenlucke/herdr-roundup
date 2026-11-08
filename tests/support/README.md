@@ -1,8 +1,8 @@
 # The L2 harness
 
-Mod code that imports `herdr`, `gpui-kit` or `gpui-base` runs in Node with `node --test tests/`, no flags. Importing `harness.mjs` installs module hooks (`loader.mjs`) that send those three imports to the stubs here. Nothing in this folder runs as a test: the files don't match Node's test-file patterns.
+Mod code that imports `herdr`, `gpui-kit` or `gpui-base` runs in Node with `node --test 'tests/*.test.mjs'`, no flags. Importing `harness.mjs` installs module hooks (`loader.mjs`) that send those three imports to the stubs here. Nothing in this folder runs as a test: the files don't match Node's test-file patterns.
 
-The hooks need Node 22.15 or later (`module.registerHooks`; older Nodes fall back to `module.register`). `node --test tests/` with a folder needs Node 26.8 or later; on older ones `node --test 'tests/*.test.mjs'` runs the same files.
+The hooks need Node 22.15 or later (`module.registerHooks`; older Nodes fall back to `module.register`). Run the suite with `node --test 'tests/*.test.mjs'`: `node --test tests/` with a folder works only from Node 26.8 on.
 
 ## Writing a test
 

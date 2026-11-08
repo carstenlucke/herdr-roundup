@@ -1,4 +1,4 @@
-// node --test tests/ (Node 22 or later: it loads the mods' files as ES modules without a package.json).
+// node --test 'tests/*.test.mjs' (Node 22.15 or later: it loads the mods' files as ES modules without a package.json).
 // Which folder roundup-files shows: the focused pane's, with Herdr's state as fixtures.
 import { test } from "node:test";
 import assert from "node:assert/strict";

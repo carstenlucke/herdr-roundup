@@ -1,4 +1,4 @@
-// node --test tests/ (Node 22 or later: it loads the mods' files as ES modules without a package.json).
+// node --test 'tests/*.test.mjs' (Node 22.15 or later: it loads the mods' files as ES modules without a package.json).
 // roundup-workspace-chrome's brand: click or drag, its texts, and the menu popup's height.
 import { test } from "node:test";
 import assert from "node:assert/strict";

@@ -1,4 +1,4 @@
-// node --test tests/ (Node 22 or later: it loads the mods' files as ES modules without a package.json).
+// node --test 'tests/*.test.mjs' (Node 22.15 or later: it loads the mods' files as ES modules without a package.json).
 // roundup-files' clicks and keys: the context menu, the keyboard menu, the cursor's moves.
 import { test } from "node:test";
 import assert from "node:assert/strict";

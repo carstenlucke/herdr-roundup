@@ -1,4 +1,4 @@
-// node --test tests/
+// node --test 'tests/*.test.mjs'
 // The right-click popups are opened at a fixed height: it must hold every row the menu can
 // have, or the last one (the pane menu's ninth, "Send back to …") is cut off. menu.js imports
 // Herdr, so its heights are read from its source rather than imported.

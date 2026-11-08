@@ -1,4 +1,4 @@
-// node --test tests/
+// node --test 'tests/*.test.mjs'
 // What the preview's helper programs print, read back: PDF pages from PDFKit, poppler and
 // Windows.Data.Pdf, and picture sizes from sips and `file`.
 import { test } from "node:test";

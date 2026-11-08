@@ -1,4 +1,4 @@
-// node --test tests/ (Node 22 or later: it loads the mods' files as ES modules without a package.json).
+// node --test 'tests/*.test.mjs' (Node 22.15 or later: it loads the mods' files as ES modules without a package.json).
 // roundup-spaces: a space's place, its git line, the agents badge, tints, rebuilt machines.
 import { test } from "node:test";
 import assert from "node:assert/strict";

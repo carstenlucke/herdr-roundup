@@ -1,4 +1,4 @@
-// node --test tests/
+// node --test 'tests/*.test.mjs'
 // Static checks of the repo's rules (CLAUDE.md): mod folders and mod.json, keys.json, the
 // commands and shared keys the mods use, their assets, their network use and the files two
 // mods share. Each failure names the file and the value that breaks the rule.

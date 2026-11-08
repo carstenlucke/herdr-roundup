@@ -18,6 +18,11 @@ concurrency:
 jobs:
   node-test:
     runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The oldest Node the suite supports (module.registerHooks) and the current LTS.
+        node: ["22.15", "26"]
     timeout-minutes: 15
     env:
       # Tests that commit set their own identity; this covers any that forget.
@@ -30,11 +35,11 @@ jobs:
         with:
           persist-credentials: false
 
-      # `node --test tests/` needs Node 26.8 or later: 22 and 24 take a folder
-      # for a file ("Cannot find module …/tests"). The image ships Node 24.
+      # A glob, not the folder: `node --test tests/` needs Node 26.8 or later
+      # (22 and 24 take the folder for a file), the glob works from 22.15 on.
       - uses: actions/setup-node@v7
         with:
-          node-version: 26
+          node-version: ${{ matrix.node }}
 
       - name: Set a git identity
         run: |
@@ -50,4 +55,5 @@ jobs:
           rsync --version | head -n 1
           command -v sh
 
-      - run: node --test tests/
+      # Quoted: Node expands the glob itself, the same on every shell.
+      - run: node --test 'tests/*.test.mjs'

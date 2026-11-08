@@ -1,4 +1,4 @@
-// node --test tests/
+// node --test 'tests/*.test.mjs'
 // Static checks of layouts/Herdr-Roundup.json: ids, colors, version, preview, the mods it places
 // and the blocks the mods look up. Each failure names the file, the place in the tree and the value.
 import { test } from "node:test";

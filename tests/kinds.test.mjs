@@ -1,4 +1,4 @@
-// node --test tests/
+// node --test 'tests/*.test.mjs'
 // Which viewer and editor language a file gets, by its extension, and the extension a
 // downloaded image keeps, by its MIME type.
 import { test } from "node:test";

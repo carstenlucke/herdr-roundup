@@ -8,8 +8,8 @@ A row says what must hold, where it comes from, how it is tested and what has to
 
 | Level | Runs | Needs Herdr | Where |
 | --- | --- | --- | --- |
-| **L1** unit / static | pure functions from files without `herdr`/`gpui` imports; static checks of repo files (layout JSON, keys, ids, colors, copies) | no | `node --test tests/`, CI (macOS) |
-| **L2** node integration | a mod's real code in Node, with `herdr`, `gpui-kit`, `gpui-base` replaced by stubs through a loader hook: `exec()` runs through `child_process` (real git repos and folders in a temp dir), `readTextFile` reads real files, `shared`/`setShared`/`panes`/`spaces`/`agents`/`run`/`notify`/`openOverlay`/`watchFolder`/`fetch` are fixtures and recorders, `cx` has fake timers; the gpui stub returns an element tree whose `on_click`/`on_key_down`/`on_mouse_down` handlers a test calls | no | `node --test tests/`, CI (macOS) |
+| **L1** unit / static | pure functions from files without `herdr`/`gpui` imports; static checks of repo files (layout JSON, keys, ids, colors, copies) | no | `node --test 'tests/*.test.mjs'`, CI (macOS) |
+| **L2** node integration | a mod's real code in Node, with `herdr`, `gpui-kit`, `gpui-base` replaced by stubs through a loader hook: `exec()` runs through `child_process` (real git repos and folders in a temp dir), `readTextFile` reads real files, `shared`/`setShared`/`panes`/`spaces`/`agents`/`run`/`notify`/`openOverlay`/`watchFolder`/`fetch` are fixtures and recorders, `cx` has fake timers; the gpui stub returns an element tree whose `on_click`/`on_key_down`/`on_mouse_down` handlers a test calls | no | `node --test 'tests/*.test.mjs'`, CI (macOS) |
 | **L3** smoke | an isolated Herdr instance (own `HERDR_APP_HOME`, own `HC_SESSION`) beside the person's window, driven by `herdr-app do` and `<mod>.<command>`, read through `herdr-app status`/`ls`, `shared.json` and `shot` | yes | `scripts/smoke.sh`, local, started on purpose; the window comes to the front while it runs |
 
 Nothing may need a person: there is no pointer or key injection, so L2 calls handlers directly and L3 uses commands (plus debug commands where a mod has none).
@@ -25,7 +25,7 @@ Nothing may need a person: there is no pointer or key injection, so L2 calls han
 3. **Extractions from `main.js`, H rows first:** each with its test in the same PR, and a live check in Herdr afterwards. Candidates are listed at the end.
 4. **`scripts/sync.sh` (L2 with a temp home):** LAY-13…17.
 5. **`scripts/smoke.sh` (L3):** start the isolated instance, seed its home (Welcome seen, update check off), install with `HERDR_APP_HOME=… scripts/sync.sh`, run the L3 rows, quit and clean up. See memory "Isolated Herdr instance" for the recipe and its pitfalls.
-6. **CI:** a GitHub Actions workflow on macOS running `node --test tests/` (L1 + L2).
+6. **CI:** a GitHub Actions workflow on macOS running `node --test 'tests/*.test.mjs'` (L1 + L2).
 
 ---
 

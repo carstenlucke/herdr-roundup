@@ -1,4 +1,4 @@
-// node --test tests/ (Node 22 or later: it loads the mods' files as ES modules without a package.json).
+// node --test 'tests/*.test.mjs' (Node 22.15 or later: it loads the mods' files as ES modules without a package.json).
 // roundup-files: what the disk index leaves out, how deep it reads, and the tree's order.
 import { test } from "node:test";
 import assert from "node:assert/strict";
