@@ -1,5 +1,5 @@
 // CSV and TSV: the delimiter, the rows (quotes per RFC 4180), and column widths.
-// Pure, so node --test covers it.
+// Pure (no Herdr imports); this repo has no tests for it yet.
 
 /** Tab for .tsv; for .csv, a semicolon when the first line has more of them than commas. */
 export function delimiterOf(ext, text) {

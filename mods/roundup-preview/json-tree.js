@@ -1,6 +1,6 @@
 // A JSON value as the rows of a collapsible tree. A node's path is a JSON
 // Pointer ("" the root, "/a/0" a's first item); `expanded` holds the open ones.
-// Pure, so node --test covers it.
+// Pure (no Herdr imports); this repo has no tests for it yet.
 
 const pointer = (path, key) => `${path}/${String(key).replaceAll("~", "~0").replaceAll("/", "~1")}`;
 const kindOf = (v) => v === null ? "null" : Array.isArray(v) ? "array" : typeof v;

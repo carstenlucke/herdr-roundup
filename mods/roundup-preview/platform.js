@@ -1,5 +1,5 @@
 // The commands behind the ⋯ menu's Open in editor, Open with default app and Reveal,
-// per system. Pure, so node --test covers it.
+// per system. Pure (no Herdr imports); this repo has no tests for it yet.
 // A system is "macos", "linux" or "windows" for files on this computer, or "remote" for
 // files on another machine: no desktop to open them in, so no command at all.
 // A command is [program, args]; an action with no command on a system is hidden.

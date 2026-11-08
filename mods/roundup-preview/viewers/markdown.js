@@ -80,7 +80,7 @@ export default {
   },
 
   render(state, env) {
-    if (state.raw) return codeView(state.editor);
+    if (state.raw) return codeView(state.editor, env);
     const t = theme(), column = Math.max(120, Math.min(920, env.size.width - (state.contents ? 240 : 0)) - 80);
     const start = state.from ? state.blocks.findIndex((b) => b.heading?.slug === state.from) : 0;
     const picture = (shown, i) => {

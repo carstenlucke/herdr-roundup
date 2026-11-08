@@ -1,6 +1,6 @@
 // How "Open in editor" runs on macOS and Linux (Windows has its own in platform.js): the
 // person's $VISUAL or $EDITOR without its wait flag (nothing here waits for the file to
-// close), else the system's opener. Pure, so node --test covers it.
+// close), else the system's opener. Pure (no Herdr imports); this repo has no tests for it yet.
 
 // Asks the login shell, since Herdr's own environment lacks $EDITOR (zsh sets it in
 // .zshenv). All in one process: the menu's popup closes on the click, its copy's tasks

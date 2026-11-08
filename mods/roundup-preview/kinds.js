@@ -1,4 +1,4 @@
-// Which viewer shows a file, chosen by extension. Pure, so node --test covers it.
+// Which viewer shows a file, chosen by extension. Pure (no Herdr imports); this repo has no tests for it yet.
 // A new viewer: add viewers/<id>.js, register it in viewers/index.js, and map
 // its extensions here. Anything unmapped opens in the code viewer.
 

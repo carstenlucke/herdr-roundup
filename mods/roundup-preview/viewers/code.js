@@ -7,6 +7,6 @@ export default {
   async load(file, env) {
     return { editor: codeState((await readLongText(file, env.on)).text, languageOf(file)) };
   },
-  render: (state) => codeView(state.editor),
+  render: (state, env) => codeView(state.editor, env),
   release: (state) => state.editor?.release(),
 };

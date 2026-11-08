@@ -1,4 +1,5 @@
 // Reading a file as text and showing it as code: shared by the code and Markdown viewers.
+import { div } from "gpui-kit";
 import { Editor, EditorState } from "gpui-base";
 import { readTextFile, exec, theme, settings, window } from "herdr";
 import { GONE, withoutBom, readFailure, tooLong, wholeLines } from "../text-file.js";
@@ -39,4 +40,8 @@ export function codeState(text, language) {
     syntax: { keyword: t.ansi5, string: t.ansi2, comment: t.dim, function: t.ansi4, type: t.ansi3, number: t.ansi1, constant: t.ansi6 } });
 }
 
-export const codeView = (state) => Editor.new(state).flex_1().min_h(0);
+/** `el` in a box that tells the preview a press in it took the keyboard (env.ownsKeys): the
+ *  floating window's own press handler runs after the field's and would take it back. */
+export const keepsKeys = (el, env) => div().flex().flex_col().on_mouse_down("left", () => env?.ownsKeys?.()).child(el);
+
+export const codeView = (state, env) => keepsKeys(Editor.new(state).flex_1().min_h(0), env).flex_1().min_h(0);

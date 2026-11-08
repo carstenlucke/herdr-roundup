@@ -25,8 +25,8 @@ export default {
     .child(`${state.body.length.toLocaleString()}${state.truncated ? "+" : ""} rows × ${state.widths.length} columns`)
     .child(rawToggle(state, "Table", "text")),
 
-  render(state) {
-    if (state.raw) return codeView(state.editor);
+  render(state, env) {
+    if (state.raw) return codeView(state.editor, env);
     const t = theme(), width = NUMBER + state.widths.reduce((a, b) => a + b, 0);
     const row = (cells, i) => h_flex().h(ROW).w(width).items_center().when(i % 2 === 1, (r) => r.bg(t.surface))
       .child(div().w(NUMBER).flex_none().pr(10).text_right().text_color(t.dim).child(String(i + 1)))

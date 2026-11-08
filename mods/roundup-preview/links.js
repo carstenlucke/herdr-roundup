@@ -1,4 +1,4 @@
-// Where a link in a Markdown file goes. Pure, so node --test covers it.
+// Where a link in a Markdown file goes. Pure (no Herdr imports); this repo has no tests for it yet.
 //   { url }   a web or mail link, for the system to open
 //   { file, anchor? }  a local file, absolute, to open in this preview, at a heading
 //   { anchor } a heading in this page

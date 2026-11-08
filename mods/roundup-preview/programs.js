@@ -1,6 +1,6 @@
 // The programs behind image, PDF and text previews, one table per system, and parsers
-// for what they print. Pure, so node --test covers it, and runs them on the system it
-// runs on. macOS has sips and PDFKit built in; Linux gets sizes from `file` and PDF
+// for what they print. Pure (no Herdr imports); this repo has no tests for it yet.
+// macOS has sips and PDFKit built in; Linux gets sizes from `file` and PDF
 // pages from poppler's pdftoppm and pdfinfo. Windows has neither sh nor file on Herdr's
 // PATH, so its scripts are PowerShell, with WPF for sizes and Windows.Data.Pdf for pages.
 import { powershell, win } from "./platform.js";

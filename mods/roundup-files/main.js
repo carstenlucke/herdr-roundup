@@ -11,14 +11,14 @@
 // keys, the context menu as a popup of this mod. See THIRD_PARTY_NOTICES.md.
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, InputState, Input, Scrollbar, Popup, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
-import { spaces, panes, focused, readTextFile, watchFolder, theme, settings, window, props, notify, openOverlay, closeOverlay, shared, setShared, nextCommand, run } from "herdr";
+import { spaces, panes, focused, readTextFile, watchFolder, theme, settings, window, props, notify, openOverlay, closeOverlay, shared, setShared, nextCommand, run, exec, home, appHome } from "herdr";
 import { iconFor, rootIcon } from "./icon.js";
 import { listDir, buildIndex, diskSearch, kinds, indexDepth, compare, prunedName, prunedAbove, realPath, PER_FOLDER, INDEX_DIRS, INDEX_PATHS } from "./disk.js";
 import { readGit, listFiles, emptyGit, ancestors, dirOf, within, NEW, MODIFIED, DELETED } from "./git.js";
 import { openExternal, revealExternal, copy, sendToAgent, relTo } from "./actions.js";
 // A copy of roundup-preview's: how it opens and which pane already shows a file. sync.sh
 // checks that the two copies match.
-import { FLOAT, openTab, timerOf, floatSpec, newToken } from "./open-file.js";
+import { FLOAT, TAB_REQUESTS, openTab, timerOf, floatSpec, newToken, taken, windowGone, sameFloat } from "./open-file.js";
 // Also roundup-preview's: the window writes a followed link's path in its own form (/ on Windows).
 import { samePath } from "./paths.js";
 
@@ -124,9 +124,15 @@ export default class Files extends View {
     this.saved = new Map();
     this.width = 368; this.measuredWidth = null; this.query = ""; this.hits = null; this.searchSeq = 0; this.shown = [];
     this.seenRequest = shared(REQUEST)?.n ?? 0;
-    // A floating window doesn't outlive a restart or a layout switch, but FLOAT is saved.
-    if (shared(FLOAT)) setShared(FLOAT, null);
     this.uid = newToken();
+    // A floating window can outlive this copy's start (the mod reloaded): the panel takes it over,
+    // so its Open in tab comes here. One gone with a restart or a layout switch leaves FLOAT
+    // behind, as FLOAT is saved: checkFloat clears it then.
+    const float = shared(FLOAT);
+    if (float) { setShared(FLOAT, { ...float, owner: this.uid }); this.checkFloat(float, cx); }
+    // Drawn or not (a hidden panel isn't drawn): the window's Open in tab requests for this copy,
+    // and a window without an owner taken over (its copy started again after FLOAT was cleared).
+    cx.timer.every(500, (cx) => this.takeTabs(cx));
     this.input = InputState.new({ placeholder: "Search files" });
     // Only a change of the text searches: reset() empties the field while drawing, where
     // search's notify would be refused, and has emptied this.query already.
@@ -748,7 +754,38 @@ export default class Files extends View {
     this.stopFollow();
     const file = join(this.root, rel), on = this.on ?? null;
     const token = newToken(), id = openOverlay(floatSpec({ file, on, token }));
-    setShared(FLOAT, { id, file, on, token });
+    setShared(FLOAT, { id, file, on, token, owner: this.uid });
+  }
+
+  // Whether the window FLOAT names (`float`) is still open, asked once at start. Mods can't list
+  // overlays; `herdr-app status` can, by name only. So only a status that lists overlays as
+  // names, none of them roundup-preview, clears FLOAT, and only while FLOAT is still that record
+  // (a copy of the window starting meanwhile writes its own `id` and `copy`); no answer, another
+  // app home (status would ask another window) or any other answer keeps it.
+  checkFloat(float, cx) {
+    if (appHome().replace(/[\\/]+$/, "") !== `${home()}/.config/herdr-app`) return;
+    cx.spawn(async () => {
+      let status = null;
+      for (const cmd of ["herdr-app", `${home()}/.local/bin/herdr-app`]) {
+        const r = await exec(cmd, ["status"]).catch(() => null);
+        if (r?.code !== 0) continue;
+        try { status = JSON.parse(r.stdout); } catch {}
+        break;
+      }
+      if (windowGone(status) && sameFloat(shared(FLOAT), float)) setShared(FLOAT, null);
+    });
+  }
+
+  // The floating window's Open in tab (preview.js toTab): this copy owns the window, so it opens
+  // the tab here, where its looks outlive the window. Taken out before they run, once.
+  takeTabs(cx) {
+    const f = shared(FLOAT);
+    if (f && !f.owner) setShared(FLOAT, { ...f, owner: this.uid });
+    const tabs = shared(TAB_REQUESTS);
+    if (!tabs || !Object.values(tabs).some((r) => r.owner === this.uid)) return;
+    const { mine, rest } = taken(tabs, this.uid, Date.now());
+    setShared(TAB_REQUESTS, rest);
+    for (const r of mine) openTab({ panes, run, shared, setShared }, r.file, r.on ?? null, timerOf(cx), undefined, r.space);
   }
 
   closeFloat() {

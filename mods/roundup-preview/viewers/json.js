@@ -38,8 +38,8 @@ export default {
       .child(rawToggle(state, "Tree", "json"));
   },
 
-  render(state) {
-    if (state.raw) return codeView(state.editor);
+  render(state, env) {
+    if (state.raw) return codeView(state.editor, env);
     const t = theme();
     const color = { string: t.ansi2, number: t.ansi1, boolean: t.ansi6, null: t.ansi6, object: t.dim, array: t.dim };
     const row = (r) => h_flex().h(ROW).pl(14 + r.depth * 18).pr(14).gap(6).items_center()

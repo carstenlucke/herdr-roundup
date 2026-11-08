@@ -1,5 +1,5 @@
 // What a text file needs before it is shown, and what Herdr's read errors mean to the
-// person. Pure, so node --test covers it.
+// person. Pure (no Herdr imports); this repo has no tests for it yet.
 
 export const GONE = "This file is no longer available";
 

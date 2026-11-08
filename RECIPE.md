@@ -586,19 +586,22 @@ not "Not a git repository":
   folder); when it fails (no repo, no git), search reads the disk
 
 A Cmd-double-click, Enter or the menu's Open in tab on a file runs `tab.new {name, mod:
-"roundup-preview", props: {file, on}}` (`open-file.js`'s `openTab` and
-`openCommand`; the window's Open in tab runs the same). `run()` names
+"roundup-preview", props: {file, on, token}}` (`open-file.js`'s `openTab` and
+`openCommand`). `run()` names
 nothing it made and a mod pane doesn't learn its own id (issue #17), so the
 opener takes the one `roundup-preview` pane that wasn't in `panes()` before
 (looking again every 200ms, five times) and records it in shared
-`roundup-preview.open` (`"<on>:<file>"` → pane). Opens in flight sit in
+`roundup-preview.open.v2` (`previewId(file, on)` → `{pane, token}`; the id is
+`[on, pathKey(file)]`, so `C:\repo\b.md` and `c:/REPO/b.md` are one file). Opens in flight sit in
 shared `roundup-preview.opening` (token → `{since, until}`): when another
 open overlapped this one in time, or two new panes came, it records none, so
 the next click opens another tab rather than focusing a wrong one.
-The next click on the file runs `pane.focus` on it while it is alive and
-`roundup-preview.moved` doesn't say it followed a link elsewhere
-(`shownIn`). `open-file.js` is a copy of `roundup-preview`'s; `sync.sh`
-refuses to install when the two differ. The click count comes from
+A preview tab writes the file it shows, after a link or Back, under its own
+token into `roundup-preview.moved.v2` (token → file); a tab without a token
+(opened some other way) writes nothing. The next click on the file runs
+`pane.focus` on the recorded pane while it is alive and its token's entry
+doesn't name another file (`shownIn`). `open-file.js` and `paths.js` are
+copies of `roundup-preview`'s; `sync.sh` refuses to install when they differ. The click count comes from
 `on_mouse_down("left")` on the list's box (`click_count`), since
 `on_item_click` gives none; the row's click then reads it, and Cmd from
 the same event's `modifiers.platform` on macOS, `modifiers.control`
@@ -606,17 +609,40 @@ elsewhere (`platform` is the Windows key there). A double-click,
 Space or Quick look runs `openOverlay(floatSpec({file, on, token}))`
 (`open-file.js`: `kind: "window"`, `key: "roundup-preview"`, so opening again
 replaces it in place) and writes shared `roundup-preview.float` (`{id, file,
-on, token}`). The window's copy (`props().float` = the token) clears that key
-in `close()` only while it still holds its token, since a replaced window
-closes after the new one wrote it. The panel clears the key on start: a
-window doesn't survive a restart or a layout switch, the key does. When the
+on, token, owner, copy}`; `owner` is the panel copy's id). The window's copy (`props().float` = the token) clears that key
+in `close()` only while it still holds its token and its `copy`, since a
+replaced window closes after the new one wrote it, and a copy that starts
+again (the mod reloaded) writes the key back with its own `copy` before the
+copy before closes. When the
 window follows a link or goes Back, it writes the file it shows into the
 key's `file`, again only while it holds its token; the panel compares that
-with a row's path by `samePath` (`paths.js`, a copy of `roundup-preview`'s
-that `sync.sh` checks too), since a link's path comes with `/` on Windows.
+with a row's path by `samePath`, since a link's path comes with `/` on Windows.
+A panel copy that starts while the key is set takes it over (`owner`), and
+asks `herdr-app status` once whether the window still exists: a window
+doesn't survive a restart or a layout switch, the key does. Mods can't list
+overlays and `status` lists them by name only, so only an answer whose
+`overlays` are names, none of them `roundup-preview`, clears the key, and
+only while the key is still the record it found (same token, `id` and
+`copy`); no answer (no `herdr-app` on the path or in `~/.local/bin`),
+another `appHome()` than `~/.config/herdr-app`, any other answer, or any
+`roundup-preview` overlay (its ⋯ menu too) keeps it.
+The window's Open in tab doesn't open the tab itself: its timers end when
+it closes. It adds `{at, owner, file, on, space}` under a fresh token to
+shared `roundup-preview.tab-requests` and closes; the panel copy named
+`owner` looks every 500ms from a timer (a hidden panel isn't drawn, so not
+from `render`), takes its own requests out (`taken`) and runs `openTab` for
+them, so a request from a second window can't replace one not yet taken.
+Requests older than 30s are dropped the next time the map is written. The
+same look takes over a key without an owner: a window copy that starts
+again after the key was cleared writes it back with none. Without an owner
+when Open in tab is pressed, the window opens the tab itself and waits for
+the record, as before.
 In the window a press drags it unless stopped, so `preview.js` stops
-`mouse_down` on its controls and its body (and focuses its handle there, for
-Esc). A mod pane has no folder, so the
+`mouse_down` on its controls and its body and focuses its handle there, for
+Esc, unless a field or editor in them took the keyboard on that press: the
+PDF's Go to and the read-only `Editor` (code, Raw) sit in `keepsKeys`
+(`viewers/text.js`), whose own `mouse_down` runs first and tells the
+preview (`env.ownsKeys`). A mod pane has no folder, so the
 panel remembers the last terminal folder per space (with its machine) and
 shows it while a tab without a terminal is focused; before one was seen,
 the first terminal of the space with a folder, else `space.folder`.
@@ -813,12 +839,9 @@ global `tab.close` and `pane.close`.
   its own. Counting the panes of the whole overlapping group works only
   with an observer that outlives each open's five looks; until `run()`
   names the pane it made (issue #17), this stays.
-- **One file, two spellings, two previews:** `roundup-preview.open` and
-  `.moved` are keyed by `"<on>:<file>"` as the path was written, and
-  `.moved` by the file a tab opened with rather than by the tab. A tab
-  opened as `C:\repo\b.md` isn't found for `C:/repo/b.md` (the window's
-  Open in tab after a link), and a second unrecorded tab of the same file
-  can overwrite the recorded one's `.moved` entry.
+- **An Open in tab can be lost with its panel:** the window hands it to the
+  panel copy that owns it; when that copy ended in between (the mod
+  reloaded while the request waited), nobody takes it, and it goes after 30s.
 
 ## Done when
 
@@ -910,5 +933,10 @@ global `tab.close` and `pane.close`.
   and a JSON tree. Another Cmd-double-click on the same file brings that
   tab back instead of a new one. With the terminal `cd`'d into a subfolder,
   the tree still shows that subfolder while the preview tab is in front.
+- In the floating preview of a PDF, typing a page into Go to and Enter
+  jumps there; in a code file or Raw, a selection copies with Cmd-C. Open
+  in tab opens the tab even though the window closes at once, and the next
+  Cmd-double-click on that file brings the tab back.
+- `node --test tests/` passes (Node 22 or later).
 - A folder without git shows "Not a git repository" and its files; a folder
   with more than 500 entries says so in the footer.

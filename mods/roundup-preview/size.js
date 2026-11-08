@@ -1,4 +1,4 @@
-// A file size the way the header shows it. Pure, so node --test covers it.
+// A file size the way the header shows it. Pure (no Herdr imports); this repo has no tests for it yet.
 export function formatSize(bytes) {
   if (typeof bytes !== "number" || !(bytes >= 0)) return "";
   if (bytes < 1024) return `${bytes} B`;

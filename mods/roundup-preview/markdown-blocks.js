@@ -5,7 +5,7 @@
 // { level, title, slug } with GitHub's anchor names. Fenced code is left whole,
 // and reference definitions ([id]: url) are repeated in every text block so a
 // reference link still resolves when its definition sits in another block.
-// Pure, so node --test covers it.
+// Pure (no Herdr imports); this repo has no tests for it yet.
 import { GONE } from "./text-file.js";
 
 const IMAGE = /\[!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)\]\(\s*<?([^)\s>]+)>?\s*\)|!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/g;

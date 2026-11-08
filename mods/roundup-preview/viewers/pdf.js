@@ -6,6 +6,7 @@ import { div, image } from "gpui-kit";
 import { v_flex, h_flex, v_virtual_list, Scrollbar, VirtualListScrollHandle, InputState, Input } from "gpui-base";
 import { theme } from "herdr";
 import { zoomControl } from "./zoom.js";
+import { keepsKeys } from "./text.js";
 import { renderPages } from "../pdf-render.js";
 import { pruneCache } from "../media.js";
 
@@ -57,7 +58,7 @@ export default {
     });
   },
 
-  toolbar(state) {
+  toolbar(state, env) {
     const t = theme(), page = state.visible + 1, last = state.pages.length;
     const step = (id, label, n) => div().id(`pdf-${id}`).w(24).h(22).flex().items_center().justify_center().rounded(5)
       .text_color(n >= 1 && n <= last ? t.muted : t.dim)
@@ -69,7 +70,7 @@ export default {
         .child(div().min_w(64).text_center().text_color(t.foreground).child(`${page} / ${state.count}`))
         .child(step("next", "›", page + 1)))
       .child(div().w(64).h(26).px(6).flex().items_center().rounded(6).border_1().border_color(t.border).bg(t.background)
-        .child(Input.new(state.goto).text_size(12)))
+        .child(keepsKeys(Input.new(state.goto).text_size(12), env).flex_1()))
       .child(zoomControl(state, state.zoom ?? 1));
   },
 

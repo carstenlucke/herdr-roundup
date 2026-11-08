@@ -1,4 +1,4 @@
-// Paths in every system's form. Pure, so node --test covers it.
+// Paths in every system's form. Pure, so tests/paths.test.mjs runs it in node.
 // A Windows path comes with \, / or both; a backslash in a POSIX name stays. A path
 // starting // is a Windows share: localPath settles that off Windows, where it is a slip.
 
@@ -30,26 +30,26 @@ export const localPath = (path, system) => system === "windows" ? path : path.re
 /** `path` as its own system writes it: backslashes on Windows. */
 export const native = (path, system) => system === "windows" ? path.replaceAll("/", "\\") : path;
 
-// A path's form for comparing: Windows paths ignore case, POSIX ones don't.
-function comparable(path) {
+/** A path's form for comparing and as a key: Windows paths ignore case and \ vs /, POSIX ones don't. */
+export function pathKey(path) {
   const full = normalize(path);
   return isWindows(full) ? full.toLowerCase() : full;
 }
 
-export const samePath = (a, b) => comparable(a) === comparable(b);
+export const samePath = (a, b) => pathKey(a) === pathKey(b);
 
 /** Whether a watchFolder result touches `file`: the file, or its folder when the list overflowed. */
 export function changedFile(changed, file) {
-  const targets = [comparable(file), comparable(dirname(file))];
-  return changed.some((path) => targets.includes(comparable(path)));
+  const targets = [pathKey(file), pathKey(dirname(file))];
+  return changed.some((path) => targets.includes(pathKey(path)));
 }
 
 /** `file` from the repo root when it has one, else from the home folder as ~/…, else as is. */
 export function relativePath(file, root, home) {
-  const full = normalize(file), target = comparable(file);
+  const full = normalize(file), target = pathKey(file);
   const under = (base) => {
     if (!base) return null;
-    const folder = comparable(base).replace(/\/$/, "");
+    const folder = pathKey(base).replace(/\/$/, "");
     return target.startsWith(folder + "/") ? full.slice(folder.length + 1) : null;
   };
   return under(root) ?? (under(home) !== null ? `~/${under(home)}` : full);
