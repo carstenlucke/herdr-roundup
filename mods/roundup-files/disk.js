@@ -65,7 +65,8 @@ export function compare(a, b) {
 }
 export const sortEntries = (list) => list.sort((a, b) => Number(b.dir) - Number(a.dir) || compare(a.name, b.name));
 
-// One folder: [{ name, dir }], folders first, the first PER_FOLDER of them in that order.
+// One folder: [{ name, dir, link, broken }] (link: a link's target as written, "" when it
+// can't be read, null for no link; broken: a link that points nowhere), folders first, the first PER_FOLDER of them in that order.
 // `more`: it held more. Up to READ_AT_MOST entries are read and sorted first: a cut while
 // reading drops in the shell's order (dotfiles come last) rather than the shown one, so only
 // a folder larger than that may miss a few of its first PER_FOLDER.
@@ -75,15 +76,18 @@ export async function listDir(path, on) {
     // Links keep directory attributes even when dangling; check their target.
     // Other reparse points (OneDrive's folders) have no LinkType and are folders.
     // PowerShell reads curly single quotes as quotes too, so they're doubled like '.
-    const r = await exec("powershell", ["-NoProfile", "-Command", `[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); & { param($p) @(Get-ChildItem -LiteralPath $p -Force -ErrorAction Stop | Where-Object Name -ne '.git' | Select-Object -First ${READ_AT_MOST} | ForEach-Object { @{ name=$_.Name; dir=($_.PSIsContainer -and (-not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -or -not $_.LinkType -or ($_.Target -and [IO.Directory]::Exists(([IO.Path]::Combine([IO.Path]::GetDirectoryName($_.FullName), $_.Target[0])))))) } }) | ConvertTo-Json -Compress } ${psQuote(path)}`], { on });
+    // link: a link's target as written (junctions and symlinks); broken: it points nowhere.
+    const r = await exec("powershell", ["-NoProfile", "-Command", `[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); & { param($p) @(Get-ChildItem -LiteralPath $p -Force -ErrorAction Stop | Where-Object Name -ne '.git' | Select-Object -First ${READ_AT_MOST} | ForEach-Object { $t = if ($_.LinkType -and $_.Target) { @($_.Target)[0] } else { $null }; $at = if ($t) { [IO.Path]::Combine([IO.Path]::GetDirectoryName($_.FullName), $t) } else { $null }; @{ name=$_.Name; dir=($_.PSIsContainer -and (-not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -or -not $_.LinkType -or ($at -and [IO.Directory]::Exists($at)))); link=$t; broken=[bool]($at -and -not (Test-Path -LiteralPath $at)) } }) | ConvertTo-Json -Compress } ${psQuote(path)}`], { on });
     if (r.code !== 0) throw new Error(r.stderr || "Cannot list this folder");
     const result = JSON.parse(r.stdout || "[]");
-    return Array.isArray(result) ? result : [result];
+    return (Array.isArray(result) ? result : [result]).map((e) => ({ name: e.name, dir: Boolean(e.dir), link: e.link ?? null, broken: Boolean(e.broken) }));
   };
   let list;
   if (windows(on)) list = await windowsDirectory();
   else {
-    const script = `n=0; for p in "$1"/* "$1"/.[!.]* "$1"/..?*; do [ -e "$p" ] || [ -L "$p" ] || continue; name=\${p##*/}; [ "$name" = .git ] && continue; if [ -d "$p" ]; then kind=d; else kind=f; fi; printf "%s\\0%s\\0" "$kind" "$name"; n=$((n+1)); [ "$n" -ge ${READ_AT_MOST} ] && break; done; test -d "$1"`;
+    // Per entry: its kind (d, f; a link: D, F, or B when it points nowhere), its name and a
+    // link's target as written (readlink: macOS, Linux, BusyBox; empty where it is missing).
+    const script = `n=0; for p in "$1"/* "$1"/.[!.]* "$1"/..?*; do [ -e "$p" ] || [ -L "$p" ] || continue; name=\${p##*/}; [ "$name" = .git ] && continue; if [ -d "$p" ]; then kind=d; else kind=f; fi; to=; if [ -L "$p" ]; then to=$(readlink "$p" 2>/dev/null); if [ ! -e "$p" ]; then kind=B; elif [ $kind = d ]; then kind=D; else kind=F; fi; fi; printf "%s\\0%s\\0%s\\0" "$kind" "$name" "$to"; n=$((n+1)); [ "$n" -ge ${READ_AT_MOST} ] && break; done; test -d "$1"`;
     let r;
     try { r = await exec("sh", ["-c", script, "roundup-files", path], { on }); }
     catch (e) {
@@ -94,7 +98,10 @@ export async function listDir(path, on) {
       if (r.code !== 0) throw new Error(r.stderr || "Cannot list this folder");
       const fields = r.stdout.split("\0");
       list = [];
-      for (let i = 0; i + 1 < fields.length; i += 2) list.push({ name: fields[i + 1], dir: fields[i] === "d" });
+      for (let i = 0; i + 2 < fields.length; i += 3) {
+        const kind = fields[i], link = "DFB".includes(kind);
+        list.push({ name: fields[i + 1], dir: kind === "d" || kind === "D", link: link ? fields[i + 2] : null, broken: kind === "B" });
+      }
     }
   }
   return { entries: sortEntries(list).slice(0, PER_FOLDER), more: list.length > PER_FOLDER };

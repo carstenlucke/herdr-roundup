@@ -24,6 +24,8 @@ import { samePath } from "./paths.js";
 
 const NAME = "roundup-files";
 const ICON = (name) => `mods/${NAME}/${name}.svg`;
+// A link row's tooltip: where it points, as written.
+const linkTip = (r) => `${r.broken ? "Broken link" : "Link"}${r.link ? ` to ${r.link}` : ""}`;
 const ROW = 26;
 const FIND_LIMIT = 200;
 // Changed shows at most this many of git's paths (in git's order): its rows are built on every
@@ -597,7 +599,8 @@ export default class Files extends View {
   }
 
   // ── rows ─────────────────────────────────────────────────────────────────────────────
-  // Every row: { rel, name, dir, depth, open, gone, disk }. gone: not on disk (deleted).
+  // Every row: { rel, name, dir, depth, open, gone, disk, link, broken }. gone: not on disk
+  // (deleted). link, broken: as listDir has them, on rows read from disk (null, false otherwise).
   // disk: a folder that opens from disk (this.folders); in Changed, the others fold (this.shut).
   rows() {
     const out = [], q = this.query.trim().toLowerCase();
@@ -612,7 +615,7 @@ export default class Files extends View {
   diskRows(prefix, depth, out) {
     for (const e of this.entries.get(prefix) ?? []) {
       const rel = prefix ? `${prefix}/${e.name}` : e.name, open = e.dir && this.folders.has(rel);
-      out.push({ rel, name: e.name, dir: e.dir, depth, open, gone: false, disk: e.dir });
+      out.push({ rel, name: e.name, dir: e.dir, depth, open, gone: false, disk: e.dir, link: e.link, broken: e.broken });
       if (open && depth < 40) this.diskRows(rel, depth + 1, out);
     }
   }
@@ -669,22 +672,23 @@ export default class Files extends View {
     // that isn't there (a file deleted next to new ones). During a search it opens for what
     // the search found in it, and shows what is on disk once opened.
     const mixed = (p, depth) => {
-      const disk = this.folders.has(p) ? this.entries.get(p) ?? [] : [], here = new Map();
-      for (const e of disk) here.set(`${p}/${e.name}`, e.dir);
+      const disk = this.folders.has(p) ? this.entries.get(p) ?? [] : [], here = new Map(), links = new Map();
+      for (const e of disk) { here.set(`${p}/${e.name}`, e.dir); if (e.link != null) links.set(`${p}/${e.name}`, e); }
       const list = new Map(here);
       for (const rel of kids.get(p) ?? []) if (!list.has(rel)) list.set(rel, dirs.has(rel));
       for (const [rel, dir] of order([...list])) {
         const name = baseOf(rel), onDisk = here.has(rel), gone = !onDisk && g.gone.has(rel);
+        const link = links.get(rel)?.link ?? null, broken = links.get(rel)?.broken ?? false;
         if (dir && onDisk) {
           const open = this.folders.has(rel) || (Boolean(q) && kids.has(rel));
-          out.push({ rel, name, dir, depth, open, gone, disk: true });
+          out.push({ rel, name, dir, depth, open, gone, disk: true, link, broken });
           if (open && depth < 40) mixed(rel, depth + 1);
         } else if (dir && !gone) {
           // Only in git's list (its files deleted): it folds, as in walk.
           const open = Boolean(q) || !this.shut.has(rel);
           out.push({ rel, name, dir, depth, open, gone, disk: false });
           if (open && depth < 40) mixed(rel, depth + 1);
-        } else out.push({ rel, name, dir, depth, open: false, gone, disk: false });
+        } else out.push({ rel, name, dir, depth, open: false, gone, disk: false, link, broken });
       }
     };
     walk("", 0);
@@ -992,9 +996,13 @@ export default class Files extends View {
     return h_flex().id(`rf-row-${rel}`).h(ROW).flex_none().pl(8 + r.depth * 14).pr(10).gap(6).items_center().rounded(6).cursor_pointer()
       .when(selected, (el) => el.bg(t.selected)).when(!selected, (el) => el.hover((s) => s.bg(t.hover)))
       .child(r.dir ? svg(ICON(`chevron-${r.open ? "down" : "right"}`)).size(12).flex_none().text_color(t.dim) : div().w(12).flex_none())
-      .child(image(iconFor(rel, r.dir, r.open)).size(16).flex_none().when(ignored || r.gone, (el) => el.opacity(0.5)))
-      .child(div().flex_1().min_w(0).truncate().text_color(ignored ? t.dim : color ?? t.foreground)
-        .when(r.gone, (el) => el.line_through()).child(r.name))
+      .child(image(iconFor(rel, r.dir, r.open)).size(16).flex_none().when(ignored || r.gone || r.broken, (el) => el.opacity(0.5)))
+      .child(div().flex_1().min_w(0).truncate().text_color(ignored || r.broken ? t.dim : color ?? t.foreground)
+        .when(r.gone, (el) => el.line_through()).when(r.link != null, (el) => el.italic()).child(r.name))
+      // A link: its name in italics and an arrow after it, red when it points nowhere; its
+      // target on hover.
+      .when(r.link != null, (el) => el.child(div().id(`rf-link-${rel}`).flex_none().tooltip(linkTip(r))
+        .child(svg(ICON("link")).size(14).text_color(r.broken ? t.ansi1 : t.accent))))
       .when(Boolean(counts), (el) => el.children(counts.map((n, i) => n
         ? h_flex().flex_none().gap(3).items_center().text_size(11).text_color(changeColors(t)[i]).child(div().size(6).rounded(3).bg(changeColors(t)[i])).child(String(n))
         : null).filter(Boolean)))

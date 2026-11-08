@@ -129,7 +129,12 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
     icon. Files end with `+N −N` and their letter (`?`, `A`, `M`, `D`, `U`,
     `R`, `T`) in a 12px column; folders show a colored dot and count for
     each of new, modified and deleted below them, and from 360px of width
-    their `+N −N`. Selected row on `selected`, hovered on `hover`.
+    their `+N −N`. A symlink read from disk (All, and folders Changed opens
+    from disk) has its name in italics and a 14px arrow (Lucide
+    `arrow-up-right`, stroke 2.5) after it in `accent`, its hover "Link to
+    <target>" as written; one that points nowhere has a `dim` name, a
+    half-faded icon, the arrow in `ansi1` and "Broken link to <target>".
+    Selected row on `selected`, hovered on `hover`.
   - **Footer** (only when needed, 11px `dim`): "Folders show their first 500
     entries", "First 200 matches", "Changed shows the first 2,000 paths",
     "Search covers the first 40,000 files" (or "the first 20,000 folders",
