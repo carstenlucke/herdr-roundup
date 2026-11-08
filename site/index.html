@@ -7,7 +7,9 @@
 <meta name="description" content="A layout for Herdr App: spaces that show where each repo stands, a files panel with git built in, a preview for every file, panes with names, and updates through your agent.">
 <meta property="og:title" content="Herdr Roundup">
 <meta property="og:description" content="A layout for Herdr App, quieter and more telling.">
-<meta property="og:image" content="https://carstenlucke.github.io/herdr-roundup/img/window.webp">
+<meta property="og:image" content="https://carstenlucke.github.io/herdr-roundup/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="750">
 <link rel="icon" href="img/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -53,10 +55,10 @@
     <div class="glow" aria-hidden="true"></div>
     <div class="frame">
       <div class="track">
-        <figure class="slide" aria-roledescription="slide"><img src="img/window.webp" width="1920" height="1200" alt="The whole window: spaces with git state, two agents side by side, a README in the floating preview, the files panel" data-title="The whole window" data-text="Spaces with their git state, two agents side by side, a README in the floating preview, the files panel."></figure>
-        <figure class="slide" aria-roledescription="slide"><img src="img/hero-files-changed.webp" width="1920" height="1200" loading="lazy" alt="The files panel showing only the changed files" data-title="Only what changed" data-text="The files panel lists exactly what git status lists, with lines added and removed."></figure>
-        <figure class="slide" aria-roledescription="slide"><img src="img/hero-preview-tab.webp" width="1920" height="1200" loading="lazy" alt="package.json in a preview tab as a JSON tree" data-title="A preview for every file" data-text="Markdown, PDF, pictures, CSV, JSON and code, in a floating window or a tab of their own."></figure>
-        <figure class="slide" aria-roledescription="slide"><img src="img/hero-update.webp" width="1920" height="1200" loading="lazy" alt="The update menu under the logo, offering version 0.9.0" data-title="Updates through your agent" data-text="A new release shows on the logo; your agent installs it after asking you."></figure>
+        <figure class="slide" aria-roledescription="slide"><img draggable="false" src="img/window.webp" width="1920" height="1200" alt="The whole window: spaces with git state, two agents side by side, a README in the floating preview, the files panel" data-title="The whole window" data-text="Spaces with their git state, two agents side by side, a README in the floating preview, the files panel."></figure>
+        <figure class="slide" aria-roledescription="slide"><img draggable="false" src="img/hero-files-changed.webp" width="1920" height="1200" loading="lazy" alt="The files panel showing only the changed files" data-title="Only what changed" data-text="The files panel lists exactly what git status lists, with lines added and removed."></figure>
+        <figure class="slide" aria-roledescription="slide"><img draggable="false" src="img/hero-preview-tab.webp" width="1920" height="1200" loading="lazy" alt="package.json in a preview tab as a JSON tree" data-title="A preview for every file" data-text="Markdown, PDF, pictures, CSV, JSON and code, in a floating window or a tab of their own."></figure>
+        <figure class="slide" aria-roledescription="slide"><img draggable="false" src="img/hero-update.webp" width="1920" height="1200" loading="lazy" alt="The update menu under the logo, offering the next version" data-title="Updates through your agent" data-text="A new release shows on the logo; your agent installs it after asking you."></figure>
       </div>
     </div>
     <div class="show-bar">
@@ -185,7 +187,7 @@
           <p>When a newer version is out, the logo gets a point, the new version shows under the name, and one notification appears. Click the logo or the name for the menu: check now, update, read the release notes, skip a version, or check <b>only when you ask</b>.</p>
           <p><b>Update</b> opens a tab with your agent and a brief. It reads the release notes, tells you what would change, keys you edited yourself included, and <b>asks before it installs anything</b>.</p>
         </div>
-        <figure class="crop narrow"><img data-zoom src="img/update.webp" width="420" height="440" alt="The update menu under the logo: details, Check for updates, Update to 0.9.0 with an agent, Release notes, Skip"></figure>
+        <figure class="crop narrow"><img data-zoom src="img/update.webp" width="420" height="440" alt="The update menu under the logo: details, Check for updates, Update to the next version with an agent, Release notes, Skip"></figure>
       </div>
     </section>
 
@@ -282,7 +284,7 @@ const dots = slides.map((_, i) => {
   return d;
 });
 const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
-let at = 0, timer = null, held = false;
+let at = 0, timer = null, hovered = false, focused = false;
 function go(i, byHand) {
   at = (i + slides.length) % slides.length;
   track.style.transform = `translateX(${-100 * at}%)`;
@@ -296,15 +298,16 @@ function go(i, byHand) {
 function restart() {
   clearInterval(timer);
   show.classList.remove("run"); void show.offsetWidth;
-  if (still || held) return;
+  if (still || hovered || focused) return;
   show.classList.add("run");
   timer = setInterval(() => go(at + 1), 6000);
 }
-const hold = (on) => { held = on; show.classList.toggle("held", on); restart(); };
-show.addEventListener("mouseenter", () => hold(true));
-show.addEventListener("mouseleave", () => hold(false));
-show.addEventListener("focusin", () => hold(true));
-show.addEventListener("focusout", (e) => { if (!show.contains(e.relatedTarget)) hold(false); });
+// Only a mouse holds them by hovering: a tap sends pointerenter without a reliable pointerleave.
+const hold = () => { show.classList.toggle("held", hovered || focused); restart(); };
+show.addEventListener("pointerenter", (e) => { if (e.pointerType === "mouse") { hovered = true; hold(); } });
+show.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse") { hovered = false; hold(); } });
+show.addEventListener("focusin", () => { focused = true; hold(); });
+show.addEventListener("focusout", (e) => { if (!show.contains(e.relatedTarget)) { focused = false; hold(); } });
 show.querySelectorAll(".arr").forEach(b => b.addEventListener("click", () => go(at + Number(b.dataset.step), true)));
 show.addEventListener("keydown", (e) => {
   if (e.key === "ArrowRight") go(at + 1, true);
@@ -317,6 +320,7 @@ track.addEventListener("pointerup", (e) => {
   const dx = e.clientX - x0; x0 = null;
   if (Math.abs(dx) > 40) { moved = true; go(at + (dx < 0 ? 1 : -1), true); }
 });
+track.addEventListener("pointercancel", () => { x0 = null; });
 slides.forEach(s => s.querySelector("img").addEventListener("click", (e) => {
   if (moved) return;
   const img = e.currentTarget;
@@ -328,10 +332,12 @@ restart();
 document.querySelectorAll("[data-zoom]").forEach(img => img.addEventListener("click", () => showBig(img.currentSrc || img.src, img.alt)));
 box.addEventListener("click", () => box.close());
 
-// A link to #mods opens its answer.
-const openMods = () => { if (location.hash === "#mods") document.getElementById("mods").open = true; };
+// A link to #mods opens its answer, also when the address already ends in #mods (no hashchange then).
+const mods = document.getElementById("mods");
+const openMods = () => { if (location.hash === "#mods") mods.open = true; };
 addEventListener("hashchange", openMods);
 openMods();
+document.querySelectorAll('a[href="#mods"]').forEach(a => a.addEventListener("click", () => { mods.open = true; }));
 
 // Copy buttons.
 document.querySelectorAll(".copy").forEach(b => b.addEventListener("click", async () => {
