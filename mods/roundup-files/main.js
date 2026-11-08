@@ -19,6 +19,7 @@ import { openExternal, revealExternal, copy, sendToAgent } from "./actions.js";
 import { dirOf, baseOf, ancestors, relTo, join } from "./tree.js";
 import { diskRows, hitRows, changedRows, rowStatus } from "./rows.js";
 import { match, cursorAfter, outdated, classify, applyRecheck, STALE_AGE } from "./search.js";
+import { location } from "./location.js";
 import { ROW, menuItems, menuHeight, keyMenuAt, menuKey, moveIndex, clickAction } from "./input.js";
 import { listNote, footerLines, linkTip, statusColor, changeColors, gitReason, noRepo, GIT_FAILED } from "./panel-text.js";
 // A copy of roundup-preview's: how it opens and which pane already shows a file. sync.sh
@@ -44,24 +45,8 @@ const REQUEST = `${NAME}.request`;
 
 const message = (e) => String(e?.message ?? e);
 
-// The last terminal folder shown per space, with its machine: for a tab of mod panes only
-// (a preview tab), which has no folder. space.folder is only where the space's first shell
-// started, so without this a click on a file would send the tree to another folder.
+// The last terminal folder shown per space, with its machine (location.js).
 const lastRoot = new Map();
-
-// The focused pane's folder; when the focused pane is a mod, the first terminal of its tab;
-// in a tab without one, the folder last shown in this space.
-function location() {
-  const space = spaces().find((s) => s.active), f = focused();
-  let pane = f?.pane ? panes().find((p) => p.pane === f.pane) : null;
-  if (pane && !pane.terminal) pane = panes().find((p) => p.tab === pane.tab && p.terminal && p.cwd) ?? null;
-  const on = f?.pane === null ? (f.terminal?.includes("/") ? f.terminal.split("/")[0] : null) : space?.machine ?? null;
-  const cwd = pane?.cwd || f?.cwd;
-  if (cwd) { if (space) lastRoot.set(space.id, { cwd, on }); return { cwd, on }; }
-  if (!space) return { cwd: null, on };
-  const tabs = new Set(space.tabs.map((t) => t.id));
-  return lastRoot.get(space.id) ?? { cwd: panes().find((p) => p.terminal && p.cwd && tabs.has(p.tab))?.cwd || space.folder || null, on };
-}
 
 export default class Files extends View {
   init(_props, cx) {
@@ -170,7 +155,7 @@ export default class Files extends View {
   current(ctx) { return this.ctx === ctx; }
 
   sync(cx) {
-    const { cwd, on } = location();
+    const { cwd, on } = location({ spaces, panes, focused }, lastRoot);
     if (cwd === this.root && on === this.on) return;
     const file = this.reset(cwd, on);
     this.refresh(cx);
