@@ -23,6 +23,7 @@ A Herdr App layout, cloned from Herdr's `main` (0.1.13). See README.md for the l
 - Raise `"version"` on the root of `layouts/Herdr-Roundup.json`. It is the layout's only version: `roundup-workspace-chrome` reads it from the file (`layout()` leaves out fields Herdr doesn't know) and shows it under the name at the top left and in its details.
 - Every release gets a tag `v<version>` matching that root `"version"`, plus a GitHub release with notes written for the person who updates (`gh release create v<version> --notes-file …`). Only a release, not a tag, reaches the update check (`releases/latest`), and the updating agent reads its notes before changing anything.
 
+- The site (`site/`, GitHub Pages) is published only by hand: after changing it or a feature it shows, run `scripts/site.sh`, commit `site/img/`, and once on `main` run `gh workflow run pages.yml`. A new feature gets a scene in `scripts/preview.py` and a section in `site/index.html`.
 - Decide whether the layout needs a new preview picture: does it look different from what Settings shows (a plain frame, or the last `layouts/Herdr-Roundup.svg`)? If so, draw `layouts/Herdr-Roundup.svg` and set `"preview": "layouts/Herdr-Roundup.svg"` on the layout root. `scripts/sync.sh` already copies it.
 
 ## Limits found so far
