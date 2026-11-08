@@ -113,6 +113,10 @@ h2 { font-weight: 560; font-size: clamp(40px, 4.8vw, 64px); line-height: 1.02; l
 /* pictures: windows cut to what a feature is about */
 .crop { margin: 30px 0 0; border-radius: 12px; overflow: hidden; cursor: zoom-in; background: #131518; box-shadow: 0 0 0 1px #ffffff17, 0 30px 70px -30px #000000b3; }
 .crop img { width: 100%; }
+/* a picture is a button that shows it large; its ring sits on the picture's frame */
+.zoom { display: block; width: 100%; padding: 0; border: 0; background: none; font: inherit; color: inherit; cursor: zoom-in; }
+.zoom:focus-visible { outline: none; }
+.crop:has(.zoom:focus-visible) { box-shadow: 0 0 0 2px var(--accent), 0 30px 70px -30px #000000b3; }
 .crop.narrow { max-width: 420px; }
 .side .crop.narrow { max-width: 320px; justify-self: end; }
 .side.wide { grid-template-columns: minmax(0, 1fr) minmax(0, 420px); }

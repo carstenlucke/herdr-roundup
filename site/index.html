@@ -56,13 +56,13 @@
     <div class="frame">
       <div class="track">
         <figure class="slide" aria-roledescription="slide"><img draggable="false" src="img/window.webp" width="1920" height="1200" alt="The whole window: spaces with git state, two agents side by side, a README in the floating preview, the files panel" data-title="The whole window" data-text="Spaces with their git state, two agents side by side, a README in the floating preview, the files panel."></figure>
-        <figure class="slide" aria-roledescription="slide"><img draggable="false" src="img/hero-files-changed.webp" width="1920" height="1200" loading="lazy" alt="The files panel showing only the changed files" data-title="Only what changed" data-text="The files panel lists exactly what git status lists, with lines added and removed."></figure>
-        <figure class="slide" aria-roledescription="slide"><img draggable="false" src="img/hero-preview-tab.webp" width="1920" height="1200" loading="lazy" alt="package.json in a preview tab as a JSON tree" data-title="A preview for every file" data-text="Markdown, PDF, pictures, CSV, JSON and code, in a floating window or a tab of their own."></figure>
-        <figure class="slide" aria-roledescription="slide"><img draggable="false" src="img/hero-update.webp" width="1920" height="1200" loading="lazy" alt="The update menu under the logo, offering the next version" data-title="Updates through your agent" data-text="A new release shows on the logo; your agent installs it after asking you."></figure>
+        <figure class="slide" aria-roledescription="slide"><img draggable="false" src="img/hero-files-changed.webp" width="1920" height="1200" alt="The files panel showing only the changed files" data-title="Only what changed" data-text="The files panel lists exactly what git status lists, with lines added and removed."></figure>
+        <figure class="slide" aria-roledescription="slide"><img draggable="false" src="img/hero-preview-tab.webp" width="1920" height="1200" alt="package.json in a preview tab as a JSON tree" data-title="A preview for every file" data-text="Markdown, PDF, pictures, CSV, JSON and code, in a floating window or a tab of their own."></figure>
+        <figure class="slide" aria-roledescription="slide"><img draggable="false" src="img/hero-update.webp" width="1920" height="1200" alt="The update menu under the logo, offering the next version" data-title="Updates through your agent" data-text="A new release shows on the logo; your agent installs it after asking you."></figure>
       </div>
     </div>
     <div class="show-bar">
-      <p class="show-cap" aria-live="polite"><b></b> <span></span></p>
+      <p class="show-cap" aria-live="off"><b></b> <span></span></p>
       <div class="show-nav">
         <div class="dots" role="tablist"></div>
         <button class="arr" type="button" data-step="-1" aria-label="Previous window">←</button>
@@ -108,7 +108,7 @@
           <p>The <b>agent badge</b> counts the agents in a space. It stays gray while all of them are idle; otherwise it takes the color of the most urgent one: <span style="color:#f0705f"><span class="dot" style="background:#f0705f"></span>blocked</span>, <span style="color:#76a8ff"><span class="dot" style="background:#76a8ff"></span>done</span> or <span style="color:#e5c07b"><span class="dot" style="background:#e5c07b"></span>working</span>.</p>
           <p><b>Worktrees of one repo share a card</b>, under the repo's name, and you drag the card as one. The counts refresh after a commit, a checkout or an agent's turn, and when the window comes to the front.</p>
         </div>
-        <figure class="crop narrow"><img data-zoom src="img/spaces.webp" width="269" height="480" alt="The spaces list: a card for the repo atlas with three worktrees, each with branch, ahead/behind, changes and an agent badge"></figure>
+        <figure class="crop narrow"><button class="zoom" type="button"><img src="img/spaces.webp" width="269" height="480" alt="The spaces list: a card for the repo atlas with three worktrees, each with branch, ahead/behind, changes and an agent badge"></button></figure>
       </div>
     </section>
 
@@ -121,7 +121,7 @@
           <h3>Keys and the menu</h3>
           <p>Arrows move and open folders, <kbd>Space</kbd> previews, <kbd>Enter</kbd> opens a tab, <kbd>/</kbd> searches, <kbd>Esc</kbd> backs out. The right-click menu (or the Menu key) opens, reveals, copies relative or absolute paths, or sends <code>@path</code> to the tab's agent.</p>
         </div>
-        <figure class="crop"><img data-zoom src="img/files.webp" width="384" height="600" alt="The files panel in All: the folder tree with git state on every row"></figure>
+        <figure class="crop"><button class="zoom" type="button"><img src="img/files.webp" width="384" height="600" alt="The files panel in All: the folder tree with git state on every row"></button></figure>
       </div>
     </section>
 
@@ -132,7 +132,7 @@
           <p><b>Changed</b> lists exactly what <code>git status</code> lists, deleted files included, as a tree with every folder open. The switch carries the count, so you see how much an agent touched before you look. A deleted file shows struck through; an untracked folder is one row that opens from disk.</p>
           <p>Large repos stay fast: Changed shows the first 2,000 paths, and the panel says when it cuts a list short. Whether you look at All or Changed stays after a restart.</p>
         </div>
-        <figure class="crop"><img data-zoom src="img/files-changed.webp" width="384" height="600" alt="The files panel in Changed: only the five changed files, every folder open"></figure>
+        <figure class="crop"><button class="zoom" type="button"><img src="img/files-changed.webp" width="384" height="600" alt="The files panel in Changed: only the five changed files, every folder open"></button></figure>
       </div>
     </section>
 
@@ -141,17 +141,17 @@
       <p><b>Search covers folders you haven't opened yet.</b> By default it reads git's files, so <code>node_modules</code> and other ignored folders stay out; the switch at the end of the field searches the disk instead. Matches show as a tree, names that match first.</p>
       <p><b>Symlinks are marked:</b> the name in italics with a small arrow after it. Rest the pointer on the arrow and it says where the link points. A link whose target is missing has a dimmed name and a red arrow.</p>
       <div class="pair">
-        <figure class="crop"><img data-zoom src="img/search.webp" width="384" height="352" alt="A search for facets finds docs/facets.md in a folder that was never opened"></figure>
-        <figure class="crop"><img data-zoom src="img/symlink.webp" width="384" height="200" alt="AGENTS.md in italics with an arrow, its hover saying Link to docs/agents.md"></figure>
+        <figure class="crop"><button class="zoom" type="button"><img src="img/search.webp" width="384" height="352" alt="A search for facets finds docs/facets.md in a folder that was never opened"></button></figure>
+        <figure class="crop"><button class="zoom" type="button"><img src="img/symlink.webp" width="384" height="200" alt="AGENTS.md in italics with an arrow, its hover saying Link to docs/agents.md"></button></figure>
       </div>
     </section>
 
     <section id="preview">
       <h2><i>05</i>A preview for every file</h2>
       <p><b>Double-click a file</b>, or press <kbd>Space</kbd>, and it opens in a window over the layout. While the window is open it follows the selection in the files panel. Drag it by its header; it opens where you left it.</p>
-      <figure class="crop"><img data-zoom src="img/float.webp" width="944" height="765" alt="The floating preview showing a rendered README over the panes"></figure>
+      <figure class="crop"><button class="zoom" type="button"><img src="img/float.webp" width="944" height="765" alt="The floating preview showing a rendered README over the panes"></button></figure>
       <p style="margin-top:30px"><b>Cmd-double-click</b> (Ctrl on Windows and Linux) or <kbd>Enter</kbd> opens the file in a tab of its own. A file that already has a tab brings that tab to the front. <b>⋯</b> opens it in your editor, with the default app, or reveals it.</p>
-      <figure class="crop"><img data-zoom src="img/preview-tab.webp" width="795" height="640" alt="package.json in a preview tab, as a JSON tree with Tree and Raw"></figure>
+      <figure class="crop"><button class="zoom" type="button"><img src="img/preview-tab.webp" width="795" height="640" alt="package.json in a preview tab, as a JSON tree with Tree and Raw"></button></figure>
       <ul id="viewers">
         <li><b>Markdown</b> rendered, with local images, a table of contents and Preview | Raw. Web images load only after you ask.</li>
         <li><b>PDF</b> pages with jumping and zoom, <b>pictures</b> fitted with their pixel size.</li>
@@ -164,17 +164,17 @@
     <section id="panes">
       <h2><i>06</i>Panes with names</h2>
       <p>Every pane has a header: the program's icon, the pane's name, the terminal's id in a small chip (<code>t7</code>), its folder and the agent's status. <b>Double-click the chip</b> to copy the id, handy when one agent should talk to another.</p>
-      <figure class="crop"><img data-zoom src="img/pane-header.webp" width="642" height="120" alt="A pane header: Reviewer, the id t7, the folder, a spinner and the buttons rename, split right, split down, zoom and close"></figure>
+      <figure class="crop"><button class="zoom" type="button"><img src="img/pane-header.webp" width="642" height="120" alt="A pane header: Reviewer, the id t7, the folder, a spinner and the buttons rename, split right, split down, zoom and close"></button></figure>
       <p style="margin-top:30px"><b>Give a pane a name of your own</b>: double-click its name, or the pencil that appears on hover. The name stays with the terminal; an empty one goes back to the program's. On hover the header also splits, zooms and closes the pane.</p>
-      <figure class="crop" style="max-width:500px"><img data-zoom src="img/rename.webp" width="500" height="296" alt="The Rename pane dialog with the name Facet filters typed in"></figure>
+      <figure class="crop" style="max-width:500px"><button class="zoom" type="button"><img src="img/rename.webp" width="500" height="296" alt="The Rename pane dialog with the name Facet filters typed in"></button></figure>
     </section>
 
     <section id="closing">
       <h2><i>07</i>Closing asks when it matters</h2>
       <p>You choose when closing a tab or a pane asks first: <b>Never</b>, <b>While an agent works</b> (the default) or <b>Always</b>. Tabs have the choice in their right-click menu, panes in the terminal's. <kbd>cmd-w</kbd> closes the tab, <kbd>cmd-shift-w</kbd> the focused pane, both through your choice.</p>
       <div class="stack">
-        <figure class="crop"><img data-zoom src="img/close-menu.webp" width="520" height="290" alt="The tab's right-click menu with Ask before closing a tab: Never, While an agent works, Always"></figure>
-        <figure class="crop"><img data-zoom src="img/close-confirm.webp" width="520" height="270" alt="The question Close tab search-filters? with Cancel holding the keyboard"></figure>
+        <figure class="crop"><button class="zoom" type="button"><img src="img/close-menu.webp" width="520" height="290" alt="The tab's right-click menu with Ask before closing a tab: Never, While an agent works, Always"></button></figure>
+        <figure class="crop"><button class="zoom" type="button"><img src="img/close-confirm.webp" width="520" height="270" alt="The question Close tab search-filters? with Cancel holding the keyboard"></button></figure>
       </div>
       <p style="margin-top:30px">The question says what would end, and it opens with <b>Cancel</b> holding the keyboard: a second <kbd>cmd-w</kbd> or an Enter too many closes nothing. <kbd>Tab</kbd> moves to Confirm, <kbd>Esc</kbd> cancels.</p>
     </section>
@@ -187,7 +187,7 @@
           <p>When a newer version is out, the logo gets a point, the new version shows under the name, and one notification appears. Click the logo or the name for the menu: check now, update, read the release notes, skip a version, or check <b>only when you ask</b>.</p>
           <p><b>Update</b> opens a tab with your agent and a brief. It reads the release notes, tells you what would change, keys you edited yourself included, and <b>asks before it installs anything</b>.</p>
         </div>
-        <figure class="crop narrow"><img data-zoom src="img/update.webp" width="420" height="440" alt="The update menu under the logo: details, Check for updates, Update to the next version with an agent, Release notes, Skip"></figure>
+        <figure class="crop narrow"><button class="zoom" type="button"><img src="img/update.webp" width="420" height="440" alt="The update menu under the logo: details, Check for updates, Update to the next version with an agent, Release notes, Skip"></button></figure>
       </div>
     </section>
 
@@ -270,8 +270,8 @@ function showBig(src, caption) {
   box.showModal();
 }
 // The hero's windows: one at a time, sliding from right to left. They move on by themselves every
-// 6 s (not with reduced motion, nor while the pointer or the keyboard is on them); arrows, dots,
-// the arrow keys and a swipe move them by hand.
+// 6 s (not with reduced motion, nor while the mouse or the keyboard is on them); arrows, dots,
+// the arrow keys and a swipe move them by hand, Enter shows the current one large.
 const show = document.querySelector(".show");
 const track = show.querySelector(".track");
 const slides = [...track.children];
@@ -283,6 +283,7 @@ const dots = slides.map((_, i) => {
   show.querySelector(".dots").append(d);
   return d;
 });
+const cap = show.querySelector(".show-cap");
 const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
 let at = 0, timer = null, hovered = false, focused = false;
 function go(i, byHand) {
@@ -291,27 +292,44 @@ function go(i, byHand) {
   slides.forEach((s, k) => s.setAttribute("aria-hidden", k !== at));
   dots.forEach((d, k) => { d.classList.toggle("on", k === at); d.setAttribute("aria-selected", k === at); });
   const img = slides[at].querySelector("img");
-  show.querySelector(".show-cap b").textContent = img.dataset.title;
-  show.querySelector(".show-cap span").textContent = img.dataset.text;
+  cap.querySelector("b").textContent = img.dataset.title;
+  cap.querySelector("span").textContent = img.dataset.text;
   if (byHand) restart();
 }
 function restart() {
   clearInterval(timer);
   show.classList.remove("run"); void show.offsetWidth;
-  if (still || hovered || focused) return;
+  const run = !still && !hovered && !focused;
+  // A screen reader reads the caption out only while the windows stand still (WAI's carousel).
+  cap.setAttribute("aria-live", run ? "off" : "polite");
+  if (!run) return;
   show.classList.add("run");
   timer = setInterval(() => go(at + 1), 6000);
 }
 // Only a mouse holds them by hovering: a tap sends pointerenter without a reliable pointerleave.
+// Focus holds them only when it comes from the keyboard: a tap or click focuses the region or a
+// button too, and that focus stays after the pointer has gone. So the page notes which came last.
 const hold = () => { show.classList.toggle("held", hovered || focused); restart(); };
+let byPointer = false;
+addEventListener("pointerdown", () => { byPointer = true; }, true);
+addEventListener("keydown", () => { byPointer = false; }, true);
 show.addEventListener("pointerenter", (e) => { if (e.pointerType === "mouse") { hovered = true; hold(); } });
 show.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse") { hovered = false; hold(); } });
-show.addEventListener("focusin", () => { focused = true; hold(); });
+show.addEventListener("focusin", () => { focused = !byPointer; hold(); });
 show.addEventListener("focusout", (e) => { if (!show.contains(e.relatedTarget)) { focused = false; hold(); } });
+// A click on what already has focus sends no focusin.
+show.addEventListener("pointerdown", () => { if (focused) { focused = false; hold(); } });
 show.querySelectorAll(".arr").forEach(b => b.addEventListener("click", () => go(at + Number(b.dataset.step), true)));
 show.addEventListener("keydown", (e) => {
+  if (!focused) { focused = true; hold(); }
   if (e.key === "ArrowRight") go(at + 1, true);
   else if (e.key === "ArrowLeft") go(at - 1, true);
+  else if (e.key === "Enter" && e.target === show) {
+    // Else the same Enter, once the lightbox has its focus, presses its Close.
+    e.preventDefault();
+    const img = slides[at].querySelector("img");
+    showBig(img.currentSrc || img.src, img.dataset.title);
+  }
 });
 let x0 = null, moved = false;
 track.addEventListener("pointerdown", (e) => { x0 = e.clientX; moved = false; });
@@ -329,7 +347,11 @@ slides.forEach(s => s.querySelector("img").addEventListener("click", (e) => {
 go(0);
 restart();
 
-document.querySelectorAll("[data-zoom]").forEach(img => img.addEventListener("click", () => showBig(img.currentSrc || img.src, img.alt)));
+// The other pictures are buttons, so a keyboard reaches them too; the picture's alt names the button.
+document.querySelectorAll(".zoom").forEach(b => b.addEventListener("click", () => {
+  const img = b.querySelector("img");
+  showBig(img.currentSrc || img.src, img.alt);
+}));
 box.addEventListener("click", () => box.close());
 
 // A link to #mods opens its answer, also when the address already ends in #mods (no hashchange then).
