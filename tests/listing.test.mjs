@@ -20,6 +20,12 @@ before(() => {
   symlinkSync("missing", join(dir, "broken"));
   mkdirSync(join(root, "plain"));
   writeFileSync(join(root, "plain", "a"), "");
+  // Dot names: .git (a folder, or a worktree's file) is left out, .x and ..x are not.
+  mkdirSync(join(root, "dots", ".git"), { recursive: true });
+  for (const n of [".x", "..x", "x"]) writeFileSync(join(root, "dots", n), "");
+  mkdirSync(join(root, "worktree"));
+  writeFileSync(join(root, "worktree", ".git"), "gitdir: /elsewhere/.git/worktrees/w\n");
+  writeFileSync(join(root, "worktree", "a"), "");
   mkdirSync(join(root, "odd"));
   symlinkSync("line\nfeed", join(root, "odd", "nl"));
   symlinkSync("ok", join(root, "odd", "ok"));
@@ -92,6 +98,11 @@ for (const shell of shells) {
 
   test(`${shell}: a folder without links`, () => {
     assert.deepEqual(list(shell, "plain"), { a: { name: "a", dir: false, link: null, broken: false, blocked: false } });
+  });
+
+  test(`${shell}: .git is left out, folder or worktree file, other dot names stay`, () => {
+    assert.deepEqual(Object.keys(list(shell, "dots")).sort(), ["..x", ".x", "x"]);
+    assert.deepEqual(Object.keys(list(shell, "worktree")), ["a"]);
   });
 
   test(`${shell}: a line feed inside a target stays`, () => {
