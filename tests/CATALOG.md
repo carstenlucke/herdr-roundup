@@ -33,18 +33,18 @@ Nothing may need a person: there is no pointer or key injection, so L2 calls han
 
 | ID | Behaviour (what must hold) | Source | Level | Covered | Needs | Prio |
 |---|---|---|---|---|---|---|
-| LAY-01 | Every `id` in the `layouts/Herdr-Roundup.json` tree is unique. | CLAUDE.md; RECIPE now (Watch out) | L1 | — | — | H |
-| LAY-02 | Every color value in the layout (`background`, `divider.color`, `border.color`, `focus.color`, …) is a theme name, not `#hex`, and the mods' JS has no hex color literal (the vendored icons excepted). | CLAUDE.md | L1 | — | — | M |
-| LAY-03 | Root `"version"` exists, matches `^\d+\.\d+\.\d+$` (what update.js compares) and has a `RELEASE-v<version>.md` beside it. | CLAUDE.md (release); commit a73afea | L1 | — | — | M |
-| LAY-04 | Root `"preview"` names an existing file matching `layouts/Herdr-Roundup.*`, which sync.sh's `cp layouts/$name.*` copies. | CLAUDE.md (release) | L1 | — | — | M |
-| LAY-05 | The layout file is `layouts/Herdr-Roundup.json` (no space); sync.sh `name=` and keys.json's `layout:Herdr-Roundup` match it. | PR #1 body; commit 0c25217 | L1 | — | — | H |
-| LAY-06 | Every `content.mod` and `terminal_menu` names a `mods/roundup-*` folder or a shipped mod (`agents`, `changes`, `workspace-status`); `roundup-workspace-chrome` sits in `brand` and in `sidebar-footer` with `props.footer: true`; `terminal_menu` is `roundup-pane`. | RECIPE now (Built from) | L1 | — | — | H |
-| LAY-07 | The block ids the code looks up exist with the right shape: `sidebar` (column with `size.px`), `panel`, `panel-body` (stack holding `files` and `changes`). | RECIPE now | L1 | — | — | H |
-| LAY-08 | Every `mods/*` folder starts with `roundup-` and has a `mod.json` with `place: "none"`; clones of shipped mods keep `cloned_from {name, version}`. | CLAUDE.md | L1 | — | — | M |
-| LAY-09 | keys.json holds only `layout:Herdr-Roundup` (no `global`): `cmd-w`→`roundup-tabs.close`, `cmd-shift-w`→`roundup-tabs.close-pane` (never `roundup-pane.close`, which every header copy would get, closing pane after pane). | CLAUDE.md; commit f0ad009 | L1 | — | — | H |
-| LAY-10 | Each `<mod>.<command>` bound in keys.json is handled by that mod's `nextCommand` loop, and that mod is placed in the layout. | CLAUDE.md (limits) | L1 | — | static scan of main.js | M |
-| LAY-11 | Shared-state key literals in the mods start with an existing `roundup-<mod>.` or are Herdr's (`sidebar.width`, `sidebar.collapsed`, `space.colors`, `workspace.panels`, `layout`). | CLAUDE.md | L1 | — | static scan | M |
-| LAY-12 | Every svg/png a mod references exists, dynamic names included (pane: rename/split-right/split-down/zoom/unzoom/close; tabs: win-min/max/restore/close; chrome menu/info icons); no unreferenced svg/png in chrome, pane, tabs, spaces. | PR #13 rc 4503276075; commit a73afea | L1 | — | list of dynamic names | L |
+| LAY-01 | Every `id` in the `layouts/Herdr-Roundup.json` tree is unique. | CLAUDE.md; RECIPE now (Watch out) | L1 | `every id in the layout tree is unique` | — | H |
+| LAY-02 | Every color value in the layout (`background`, `divider.color`, `border.color`, `focus.color`, …) is a theme name, not `#hex`, and the mods' JS has no hex color literal (the vendored icons excepted). | CLAUDE.md | L1 | `every color in the layout is a theme name, not hex`; `no hex color in the mods' JavaScript` | — | M |
+| LAY-03 | Root `"version"` exists, matches `^\d+\.\d+\.\d+$` (what update.js compares) and has a `RELEASE-v<version>.md` beside it. | CLAUDE.md (release); commit a73afea | L1 | `the root version is major.minor.patch and has its release notes` | — | M |
+| LAY-04 | Root `"preview"` names an existing file matching `layouts/Herdr-Roundup.*`, which sync.sh's `cp layouts/$name.*` copies. | CLAUDE.md (release) | L1 | `the root preview names an existing layouts/Herdr-Roundup.* file` | — | M |
+| LAY-05 | The layout file is `layouts/Herdr-Roundup.json` (no space); sync.sh `name=` and keys.json's `layout:Herdr-Roundup` match it. | PR #1 body; commit 0c25217 | L1 | `the layout file, sync.sh's name and keys.json's section agree, with no space` | — | H |
+| LAY-06 | Every `content.mod` and `terminal_menu` names a `mods/roundup-*` folder or a shipped mod (`agents`, `changes`, `workspace-status`); `roundup-workspace-chrome` sits in `brand` and in `sidebar-footer` with `props.footer: true`; `terminal_menu` is `roundup-pane`. | RECIPE now (Built from) | L1 | `every mod the layout places exists, and the chrome and pane mods sit where the code expects` | — | H |
+| LAY-07 | The block ids the code looks up exist with the right shape: `sidebar` (column with `size.px`), `panel`, `panel-body` (stack holding `files` and `changes`). | RECIPE now | L1 | `the blocks the mods look up exist with the right shape` | — | H |
+| LAY-08 | Every `mods/*` folder starts with `roundup-` and has a `mod.json` with `place: "none"`; clones of shipped mods keep `cloned_from {name, version}`. | CLAUDE.md | L1 | `every mod folder is roundup-* with a mod.json placed nowhere, clones naming what they came from` | — | M |
+| LAY-09 | keys.json holds only `layout:Herdr-Roundup` (no `global`): `cmd-w`→`roundup-tabs.close`, `cmd-shift-w`→`roundup-tabs.close-pane` (never `roundup-pane.close`, which every header copy would get, closing pane after pane). | CLAUDE.md; commit f0ad009 | L1 | `keys.json binds only the layout's own section, cmd-shift-w through the tab bar` | — | H |
+| LAY-10 | Each `<mod>.<command>` bound in keys.json is handled by that mod's `nextCommand` loop, and that mod is placed in the layout. | CLAUDE.md (limits) | L1 | `each mod command keys.json binds is handled by that mod's command loop, and that mod is placed` | static scan of main.js | M |
+| LAY-11 | Shared-state key literals in the mods start with an existing `roundup-<mod>.` or are Herdr's (`sidebar.width`, `sidebar.collapsed`, `space.colors`, `workspace.panels`, `layout`). | CLAUDE.md | L1 | `every shared-state key is under an existing roundup mod's name or one of Herdr's` | static scan | M |
+| LAY-12 | Every svg/png a mod references exists, dynamic names included (pane: rename/split-right/split-down/zoom/unzoom/close; tabs: win-min/max/restore/close; chrome menu/info icons); no unreferenced svg/png in chrome, pane, tabs, spaces. | PR #13 rc 4503276075; commit a73afea | L1 | `every svg and png a mod draws exists, and none of its own lies unused` | list of dynamic names | L |
 | LAY-13 | With `HERDR_APP_HOME` set to a temp folder, sync.sh installs there and writes nothing under `$HOME/.config/herdr-app`. | sync.sh | L2 | — | temp HOME, `herdr-app` stub on PATH | H |
 | LAY-14 | sync.sh copies the layout (.json, .svg) and each `roundup-*` mod with `rsync --delete`: a stale file in an installed roundup mod goes; other mods stay; `gpui-kit.d.ts`, `jsconfig.json`, `.gitkeep` aren't copied; `layouts/.state/` survives; an empty `themes/` is fine. | commit c8d800a; sync.sh | L2 | — | temp app home, `herdr-app` stub | M |
 | LAY-15 | sync.sh replaces only `layout:Herdr-Roundup` in keys.json and keeps `global` and other sections; a missing keys.json is created; a section missing from the repo installs as `{}`, never `null`. | commits 0c25217, c8d800a | L2 | — | fixture keys.json | H |
@@ -88,7 +88,7 @@ Nothing may need a person: there is no pointer or key injection, so L2 calls han
 | CHR-28 | Brand sub line: no version → none; offered release → "V available" in accent plus the point on the logo; checking → "I · checking…"; else the installed version. | RECIPE now | L2 | — | gpui stub | M |
 | CHR-29 | Sidebar toggle: wide (≥ 160 px) stores `sidebar.width`, sets `sidebar.collapsed` and resizes to 76 (macOS) or 44; narrow resizes to `sidebar.width ?? 268`, `collapsed` false. | RECIPE now/old | L2 | — | layout/window fixtures | M |
 | CHR-30 | `when()` gives "today HH:MM", "yesterday HH:MM", else "Mon D HH:MM", zero-padded. | RECIPE now | L1 | — | extract `when` | L |
-| CHR-31 | Only update.js calls `fetch`, and only `RELEASES`; no other network URL in these mods. | RECIPE Watch out (network) | L1 | — | static scan | M |
+| CHR-31 | Only update.js calls `fetch`, and only `RELEASES`; no other network URL in these mods. | RECIPE Watch out (network) | L1 | `only update.js fetches, and only the releases URL; no other network address in the mods` | static scan | M |
 | CHR-32 | Settings in the footer has an accent dot iff `updates().app.ready`; Add machine runs `mod.open {name:"machine-add"}`. | RECIPE now | L2 | — | gpui stub | L |
 | CHR-33 | `roundup-workspace-chrome.check` writes `…update.checked`, `…update.latest.version` and `…update.error` null into shared.json. | PR #13 body | L3 | — | isolated Herdr, network | M |
 | CHR-34 | `lastCheck` stays the same across two restarts within a day; with `…update.auto` false seeded, no `lastCheck` is written. | RECIPE Done when | L3 | — | seeded shared.json | M |
@@ -122,8 +122,8 @@ Nothing may need a person: there is no pointer or key injection, so L2 calls han
 
 | ID | Behaviour | Source | Level | Covered | Needs | Prio |
 |---|---|---|---|---|---|---|
-| PAN-01 | roundup-pane's `close.js` and `menu.js` are byte-identical to roundup-tabs'. | commit f0ad009; RECIPE Watch out | L1 | — | — | H |
-| PAN-02 | roundup-pane has no `nextCommand` loop; `cmd-shift-w` goes only through `roundup-tabs.close-pane`. | commit f0ad009 ("pane after pane") | L1 | — | static scan | H |
+| PAN-01 | roundup-pane's `close.js` and `menu.js` are byte-identical to roundup-tabs'. | commit f0ad009; RECIPE Watch out | L1 | `roundup-pane's close.js and menu.js are copies of roundup-tabs'` | — | H |
+| PAN-02 | roundup-pane has no `nextCommand` loop; `cmd-shift-w` goes only through `roundup-tabs.close-pane`. | commit f0ad009 ("pane after pane") | L1 | `roundup-pane has no command loop: cmd-shift-w goes only through the tab bar` | static scan | H |
 | PAN-03 | `closePane`: a pane with siblings → kind `pane`, `pane.close {pane}`; a lone pane → kind `tab`, `tab.close {id, confirmed:true}`; "Its terminal ends." only for a terminal; "…space closes too" for the last pane of the last tab, "…tab closes too" for a lone pane. | PR #5 body | L2 | — | herdr stub | H |
 | PAN-04 | A pane's busy agents: its own plus terminals descending from it through `parent` (sub-agents of sub-agents); a parent cycle ends; a lone pane counts every busy agent in the tab. | commit f0ad009 | L2 | — | terminals/agents fixtures | H |
 | PAN-05 | `paneName`: the given name (terminal label `roundup-pane.name`; mod pane: shared `roundup-pane.names[pane]`), else agent/shell program name, else title, else program name, else "shell". | PR #4 body | L2 | — | herdr stub | M |
@@ -134,7 +134,7 @@ Nothing may need a person: there is no pointer or key injection, so L2 calls han
 | PAN-10 | The chip shows "copied" for 1.2 s; a second copy cancels the first timer. | commit 9cb2280 | L2 | — | fake cx.timer | M |
 | PAN-11 | Rename submit reads the input before `closeOverlay`, then saves; Esc and Cancel close without saving. | commit 9cb2280 | L2 | — | gpui stub | M |
 | PAN-12 | Terminal menu: Split right/down, Zoom, the right-click toggle (label by `herdr.right-click`), "Send back to <parent>" only with a parent, Close pane → `closePane` (never a bare `pane.close`), then three choices writing only `roundup-pane.confirm-close`. | PR #5 body; RECIPE Done when | L2 | — | herdr + gpui stubs | H |
-| PAN-13 | Popup heights fit their rows: pane overlay 332 ≥ 9 rows (326); tab popup 237 ≥ 6 rows (233). | commit f0ad009 ("ninth row") | L1 | — | export row heights from menu.js | M |
+| PAN-13 | Popup heights fit their rows: pane overlay 332 ≥ 9 rows (326); tab popup 237 ≥ 6 rows (233). | commit f0ad009 ("ninth row") | L1 | `the pane's terminal menu fits its popup with all nine rows`; `the tab's menu fits its popup with all six rows` | export row heights from menu.js | M |
 | PAN-14 | `shortcut()` returns the first bound action's keys from `layout:<layout>`, then `global`, else ""; Close pane shows `cmd-shift-w`. | RECIPE now | L2 | — | keys() fixture | L |
 | PAN-15 | Hover buttons: rename, split right/down, zoom/unzoom by `p.zoomed`, close → `closePane`; status spinner for working, "Needs you" for blocked, a dot for done. | RECIPE now | L2 | — | gpui stub | L |
 | PAN-16 | `roundup-tabs.close-pane` on a focused shell beside another shell (default mode) closes only that pane (`herdr-app ls`). | PR #5 test plan | L3 | — | isolated Herdr | M |
@@ -227,7 +227,7 @@ Source keys: `PR #6 c <sha>` is a fix commit inside PR #6 whose message names th
 | ID | Behaviour | Source | Level | Covered | Needs | Prio |
 |---|---|---|---|---|---|---|
 | FIL-39 | `listScript` reports kinds d/f/D/F/B and targets for links to a file, to a folder, and a broken one. | PR #18 body | L1 | `kinds, names and targets` | — | H |
-| FIL-40 | `listScript` leaves out `.git` (folder or worktree file) and includes `.x` and `..x`. | RECIPE now | L1 | partly: `kinds, names and targets` | fixture with `.git`, `..x` | M |
+| FIL-40 | `listScript` leaves out `.git` (folder or worktree file) and includes `.x` and `..x`. | RECIPE now | L1 | `kinds, names and targets`; `.git is left out, folder or worktree file, other dot names stay` | fixture with `.git`, `..x` | M |
 | FIL-41 | One `readlink` for all links through `xargs`, with a per-link fallback giving the same result (BusyBox). | PR #18 rc 4506237347 | L1 | `a readlink taking one path still gives every target`; `under any budget…` | — | H |
 | FIL-42 | A line feed inside a target is kept. | PR #18 rc 4506237385 | L1 | `a line feed inside a target stays` | — | M |
 | FIL-43 | 7 MiB byte budget: entries only whole, `+` when cut, a target that doesn't fit becomes `""`, names counted in bytes. | PR #18 rc 4506344137 | L1 | `a target is shown whole…`; `the budget ends the entries…`; `names count in bytes`; `the cut keeps links and targets together` | — | H |
@@ -306,7 +306,7 @@ Source keys: `PR #6 c <sha>` is a fix commit inside PR #6 whose message names th
 | FIL-101 | `relTo`: under root → rel; equal → `""`; outside → null; `\` normalized; a trailing slash ignored. | actions.js | L1 | — | move `relTo` herdr-free | M |
 | FIL-102 | `psQuote` doubles `'` and curly single quotes. | disk.js | L1 | — | move herdr-free | L |
 | FIL-103 | `roundup-files.focus`, `search`, `view:all`, `view:changed`, `source:git`, `source:disk`, `menu` run with status clean; view and source persist across a restart. | RECIPE now; PR #6 body | L3 | — | isolated Herdr; panel shown first | M |
-| FIL-104 | `mod.json` has `focusable: true`, `place: "none"`, `cloned_from files 0.1.13`; layout block `files` uses `roundup-files`. | PR #6 body; CLAUDE.md | L1 | — | static | M |
+| FIL-104 | `mod.json` has `focusable: true`, `place: "none"`, `cloned_from files 0.1.13`; layout block `files` uses `roundup-files`. | PR #6 body; CLAUDE.md | L1 | `roundup-files is a focusable clone of Herdr's files, in the layout's files block` | static | M |
 | FIL-105 | View and source persist in prefs; invalid saved values fall back to `all`/`git`. | PR #6 body; RECIPE now | L2 | — | localStorage stub | M |
 
 ### Panel preview, icons
@@ -315,10 +315,10 @@ Source keys: `PR #6 c <sha>` is a fix commit inside PR #6 whose message names th
 |---|---|---|---|---|---|---|
 | FIL-106 | `show()`: `\0` → "Binary file · no text preview"; null → "This file is no longer available"; > 400,000 chars cut with "… (file truncated)"; language from the file name. | PR #6 c 028b202; RECIPE now | L2 | — | readTextFile + EditorState stubs | M |
 | FIL-107 | Opening A, closing it and opening A again before the first read ends leaves at most one unreleased `EditorState`. | issue #8; PR #6 c bbee787 | L2 | — | EditorState stub counting `release()` | H |
-| FIL-108 | `iconFor("constructor")`, `"__proto__"`, `"foo.constructor"` give the generic file icon, a folder `constructor` the generic folder. | PR #6 rc 4499340962 | L1 | — | — | H |
-| FIL-109 | `iconFor`: case-insensitive; a path rule beats the name; a name beats its extension; the longest extension wins; the whole name counts as an extension; an open folder without its own open icon shows the closed one. | PR #6 body; icon.js | L1 | — | — | M |
-| FIL-110 | Every id in `icons.js` has `icons/<id>.svg`; `.css`, `.html`, `.php`, `.vue` get non-generic icons; `icons/LICENSE` exists. | PR #6 body; RECIPE now | L1 | — | static | M |
-| FIL-111 | `THIRD_PARTY_NOTICES.md` names `link.svg` (Lucide) and `fonts/Geist-Italic.ttf` with `fonts/OFL.txt`, and both files exist. | PR #18 rc 4506237521 | L1 | — | static | L |
+| FIL-108 | `iconFor("constructor")`, `"__proto__"`, `"foo.constructor"` give the generic file icon, a folder `constructor` the generic folder. | PR #6 rc 4499340962 | L1 | `iconFor: names like Object's own properties get the generic icons` | — | H |
+| FIL-109 | `iconFor`: case-insensitive; a path rule beats the name; a name beats its extension; the longest extension wins; the whole name counts as an extension; an open folder without its own open icon shows the closed one. | PR #6 body; icon.js | L1 | `iconFor: case doesn't matter`; `…a file's name beats its extension…`; `…the whole name counts…`; `…a rule naming a path…`; `…an open folder without an open icon…` | — | M |
+| FIL-110 | Every id in `icons.js` has `icons/<id>.svg`; `.css`, `.html`, `.php`, `.vue` get non-generic icons; `icons/LICENSE` exists. | PR #6 body; RECIPE now | L1 | `every icon the tables name is in icons/, with the licence beside them`; `web files get icons of their own` | static | M |
+| FIL-111 | `THIRD_PARTY_NOTICES.md` names `link.svg` (Lucide) and `fonts/Geist-Italic.ttf` with `fonts/OFL.txt`, and both files exist. | PR #18 rc 4506237521 | L1 | `THIRD_PARTY_NOTICES.md names the Lucide link icon and the Geist font with its licence, and they exist` | static | L |
 
 ## Opening files: roundup-files → roundup-preview (OPN, FLT, WIN)
 
@@ -327,7 +327,7 @@ Source keys: `PR #6 c <sha>` is a fix commit inside PR #6 whose message names th
 | ID | Behaviour | Source | Level | Covered | Needs | Prio |
 |---|---|---|---|---|---|---|
 | OPN-01 | A single click on a file, no window open, only moves the cursor: no `openOverlay`, no `run`. | RECIPE now; PR #16 rc 4504147816 | L2 | — | extract click decision `clickAction` | H |
-| OPN-02 | `floatSpec({file,on,token})` is `{kind:"window", key:"roundup-preview", mod:"roundup-preview", width:0.6, height:0.75, props:{file,on,float:token}}`, `on` defaulting to null. | RECIPE now | L1 | — | — | M |
+| OPN-02 | `floatSpec({file,on,token})` is `{kind:"window", key:"roundup-preview", mod:"roundup-preview", width:0.6, height:0.75, props:{file,on,float:token}}`, `on` defaulting to null. | RECIPE now | L1 | `floatSpec: one floating window, keyed and sized, carrying the file and the token` | — | M |
 | OPN-03 | A double-click writes FLOAT `{file,on,token}` before `openOverlay(floatSpec)`, then adds `id`, keeping a `copy` the window wrote in between. | RECIPE now | L2 | partly: "replacing a window: the new copy's record keeps its copy…" | herdr stub | H |
 | OPN-04 | With the window open, a double-click on the file it shows opens nothing again: one `openOverlay` for presses 1+2. | PR #16 rc 4503805795 | L2 | — | herdr + gpui stub | H |
 | OPN-05 | A triple-click leaves exactly one window open: the third press neither closes nor reopens it. | PR #16 rc 4503805795 | L2 | — | herdr + gpui stub | M |
@@ -353,7 +353,7 @@ Source keys: `PR #6 c <sha>` is a fix commit inside PR #6 whose message names th
 | OPN-24 | `remember` drops OPEN entries of dead or replaced panes with their MOVED, keeps MOVED for tokens OPEN never named and the new token's early MOVED. | PR #16 rc 4503805847, 4505948223 | L1 | `remember: drops dead panes…` | — | H |
 | OPN-25 | `madePane`: `{}` for two new preview panes, ignores non-preview panes, `{wait:true}` while none came; `openTab` then records nothing. | PR #16 rc 4503805676 | L1 | partly: `marked and madePane: an overlap records nothing` | — | H |
 | OPN-26 | Overlapping opens record nothing rather than a wrong pane, also when the second pane comes late; after SPAN (10 s) a new open records again. | PR #16 rc 4504122495, 4504219871 | L1 | `openTab: overlapping opens with a late second pane…`; `marked and madePane…` | — | H |
-| OPN-27 | A recorded open sets its OPENING `until` to now, so an open 1 s later without overlap is still recorded. | PR #16 rc 4504147635 | L1 | — | — | H |
+| OPN-27 | A recorded open sets its OPENING `until` to now, so an open 1 s later without overlap is still recorded. | PR #16 rc 4504147635 | L1 | `openTab: a recorded open ends its OPENING entry, so the next open a second later records too` | — | H |
 | OPN-28 | `openTab` looks up to 5 times 200 ms apart, records the pane when it comes, calls `done` once, leaves `until: null` when the pane comes after the last look. | PR #16 rc 4504122495 | L1 | `openTab: a new tab with a token…`; `openTab: a pane later than five looks…` | — | H |
 | OPN-29 | When a tab already shows the file, `openTab` only runs `pane.focus`, calls `done` at once, writes no OPENING and no `tab.new`. | RECIPE now | L1 | partly: `openTab: a new tab with a token…` | — | M |
 | OPN-30 | Tabs recorded under `open.v2` are found with their MOVED; the first `open.v3` record takes them over and clears `open.v2`. | RECIPE now | L1 | `upgraded…`; `openTab after the upgrade…` | — | M |
@@ -392,11 +392,11 @@ Source keys: `PR #6 c <sha>` is a fix commit inside PR #6 whose message names th
 
 | ID | Behaviour | Source | Level | Covered | Needs | Prio |
 |---|---|---|---|---|---|---|
-| LNK-01 | `resolveLink`: empty → `{error:"Empty link"}`; `#h` → `{anchor:"h"}`; `?q` → `{anchor:""}`; http/https/mailto in any case → `{url}`. | RECIPE now | L1 | — | — | H |
-| LNK-02 | Relative links resolve against the document (`../x/c.md#Intro` → `{file:"/x/c.md", anchor:"Intro"}`); a query is dropped; `%20` decoded; a bad `%` → "This link has an invalid path". | RECIPE now | L1 | — | — | H |
-| LNK-03 | Other schemes are refused (`ftp:`, `javascript:` → "Can't open …: links here"); a Windows drive isn't taken for a scheme. | RECIPE now | L1 | — | — | H |
-| LNK-04 | `file:///etc/hosts` and `file://localhost/etc/hosts` → `/etc/hosts`; in a Windows document `file:///D:/x.md` → `D:/x.md`, `/top.md` → `C:/top.md`. | RECIPE now | L1 | — | — | M |
-| LNK-05 | From a Windows document a link to `\\other\s\x.md` → "Can't open links to another computer"; within `//srv/sh/` it resolves. | RECIPE now | L1 | — | — | H |
+| LNK-01 | `resolveLink`: empty → `{error:"Empty link"}`; `#h` → `{anchor:"h"}`; `?q` → `{anchor:""}`; http/https/mailto in any case → `{url}`. | RECIPE now | L1 | `resolveLink: empty links, anchors, and web and mail links in any case` | — | H |
+| LNK-02 | Relative links resolve against the document (`../x/c.md#Intro` → `{file:"/x/c.md", anchor:"Intro"}`); a query is dropped; `%20` decoded; a bad `%` → "This link has an invalid path". | RECIPE now | L1 | `resolveLink: a relative link resolves against the document, without its query, decoded` | — | H |
+| LNK-03 | Other schemes are refused (`ftp:`, `javascript:` → "Can't open …: links here"); a Windows drive isn't taken for a scheme. | RECIPE now | L1 | `resolveLink: other schemes are refused, a Windows drive in a Windows document is a path` | — | H |
+| LNK-04 | `file:///etc/hosts` and `file://localhost/etc/hosts` → `/etc/hosts`; in a Windows document `file:///D:/x.md` → `D:/x.md`, `/top.md` → `C:/top.md`. | RECIPE now | L1 | `resolveLink: file URLs, and a root path in a Windows document stays on its drive` | — | M |
+| LNK-05 | From a Windows document a link to `\\other\s\x.md` → "Can't open links to another computer"; within `//srv/sh/` it resolves. | RECIPE now | L1 | `resolveLink: a share on another computer is refused, the document's own share is not` | — | H |
 | LNK-06 | `navigate` pushes the current file onto history; Back pops it with the anchor cleared; ← only with history, tooltip "Back to <name>". | RECIPE now | L2 | — | herdr + gpui stub | M |
 | LNK-07 | Showing another file resets the header size until `wc -c` answers; a reload keeps it; a late answer for the previous file is dropped and its viewer state released. | PR #16 rc 4504326783, 4504410831 | L2 | — | deferred exec | M |
 | LNK-08 | A Markdown link click: url → `cx.open_url`; file → `navigate`; a known anchor shows from that heading; an unknown one → "No such heading here"; an error → "Can't open this link". | RECIPE now | L2 | — | extract `linkAction` | M |
@@ -407,31 +407,31 @@ Source keys: `PR #6 c <sha>` is a fix commit inside PR #6 whose message names th
 
 | ID | Behaviour | Source | Level | Covered | Needs | Prio |
 |---|---|---|---|---|---|---|
-| VW-01 | `viewerFor`: md/markdown/mdx → markdown; pdf; csv/tsv → table; json; png/jpg/jpeg/gif/webp/svg/bmp/tiff/heic → image; case ignored; `.env`, no extension, anything else → code. | RECIPE now | L1 | — | — | M |
-| VW-02 | `languageOf` maps ts/tsx/mjs/jsx → js, yml/toml → yaml, sh/zsh → bash, py → python, unknown → itself, else "text"; `basename` handles `\` and a trailing slash. | kinds.js | L1 | — | — | L |
-| VW-03 | Markdown slugs follow GitHub (lower case, punctuation dropped, link text and Unicode letters kept, spaces → dashes, duplicates `-1`, `-2`); `Constructor`/`toString` don't hit Object.prototype. | PR #16 rc 4505948187 | L1 | partly: `splitBlocks: a heading named like an Object property…` | — | H |
-| VW-04 | `splitBlocks` cuts around images (also linked ones) but not inside inline code; fenced code stays whole (closing fence same char, at least the same length); reference definitions go to every text block; an empty file → `[{text:""}]`. | markdown-blocks.js; RECIPE now | L1 | — | — | M |
-| VW-05 | `imageNote`: web image "on the web" / "loading…" / "couldn't load"; local "not found" or its failure. | markdown-blocks.js | L1 | — | — | L |
+| VW-01 | `viewerFor`: md/markdown/mdx → markdown; pdf; csv/tsv → table; json; png/jpg/jpeg/gif/webp/svg/bmp/tiff/heic → image; case ignored; `.env`, no extension, anything else → code. | RECIPE now | L1 | `viewerFor: the viewer by extension, case ignored, anything else in the code viewer` | — | M |
+| VW-02 | `languageOf` maps ts/tsx/mjs/jsx → js, yml/toml → yaml, sh/zsh → bash, py → python, unknown → itself, else "text"; `basename` handles `\` and a trailing slash. | kinds.js | L1 | `languageOf: editor languages…`; `basename and extension: either slash, a trailing slash, a leading dot` | — | L |
+| VW-03 | Markdown slugs follow GitHub (lower case, punctuation dropped, link text and Unicode letters kept, spaces → dashes, duplicates `-1`, `-2`); `Constructor`/`toString` don't hit Object.prototype. | PR #16 rc 4505948187 | L1 | `splitBlocks: a heading named like an Object property…`; `slugify: GitHub's anchors…`; `splitBlocks: a block per heading, repeated titles numbered -1, -2` | — | H |
+| VW-04 | `splitBlocks` cuts around images (also linked ones) but not inside inline code; fenced code stays whole (closing fence same char, at least the same length); reference definitions go to every text block; an empty file → `[{text:""}]`. | markdown-blocks.js; RECIPE now | L1 | `splitBlocks: images, linked ones too…`; `…fenced code stays whole…`; `…reference definitions go into every text block…` | — | M |
+| VW-05 | `imageNote`: web image "on the web" / "loading…" / "couldn't load"; local "not found" or its failure. | markdown-blocks.js | L1 | `imageNote: why an image block isn't drawn` | — | L |
 | VW-06 | Markdown load: prune runs before the first stage whenever there is any image; local images are staged, a remote document's aren't; web images aren't fetched until "Load them". | PR #16 rc 4505948261; PR #16 body; RECIPE Watch out | L2 | — | exec recorder | H |
 | VW-07 | A Markdown reload keeps Raw, ToC and the heading shown from, refetches loaded web images; ToC only with > 1 heading and not in Raw. | RECIPE now | L2 | — | herdr + gpui stub | M |
 | VW-08 | `fetchImage` names each download uniquely; a non-image MIME removes it and throws "Not an image (<mime>)"; the POSIX command has `--proto =https --proto-redir =https --max-time 10 --max-filesize 5242880`. | PR #16 rc 4505948202, 4505990760; RECIPE Watch out | L1 + L2 | — | move `key()` out of media.js | H |
-| VW-09 | `imageExtension` maps png/jpeg/gif/webp/svg+xml (with parameters, any case) to extensions, else null. | mime.js | L1 | — | — | M |
+| VW-09 | `imageExtension` maps png/jpeg/gif/webp/svg+xml (with parameters, any case) to extensions, else null. | mime.js | L1 | `imageExtension: the drawn image types, with parameters and in any case, else null` | — | M |
 | VW-10 | PDF: a remote file → "PDF previews work for files on this computer only"; prune before render; zero pages → "This PDF has no pages"; at most 500 slots with "Showing the first 500 of N pages"; zoom kept on reload. | PR #16 rc 4503805973, 4504031181; RECIPE now | L2 | — | exec returns PDFKit JSON | H |
 | VW-11 | PDF renders missing pages in batches of 6, first from the page jumped to; stops after release; a failed batch shows its error. | RECIPE now | L2 | — | extract `nextBatch` | M |
 | VW-12 | PDF Go to: "12" jumps to page 12 clamped to 1..count and empties the field; non-numbers ignored; ‹ › inactive at the ends. | RECIPE now; PR #16 rc 4504309105 | L2 | — | extract `jump` clamp | M |
-| VW-13 | `pdfPages` rejects a page path outside `data/roundup-preview/`; the macOS message loses its "execution error: Error:" prefix and "(-2700)"; a poppler "password" error → "This PDF is password protected"; empty stderr → "Cannot render this PDF". | PR #16 body | L1 | — | — | H |
-| VW-14 | `popplerPages` reads Pages, Stamp and sizes, swaps width/height at 90/270°, names pages `data/roundup-preview/<key>-<stamp>-p<n>.png`. | programs.js | L1 | — | — | M |
-| VW-15 | `pictureSize` reads sips and `file` output ("480 x 270", "480x270"), skipping JPEG density and BMP resolution; zeros when no size is named. | programs.js | L1 | — | — | M |
-| VW-16 | `svgSize` ignores `stroke-width`, accepts `px`, falls back to the viewBox (spaces or commas), then 300×150, matches `<svg:svg>`, 0×0 without an svg tag. | PR #16 rc 4505948234 | L1 | partly: `svgSize: stroke-width is no width` | — | M |
+| VW-13 | `pdfPages` rejects a page path outside `data/roundup-preview/`; the macOS message loses its "execution error: Error:" prefix and "(-2700)"; a poppler "password" error → "This PDF is password protected"; empty stderr → "Cannot render this PDF". | PR #16 body | L1 | `pdfPages: pages only from the cache folder`; `pdfPages: failures read as one plain line` | — | H |
+| VW-14 | `popplerPages` reads Pages, Stamp and sizes, swaps width/height at 90/270°, names pages `data/roundup-preview/<key>-<stamp>-p<n>.png`. | programs.js | L1 | `popplerPages: count, stamp and sizes, width and height swapped for turned pages` | — | M |
+| VW-15 | `pictureSize` reads sips and `file` output ("480 x 270", "480x270"), skipping JPEG density and BMP resolution; zeros when no size is named. | programs.js | L1 | `pictureSize: sips and file output, past a JPEG's density and a BMP's resolution` | — | M |
+| VW-16 | `svgSize` ignores `stroke-width`, accepts `px`, falls back to the viewBox (spaces or commas), then 300×150, matches `<svg:svg>`, 0×0 without an svg tag. | PR #16 rc 4505948234 | L1 | `svgSize: stroke-width is no width`; `svgSize: attributes in px, else the viewBox…`; `svgSize: a prefixed svg tag counts…` | — | M |
 | VW-17 | Image: remote → "Image previews work for files on this computer only"; prune before stage; toolbar `W × H`; Fit never above 100 %; 0×0 → "This image format can't be shown"; zoom kept on reload. | RECIPE now | L2 | — | extract `fit` | M |
 | VW-18 | Zoom steps 25…400 %: from Fit at 60 %, + → 75 %, − → 50 %; stops at 25 % and 400 %; the middle returns to Fit. | RECIPE now | L1 | — | extract `next` from viewers/zoom.js | M |
 | VW-19 | CSV/TSV: tab for .tsv; `;` when the first record has more `;` than `,` outside quotes; RFC 4180 quotes; a last `""` record is a row; columns over all rows; widths from the first 200, clamped 48..360. | PR #16 rc 4505948143, 4505948166; RECIPE now | L1 | `delimiterOf…`; `parseDelimited: quotes…`; `parseDelimited: a last record…`; `columnWidths…` | — | H |
 | VW-20 | Table toolbar "N+ rows × M columns", `+` past 100,000 rows or when cut at 1 MiB; first row is the header; Raw of a cut file carries the note. | RECIPE now; PR #16 rc 4505991102 | L2 | — | extract summary | M |
-| VW-21 | `json-tree`: `flatten` summaries "{ 1 key }" / "[ 2 items ]"; pointers escape `~`/`/` and `valueAt` round-trips; `containers(v,1)` holds root and first level; `toggleDeep` opens or closes a branch. | RECIPE now | L1 | — | — | M |
+| VW-21 | `json-tree`: `flatten` summaries "{ 1 key }" / "[ 2 items ]"; pointers escape `~`/`/` and `valueAt` round-trips; `containers(v,1)` holds root and first level; `toggleDeep` opens or closes a branch. | RECIPE now | L1 | `flatten: a row per visible node…`; `pointers escape ~ and / and valueAt follows them back`; `containers: …`; `toggleDeep: …` | — | M |
 | VW-22 | JSON viewer: root and first level open; invalid JSON shows Raw and "Invalid JSON: <msg>"; a BOM is stripped; a reload keeps open rows and Raw; Collapse all leaves only the root. | RECIPE now | L2 | — | herdr + gpui stub | M |
 | VW-23 | Text: null → "This file is no longer available"; NUL → "Binary file · no text preview"; non-UTF-8 → "Binary or non-UTF-8 file · no text preview"; over 1 MiB code and table read the head cut back to whole lines. | text-file.js; RECIPE now | L1 + L2 | — | move `checked` to text-file.js | H |
 | VW-24 | Code view: over 400,000 chars, or any cut text however short, ends with "… (file truncated)". | PR #16 rc 4505948247, 4505991102 | L2 | — | extract value builder | H |
-| VW-25 | `formatSize`: 0 → "0 B", 1023 → "1023 B", 1536 → "1.5 KB", 10240 → "10 KB", stops at GB, a non-number → "". | RECIPE now | L1 | — | — | L |
+| VW-25 | `formatSize`: 0 → "0 B", 1023 → "1023 B", 1536 → "1.5 KB", 10240 → "10 KB", stops at GB, a non-number → "". | RECIPE now | L1 | `formatSize: bytes, then KB, MB and GB with one decimal below ten`; `formatSize: no size for what isn't a size` | — | L |
 | VW-26 | Header copiers: the name copies the basename, the folder the native path, each with a toast. | RECIPE now | L2 | — | gpui stub | L |
 | VW-27 | `tab.new --mod roundup-preview` for .md (with a local SVG), .pdf (2 pages), .png, .csv, .json and .ts renders in a shot with status clean. | PR #16 body; RECIPE Done when | L3 | — | fixtures; isolated Herdr | H |
 | VW-28 | `herdr-app check` passes for roundup-preview. | CLAUDE.md | L3 | — | isolated install | M |
@@ -453,19 +453,19 @@ Source keys: `PR #6 c <sha>` is a fix commit inside PR #6 whose message names th
 
 | ID | Behaviour | Source | Level | Covered | Needs | Prio |
 |---|---|---|---|---|---|---|
-| MNU-01 | `commands`: macOS editor/open/reveal (`open`, `open -R`); Linux editor always, open/reveal only with xdg-open; Windows powershell; remote none (only the copy items). | RECIPE now | L1 | — | — | M |
-| MNU-02 | `revealLabel`: "Reveal in Finder" (mac), "Open containing folder" (linux), "Show in Explorer" (windows). | platform.js | L1 | — | — | L |
+| MNU-01 | `commands`: macOS editor/open/reveal (`open`, `open -R`); Linux editor always, open/reveal only with xdg-open; Windows powershell; remote none (only the copy items). | RECIPE now | L1 | `commands: macOS opens with open…`; `commands: Linux edits always…`; `commands: Windows runs PowerShell, a remote file gets none` | — | M |
+| MNU-02 | `revealLabel`: "Reveal in Finder" (mac), "Open containing folder" (linux), "Show in Explorer" (windows). | platform.js | L1 | `revealLabel: each system's file manager` | — | L |
 | MNU-03 | The editor script opens `$VISUAL`, else `$EDITOR`, drops `--wait`/`-w`, honours quoting, accepts an unquoted path with spaces, falls back to the opener for an empty or unparseable value. | RECIPE now | L2 | — | real sh; fake editor scripts | H |
-| MNU-04 | `powershell(...)` passes each value as `[char[]]` codes and its scripts contain no `"`. | platform.js | L1 | — | — | M |
+| MNU-04 | `powershell(...)` passes each value as `[char[]]` codes and its scripts contain no `"`. | platform.js | L1 | `powershell: each value goes as character codes…`; `no PowerShell script of the preview holds a double quote` | — | M |
 | MNU-05 | `openInEditor` on a remote file throws "Open in editor works for files on this computer only"; a non-zero exit toasts "Couldn't open the editor". | editor.js; menu.js | L2 | — | herdr stub | L |
-| MNU-06 | `relativePath`: from the git root when it holds the file, else `~/…`, else absolute; case-insensitive on Windows. | RECIPE now | L1 + L2 | — | — | M |
+| MNU-06 | `relativePath`: from the git root when it holds the file, else `~/…`, else absolute; case-insensitive on Windows. | RECIPE now | L1 + L2 | partly (L1): `relativePath: from the repo root when it holds the file, else ~/…, else absolute`; `relativePath: case and slashes count on POSIX only` | — | M |
 
 ### Paths
 
 | ID | Behaviour | Source | Level | Covered | Needs | Prio |
 |---|---|---|---|---|---|---|
 | PTH-01 | `samePath`/`pathKey`: Windows ignores case and `\` vs `/`, resolves `.`/`..`, verbatim `\\?\`, UNC; POSIX keeps case and a `\` in a name. | PR #16 rc 4504219483, 4504309188 | L1 | `Windows paths…`; `POSIX paths keep case…` | — | H |
-| PTH-02 | `localPath` turns `//etc/x` into `/etc/x` off Windows; `native` turns `/` into `\` on Windows only; `dirname` of `/a` is `/`, of `C:/a` is `C:/`. | paths.js | L1 | partly: `POSIX paths keep case…` | — | M |
+| PTH-02 | `localPath` turns `//etc/x` into `/etc/x` off Windows; `native` turns `/` into `\` on Windows only; `dirname` of `/a` is `/`, of `C:/a` is `C:/`. | paths.js | L1 | `POSIX paths keep case…`; `localPath, native and dirname: each system's own form` | — | M |
 
 ---
 
