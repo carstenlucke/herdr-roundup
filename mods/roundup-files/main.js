@@ -19,6 +19,7 @@ import { openExternal, revealExternal, copy, sendToAgent } from "./actions.js";
 import { dirOf, baseOf, ancestors, relTo, join } from "./tree.js";
 import { diskRows, hitRows, changedRows, rowStatus } from "./rows.js";
 import { match, cursorAfter, outdated, classify, applyRecheck, STALE_AGE } from "./search.js";
+import { ROW, menuItems, menuHeight, keyMenuAt, menuKey, moveIndex, clickAction } from "./input.js";
 import { listNote, footerLines, linkTip, statusColor, changeColors, gitReason, noRepo, GIT_FAILED } from "./panel-text.js";
 // A copy of roundup-preview's: how it opens and which pane already shows a file. sync.sh
 // checks that the two copies match.
@@ -28,15 +29,12 @@ import { samePath } from "./paths.js";
 
 const NAME = "roundup-files";
 const ICON = (name) => `mods/${NAME}/${name}.svg`;
-const ROW = 26;
 // How many folders keep their open folders, cursor and preview while another one shows.
 const SAVED = 50;
 // How long ↑ ↓ rest on a row before the floating window follows to it.
 const FOLLOW_MS = 150;
 const LANG = { ts: "js", tsx: "js", mts: "js", cts: "js", jsx: "js", mjs: "js", cjs: "js", toml: "yaml", yml: "yaml", jsonc: "json", svelte: "html", vue: "html", htm: "html", sh: "bash", zsh: "bash" };
 const VIEWS = [["all", "All"], ["changed", "Changed"]];
-// The menu's height: 28 per entry, 9 per divider, 5 of padding above and below.
-const menuHeight = (groups) => groups.reduce((n, g) => n + g.length, 0) * 28 + (groups.length - 1) * 9 + 10;
 // What search in All reads: git's files (without ignored ones; the disk outside a repo and in
 // an ignored folder) or the disk (everything but the pruned folders).
 const SOURCES = ["git", "disk"];
@@ -63,20 +61,6 @@ function location() {
   if (!space) return { cwd: null, on };
   const tabs = new Set(space.tabs.map((t) => t.id));
   return lastRoot.get(space.id) ?? { cwd: panes().find((p) => p.terminal && p.cwd && tabs.has(p.tab))?.cwd || space.folder || null, on };
-}
-
-// The context menu's entries for one path, in groups. `local`: on this computer.
-function menuItems(m) {
-  const mac = window()?.platform === "macos";
-  return [
-    [!m.dir && !m.gone && ["float", "Quick look"],
-      !m.dir && !m.gone && ["tab", "Open in tab"],
-      !m.dir && !m.gone && ["preview", "Preview in panel"],
-      m.local && !m.dir && !m.gone && ["open", "Open with default app"],
-      m.local && !m.gone && ["reveal", mac ? "Reveal in Finder" : "Show in folder"]],
-    [["copy-rel", "Copy relative path"], ["copy-abs", "Copy absolute path"]],
-    [["send", "Send @path to agent"]],
-  ].map((g) => g.filter(Boolean)).filter((g) => g.length);
 }
 
 export default class Files extends View {
@@ -504,13 +488,18 @@ export default class Files extends View {
   // opens or closes on the first; a file gets the cursor (and the floating window, when it is
   // open, follows), the second shows it in the floating window. With `tab` the first only
   // selects and the second opens a tab (closing the window if it shows that file).
+  // input.js's clickAction decides.
   click(r, n, cx, tab = false) {
     if (!r) return;
     this.cursor = r.rel;
-    if (r.dir || r.gone) { if (n === 1) this.activate(r, cx); return; }
-    if (n === 1) { if (tab) this.stopFollow(); else this.follow(cx); }
-    else if (n === 2 && tab) { if (this.floats(r.rel)) this.closeFloat(); this.openPreview(r.rel, cx); }
-    else if (n === 2) { if (!this.floats(r.rel)) this.openFloat(r.rel); }
+    for (const step of clickAction(r, n, tab, (rel) => this.floats(rel))) {
+      if (step === "activate") this.activate(r, cx);
+      else if (step === "follow") this.follow(cx);
+      else if (step === "stopFollow") this.stopFollow();
+      else if (step === "closeFloat") this.closeFloat();
+      else if (step === "openPreview") this.openPreview(r.rel, cx);
+      else if (step === "openFloat") this.openFloat(r.rel);
+    }
   }
 
   // ── floating preview ─────────────────────────────────────────────────────────────────
@@ -587,6 +576,9 @@ export default class Files extends View {
   }
 
   // ── context menu ─────────────────────────────────────────────────────────────────────
+  // The context menu's entries for one path, in groups (input.js).
+  items(m) { return menuItems(m, window()?.platform === "macos"); }
+
   menuOf(r) {
     return { from: this.uid, root: this.root, on: this.on, rel: r.rel, abs: join(this.root, r.rel), dir: r.dir, gone: r.gone, local: !this.on };
   }
@@ -594,7 +586,7 @@ export default class Files extends View {
   // A right-click: the menu as a popup of this mod, at the pointer.
   openMenu(r) {
     const m = this.menuOf(r);
-    openOverlay({ mod: NAME, kind: "popup", width: 228, height: menuHeight(menuItems(m)), props: { menu: m } });
+    openOverlay({ mod: NAME, kind: "popup", width: 228, height: menuHeight(this.items(m)), props: { menu: m } });
   }
 
   // The Menu key, Shift-F10, the `menu` command: the panel draws the menu itself, pinned below
@@ -603,7 +595,7 @@ export default class Files extends View {
     const at = this.shown.findIndex((x) => x.rel === r.rel);
     if (at < 0) return;
     const m = this.menuOf(r);
-    this.kmenu = { m, items: menuItems(m).flat(), at: 0, row: at, depth: r.depth };
+    this.kmenu = { m, items: this.items(m).flat(), at: 0, row: at, depth: r.depth };
     this.scroll.scroll_to_item(at, "center");
     this.handle.focus();
   }
@@ -621,20 +613,9 @@ export default class Files extends View {
     cx.notify();
   }
 
-  // Where the keyboard menu hangs in the list's box: below its row's name. openKeyMenu centred
-  // the row, so with the list's height its place is known: in the middle, or at the top or
-  // bottom when the list can't scroll that far. Null before the list was measured.
+  // Where the keyboard menu hangs in the list's box (input.js). Null before the list was measured.
   // (A virtual list's rows can't hold the menu: they take no click handlers.)
-  keyMenuAt(n) {
-    const k = this.kmenu;
-    if (!this.listHeight) return null;
-    const h = this.listHeight / this.zoom() - 4; // the list, inside the box's bottom padding
-    const offset = Math.max(0, Math.min(k.row * ROW + ROW / 2 - h / 2, n * ROW - h));
-    const top = k.row * ROW - offset, left = 4 + 8 + k.depth * 14 + 18;
-    // Where it wouldn't fit below its row, it opens above it.
-    const tall = menuHeight(menuItems(k.m)) + 4; // with its 2px margin and 1px border
-    return top + ROW + tall > h ? { top, left, up: true } : { top: top + ROW, left };
-  }
+  keyMenuAt(n) { return keyMenuAt(this.kmenu, n, this.listHeight, this.zoom()); }
 
   // on_size_change measures in the window's pixels, which Herdr's zoom makes larger than the
   // mod's: settings() has the zoom (Herdr's picker divides the same way).
@@ -663,7 +644,7 @@ export default class Files extends View {
         .on_click((_e, cx) => pick(id, cx)).child(label);
     };
     return v_flex().p(5).text_color(t.foreground)
-      .children(menuItems(m).flatMap((g, i) => [...(i ? [div().h(1).mx(6).my(4).bg(t.border)] : []), ...g.map(item)]));
+      .children(this.items(m).flatMap((g, i) => [...(i ? [div().h(1).mx(6).my(4).bg(t.border)] : []), ...g.map(item)]));
   }
 
   // What the menu asked for, run by the panel: its tasks outlive the closed popup.
@@ -695,10 +676,7 @@ export default class Files extends View {
   // ── keyboard ─────────────────────────────────────────────────────────────────────────
   move(rows, delta, cx) {
     if (!rows.length) return;
-    const at = rows.findIndex((r) => r.rel === this.cursor);
-    // Without a selected row, down starts at the top and up at the bottom.
-    const from = at >= 0 ? at : delta > 0 ? -1 : rows.length;
-    const next = Math.max(0, Math.min(rows.length - 1, from + delta));
+    const next = moveIndex(rows.length, rows.findIndex((r) => r.rel === this.cursor), delta);
     this.cursor = rows[next].rel;
     this.scroll.scroll_to_item(next);
     this.follow(cx, FOLLOW_MS);
@@ -708,13 +686,10 @@ export default class Files extends View {
     const k = e.key, rows = this.shown, cur = rows.find((r) => r.rel === this.cursor);
     if (e.modifiers?.platform || e.modifiers?.control || e.modifiers?.alt) return;
     if (this.kmenu) {
-      const km = this.kmenu, n = km.items.length;
-      if (k === "down" || k === "tab") km.at = (km.at + 1) % n;
-      else if (k === "up") km.at = (km.at - 1 + n) % n;
-      else if (k === "home" || k === "pageup") km.at = 0;
-      else if (k === "end" || k === "pagedown") km.at = n - 1;
-      else if (k === "enter" || k === "space") this.runKeyMenu(km.items[km.at][0], cx);
-      else if (k === "escape" || k === "left" || k === "menu" || (k === "f10" && e.modifiers?.shift)) this.closeKeyMenu();
+      const km = this.kmenu, next = menuKey(km.at, km.items.length, k, e.modifiers?.shift);
+      if (next.at !== undefined) km.at = next.at;
+      else if (next.run !== undefined) this.runKeyMenu(km.items[next.run][0], cx);
+      else if (next.close) this.closeKeyMenu();
       cx.stop_propagation(); cx.notify(); return;
     }
     if (this.typing) {
