@@ -12,13 +12,15 @@ import { GONE } from "./text-file.js";
 const MTIME = String.raw`$({ stat -c '%y %s' "$src" 2>/dev/null || stat -f '%Fm %z' "$src"; } | tr -cd 0-9)`;
 
 // sh: copies `src` into `dir` as <key>-<revision>.<ext> unless there already; prints the name.
-// A copy already there is touched: the prune goes by age, and it is in use again.
+// A copy already there is touched (-c: never made anew, empty), the prune going by age; one a
+// prune took meanwhile is copied again.
 const STAGE = String.raw`
 src=$1 dir=$2 key=$3 ext=$4
 [ -f "$src" ] || { echo "${GONE}" >&2; exit 1; }
 name="$key-${MTIME}.$ext"
 mkdir -p "$dir" || exit 1
-if [ -f "$dir/$name" ]; then touch "$dir/$name" 2>/dev/null; else cp "$src" "$dir/$name" || exit 1; fi
+[ -f "$dir/$name" ] && touch -c "$dir/$name" 2>/dev/null
+[ -f "$dir/$name" ] || cp "$src" "$dir/$name" || exit 1
 echo "$name"`;
 
 // sh: downloads `url` to <dir>/<key>.download (https only, 10 s, 5 MB); prints its MIME type.
@@ -36,7 +38,8 @@ const STAMP = String.raw`('{0}{1}' -f [IO.File]::GetLastWriteTimeUtc($src).Ticks
 // another render got there first, whose result is as good; -Force would delete it first.
 const PLACE = String.raw`try { [IO.File]::Move($tmp, $out) } catch { if (-not [IO.File]::Exists($out)) { throw }; Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }`;
 
-// $out, a copy or page already in the cache, dated now: the prune goes by age, and it is in use again.
+// $out, a copy or page already in the cache, dated now: the prune goes by age. It never makes the
+// file anew; the check after it copies or renders again one a prune took meanwhile.
 const TOUCH = String.raw`try { [IO.File]::SetLastWriteTimeUtc($out, [DateTime]::UtcNow) } catch {}`;
 
 // The bytes alone: [IO.File]::Copy keeps the source's date, read-only and hidden
@@ -47,11 +50,12 @@ if (-not [IO.File]::Exists($src)) { throw '${GONE}' }
 $name = $key + '-' + ${STAMP} + '.' + $ext
 [void][IO.Directory]::CreateDirectory($dir)
 $out = $dir + '\' + $name
+if ([IO.File]::Exists($out)) { ${TOUCH} }
 if (-not [IO.File]::Exists($out)) {
   $tmp = $out + '.' + $PID + '.tmp'
   [IO.File]::WriteAllBytes($tmp, [IO.File]::ReadAllBytes($src))
   ${PLACE}
-} else { ${TOUCH} }
+}
 $name`;
 
 // `file --mime-type` for what the preview draws: the type of the bytes in $tmp. An SVG's
@@ -130,12 +134,14 @@ function run(argv) {
     var name = key + '-' + stamp + '-p' + n + '.png', path = dir + '/' + name;
     var page = doc.pageAtIndex(n - 1), box = page.boundsForBox(1), turned = Number(page.rotation) % 180 !== 0;
     var w = turned ? box.size.height : box.size.width, h = turned ? box.size.width : box.size.height;
+    // A page already there is dated now, the prune going by age; one a prune took meanwhile renders again.
+    if (fm.fileExistsAtPath($(path))) fm.setAttributesOfItemAtPathError($({ NSFileModificationDate: $.NSDate.date }), $(path), null);
     if (!fm.fileExistsAtPath($(path))) {
       var picture = page.thumbnailOfSizeForBox($.NSMakeSize(wide, wide * h / w), 1);
       var bitmap = $.NSBitmapImageRep.imageRepWithData(picture.TIFFRepresentation);
       var png = bitmap.representationUsingTypeProperties($.NSBitmapImageFileTypePNG, $({}));
       if (!png.writeToFileAtomically($(path), true)) throw new Error('Cannot save page ' + n);
-    } else fm.setAttributesOfItemAtPathError($({ NSFileModificationDate: $.NSDate.date }), $(path), null); // in use again: the prune goes by age
+    }
     pages.push({ n: n, path: 'data/roundup-preview/' + name, width: w, height: h });
   }
   return JSON.stringify({ count: count, pages: pages });
@@ -155,8 +161,8 @@ mkdir -p "$dir" || exit 1
 n=$from
 while [ "$n" -le "$to" ]; do
   out="$dir/$key-$stamp-p$n"
-  if [ -f "$out.png" ]; then touch "$out.png" 2>/dev/null
-  else pdftoppm -png -f "$n" -l "$n" -scale-to-x "$wide" -scale-to-y -1 -singlefile "$src" "$out" || exit 1; fi
+  [ -f "$out.png" ] && touch -c "$out.png" 2>/dev/null
+  [ -f "$out.png" ] || pdftoppm -png -f "$n" -l "$n" -scale-to-x "$wide" -scale-to-y -1 -singlefile "$src" "$out" || exit 1
   n=$((n + 1))
 done
 echo "Stamp: $stamp"
@@ -192,6 +198,7 @@ for ($n = [Math]::Max(1, [int]$from); $n -le [Math]::Min([int]$to, $count); $n++
   $page = $doc.GetPage($n - 1)
   $name = $key + '-' + $stamp + '-p' + $n + '.png'
   $out = $dir + '\' + $name
+  if ([IO.File]::Exists($out)) { ${TOUCH} }
   if (-not [IO.File]::Exists($out)) {
     $tmp = $out + '.' + $PID + '.tmp'
     $stream = [IO.File]::Open($tmp, 'Create', 'ReadWrite')
@@ -200,7 +207,7 @@ for ($n = [Math]::Max(1, [int]$from); $n -le [Math]::Min([int]$to, $count); $n++
     $null = $action.Invoke($null, @($page.RenderToStreamAsync([System.IO.WindowsRuntimeStreamExtensions]::AsRandomAccessStream($stream), $options))).GetAwaiter().GetResult()
     $stream.Dispose()
     ${PLACE}
-  } else { ${TOUCH} }
+  }
   $pages += @{ n = $n; path = 'data/roundup-preview/' + $name; width = $page.Size.Width; height = $page.Size.Height }
   $page.Dispose()
 }

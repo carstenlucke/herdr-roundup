@@ -543,8 +543,10 @@ copied and PDF pages rendered into `data/roundup-preview/`, named by a
 hash of the path and its revision (modification time to the nanosecond, or
 in ticks on Windows, and size, so a change within a second shows), pruned after 14 days.
 The prune runs before an image, PDF or Markdown with images is staged, and a cache hit is
-touched (dated now), so no prune deletes a file just picked. A preview left open longer than
-14 days can still lose its files to another preview's prune. Each web-image download
+touched (dated now, never made anew; one a prune took meanwhile is copied or rendered again),
+so a prune rarely takes a file just picked: one running at the same time may have chosen it
+before the touch. A preview left open longer than 14 days can still lose its files to another
+preview's prune. Each web-image download
 gets names of its own, since two previews may fetch the same URL at once. Live
 reload through `watchFolder` on the file's folder; a change counts under the
 file's path and under its folder resolved (`pwd -P`: on macOS the watch reports
@@ -611,8 +613,9 @@ A preview tab writes the file it shows, after a link or Back, under its own
 token into `roundup-preview.moved.v2` (token → file); a tab without a token
 (opened some other way) writes nothing. A record drops the dead panes' entries from both
 keys; a `moved` entry whose token was never recorded stays, as its tab may be alive (an
-overlap left it out) and restores from it; such an entry stays after its tab closed, for good
-(rare: it takes an overlap and a link followed). The next click on a file runs
+overlap, or a pane that came after the opener's last look, left it out) and restores from it;
+such an entry stays after its tab closed, for good (rare: it takes a tab left unrecorded that
+then followed a link). The next click on a file runs
 `pane.focus` on a recorded pane that is alive and shows that file now: its
 token's `moved` entry, else the file it opened with (`shownIn`, compared by
 `previewId` = `[on, pathKey(file)]`, so `C:\repo\b.md` and `c:/REPO/b.md`

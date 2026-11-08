@@ -45,7 +45,8 @@ export function upgraded(open, v2) {
  *  longer in `alive` are dropped, with their MOVED. A token OPEN never named keeps its MOVED:
  *  its tab may be alive, unrecorded after an overlap, and restores from it (only a tab can tell
  *  its token is gone, and it can't). So MOVED entries of tabs never recorded stay after their
- *  tab closed, for good: rare, as it takes an overlap and a link followed. The new token's MOVED
+ *  tab closed, for good: rare, as it takes a tab left unrecorded (an overlap, or a pane that came
+ *  after the opener's last look) that then followed a link. The new token's MOVED
  *  stays too: its tab may have followed a link before it was recorded. */
 export function remember(open, moved, file, on, pane, token, alive) {
   const entries = Object.entries(open ?? {});

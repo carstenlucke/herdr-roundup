@@ -54,8 +54,8 @@ export async function fetchImage(url) {
 }
 
 /** Drops cached pages and pictures older than two weeks. Await it before staging or rendering:
- *  with that, and the scripts in programs.js touching a cache hit, no prune deletes what was
- *  just picked. */
+ *  with that, and the scripts in programs.js touching a cache hit, a prune rarely takes what was
+ *  just picked. Not never: one running at the same time may have chosen the file before the touch. */
 export function pruneCache() {
   return exec(...here().prune(DIR())).catch(() => null);
 }
