@@ -86,42 +86,39 @@ export function openTab(api, file, on, wait, done = () => {}, space = null) {
   attempt(TRIES, wait);
 }
 
-// The floating window's Open in tab: the window ends when it closes, timers included, so it
-// hands the open to the panel copy that opened it (FLOAT.owner) and closes. TAB_REQUESTS:
-// request token -> { at, owner, file, on, space }; the owner takes its own out before it opens
-// them, so a second window's request can't replace one not yet taken. Old ones go after AGE ms.
-export const TAB_REQUESTS = "roundup-preview.tab-requests";
-const AGE = 30000;
-
-/** TAB_REQUESTS with `request` added under `token`, old ones dropped. */
-export function requested(requests, token, request, now) {
-  const keep = Object.entries(requests ?? {}).filter(([, r]) => r.at > now - AGE);
-  return Object.fromEntries([...keep, [token, request]]);
-}
-
-/** What `owner` takes from TAB_REQUESTS: { mine: its requests, rest: the map without them and old ones }. */
-export function taken(requests, owner, now) {
-  const all = Object.entries(requests ?? {}).filter(([, r]) => r.at > now - AGE);
-  return { mine: all.filter(([, r]) => r.owner === owner).map(([, r]) => r), rest: Object.fromEntries(all.filter(([, r]) => r.owner !== owner)) };
-}
-
 // The floating preview: one window (kind "window", one key), which opening again replaces
-// in its place. FLOAT: { id, file, on, token, owner, copy } of the open one, null when none is;
-// the token tells the window's own copy that it is still the one FLOAT names, owner is the
-// panel copy that opened it (or took it over), copy the window's running copy.
+// in its place. FLOAT: { id, file, on, token, copy, probe?, alive? } of the open one, null when
+// none is; the token tells the window's own copy that it is still the one FLOAT names, copy the
+// window's running copy. FLOAT is saved and outlives the window (a restart, a layout switch, a
+// crash): a panel copy that starts while it is set asks with a fresh `probe`, the window's copy
+// answers with `alive` = that probe, and an unanswered probe clears FLOAT (roundup-files main.js).
 export const FLOAT = "roundup-preview.float";
 export function floatSpec({ file, on = null, token }) {
   return { kind: "window", key: "roundup-preview", mod: "roundup-preview", width: 0.6, height: 0.75, props: { file, on, float: token } };
 }
 
-/** From `herdr-app status`: true only when it lists overlays as names, none of them roundup-preview. */
-export function windowGone(status) {
-  const names = status?.overlays;
-  return Array.isArray(names) && names.every((n) => typeof n === "string") && !names.includes("roundup-preview");
+/** Whether FLOAT `f` names a window to follow: written fresh (no probe), or its probe answered. */
+export const isOpen = (f) => Boolean(f) && (f.probe == null || f.alive === f.probe);
+
+/** FLOAT `f` without a probe or its answer: a window opened or a copy started just now. */
+export function fresh(f) {
+  const { probe: _probe, alive: _alive, ...rest } = f ?? {};
+  return rest;
 }
 
-/** Whether FLOAT `f` is still the record `was`: a window copy that started since writes its own id and copy. */
-export const sameFloat = (f, was) => Boolean(f && was) && f.token === was.token && f.id === was.id && (f.copy ?? null) === (was.copy ?? null);
+/** FLOAT once openOverlay returned `record` ({ file, on, token, id }): what the window's copy
+ *  wrote under the same token meanwhile (its `copy`) stays; another token's record is replaced. */
+export const placed = (f, record) => ({ ...(f?.token === record.token ? f : {}), ...record });
+
+/** The window copy `token`/`copy`'s answer to FLOAT `f`: the record to write, or null when it
+ *  names another window or copy, or has no probe left to answer. */
+export function answered(f, token, copy) {
+  return f?.token === token && f.copy === copy && f.probe != null && f.alive !== f.probe ? { ...f, alive: f.probe } : null;
+}
+
+/** Whether FLOAT `f` still holds `probe` unanswered: then no window took it, and FLOAT goes.
+ *  A newer probe (another panel copy asked since), or a window written since, isn't this one's. */
+export const unanswered = (f, probe) => Boolean(f) && f.probe === probe && f.alive !== probe;
 
 /** The app command, as [name, args], that shows `file` (on machine `on`) in roundup-preview. */
 export function openCommand({ file, on = null, mode = "tab", token = null, space = null }) {

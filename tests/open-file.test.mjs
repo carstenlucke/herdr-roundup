@@ -3,7 +3,7 @@ import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  OPEN, MOVED, OPENING, TAB_REQUESTS, previewId, shownIn, remember, marked, madePane, openTab, openCommand, requested, taken, windowGone, sameFloat,
+  OPEN, MOVED, OPENING, FLOAT, previewId, shownIn, remember, marked, madePane, openTab, openCommand, isOpen, fresh, answered, unanswered, placed,
 } from "../mods/roundup-preview/open-file.js";
 
 test("roundup-files' open-file.js is a copy of roundup-preview's", () => {
@@ -129,33 +129,95 @@ test("openCommand: split modes and the props a tab gets", () => {
     ["tab.new", { name: "a.md", mod: "roundup-preview", props: { file: "C:\\r\\a.md", on: null, token: null } }]);
 });
 
-test("TAB_REQUESTS: each owner takes only its own, old ones go", () => {
-  let r = requested({}, "r1", { at: 0, owner: "panel-1", file: "/r/a.md", on: null, space: null }, 0);
-  r = requested(r, "r2", { at: 10, owner: "panel-2", file: "/r/b.md", on: null, space: null }, 10);
-  const { mine, rest } = taken(r, "panel-1", 20);
-  assert.deepEqual(mine.map((x) => x.file), ["/r/a.md"]);
-  assert.deepEqual(Object.keys(rest), ["r2"]);
-  assert.deepEqual(taken(r, "panel-2", 40000), { mine: [], rest: {} }, "older than 30 s");
-  assert.equal(TAB_REQUESTS, "roundup-preview.tab-requests");
+test("shared keys keep their names", () => {
+  assert.equal(FLOAT, "roundup-preview.float");
   assert.equal(MOVED, "roundup-preview.moved.v2");
   assert.equal(OPENING, "roundup-preview.opening");
 });
 
-test("windowGone: only a list of names without roundup-preview", () => {
-  assert.equal(windowGone({ overlays: [] }), true);
-  assert.equal(windowGone({ overlays: ["toast"] }), true);
-  assert.equal(windowGone({ overlays: ["roundup-preview", "toast"] }), false);
-  assert.equal(windowGone({ overlays: [{ mod: "roundup-preview", id: "o1" }] }), false, "unknown shape keeps it");
-  assert.equal(windowGone({ overlays: [null] }), false);
-  assert.equal(windowGone({}), false);
-  assert.equal(windowGone(null), false);
+// FLOAT as the panel and the window write it: openFloat, a panel copy's probe, the window's answer.
+const window1 = { id: "o1", file: "/r/a.md", on: null, token: "T", copy: "c1" };
+
+test("isOpen: a fresh record or an answered probe", () => {
+  assert.equal(isOpen(null), false);
+  assert.equal(isOpen(undefined), false);
+  assert.equal(isOpen(window1), true, "openFloat's record, no probe");
+  assert.equal(isOpen({ ...window1, probe: "p1" }), false, "asked, no answer yet");
+  assert.equal(isOpen({ ...window1, probe: "p1", alive: "p1" }), true, "answered");
+  assert.equal(isOpen({ ...window1, probe: "p2", alive: "p1" }), false, "a newer probe, not answered yet");
 });
 
-test("sameFloat: token, id and copy all still match", () => {
-  const was = { token: "T", id: "o1", copy: "c1", owner: "p1" };
-  assert.ok(sameFloat({ ...was, owner: "p2", file: "/r/b.md" }, was));
-  assert.ok(!sameFloat({ ...was, copy: "c2" }, was), "the window's copy started again");
-  assert.ok(!sameFloat({ ...was, id: "o2" }, was));
-  assert.ok(!sameFloat({ ...was, token: "U" }, was));
-  assert.ok(!sameFloat(null, was));
+test("a saved answer from the last run doesn't count: the new probe waits for a live window", () => {
+  const saved = { ...window1, probe: "p1", alive: "p1" };
+  const asked = { ...saved, probe: "p2" };
+  assert.equal(isOpen(asked), false);
+  assert.equal(unanswered(asked, "p2"), true, "no window answers: FLOAT goes");
+});
+
+test("answered: only the window copy FLOAT names answers, and only an open probe", () => {
+  const asked = { ...window1, probe: "p1" };
+  assert.deepEqual(answered(asked, "T", "c1"), { ...asked, alive: "p1" });
+  assert.equal(answered(asked, "T", "c0"), null, "an older copy of the window");
+  assert.equal(answered(asked, "U", "c1"), null, "another window");
+  assert.equal(answered({ ...asked, copy: undefined }, "T", "c1"), null, "a record without copy is no proof");
+  assert.equal(answered({ ...asked, alive: "p1" }, "T", "c1"), null, "answered already: no write");
+  assert.equal(answered(window1, "T", "c1"), null, "nothing asked: no write");
+  assert.equal(answered(null, "T", "c1"), null);
+});
+
+test("unanswered: only the probe a panel copy wrote, still open, clears FLOAT", () => {
+  const asked = { ...window1, probe: "p1" };
+  assert.equal(unanswered(asked, "p1"), true);
+  assert.equal(unanswered({ ...asked, alive: "p1" }, "p1"), false, "the window answered");
+  assert.equal(unanswered({ ...asked, probe: "p2" }, "p1"), false, "a newer probe: its own timer decides");
+  assert.equal(unanswered({ ...asked, probe: "p2", alive: "p2" }, "p1"), false);
+  assert.equal(unanswered({ ...window1, token: "U" }, "p1"), false, "a window opened since");
+  assert.equal(unanswered(null, "p1"), false);
+});
+
+test("a window copy that starts during a probe proves itself: fresh drops probe and answer", () => {
+  const asked = { ...window1, probe: "p1" };
+  const restarted = { ...fresh(asked), copy: "c2" };
+  assert.deepEqual(restarted, { ...window1, copy: "c2" });
+  assert.equal(isOpen(restarted), true);
+  assert.equal(unanswered(restarted, "p1"), false, "the panel's timeout leaves it");
+  assert.deepEqual(fresh({ ...window1, probe: "p1", alive: "p1" }), window1);
+  assert.deepEqual(fresh(null), {});
+});
+
+test("two panel copies ask one after the other: both see the window once the newer probe is answered", () => {
+  let f = { ...window1, probe: "p1" };          // panel 1 asks
+  f = { ...f, probe: "p2" };                    // panel 2 asks before the window answered
+  f = answered(f, "T", "c1");                   // the window answers what it finds
+  assert.equal(isOpen(f), true, "the same record frees both panels");
+  assert.equal(unanswered(f, "p1"), false, "panel 1's timeout: not its probe");
+  assert.equal(unanswered(f, "p2"), false, "panel 2's timeout: answered");
+});
+
+// openFloat (roundup-files main.js) and the window copy's start (roundup-preview preview.js), as
+// they write FLOAT; `inside` says whether the copy starts within openOverlay or after it.
+const replaceWindow = (inside) => {
+  let f = { id: "o-old", file: "/r/old.md", on: null, token: "OLD", copy: "c-old" };
+  const start = () => { // preview.js: only over its own token, with its copy, no probe
+    if (!f || f.token === "NEW") f = { ...fresh(f), id: "o-new", file: "/r/new.md", on: null, token: "NEW", copy: "c-new" };
+  };
+  const record = { file: "/r/new.md", on: null, token: "NEW" };
+  f = record;                        // openFloat: the new token first
+  if (inside) start();               // openOverlay runs the copy's start
+  f = placed(f, { ...record, id: "o-new" });
+  if (!inside) start();
+  return f;
+};
+
+test("replacing a window: the new copy's record keeps its copy, whenever it starts", () => {
+  for (const inside of [true, false]) {
+    const f = replaceWindow(inside);
+    assert.equal(f.token, "NEW");
+    assert.equal(f.copy, "c-new", inside ? "copy started inside openOverlay" : "copy started after");
+    assert.equal(f.id, "o-new");
+    // A panel copy starting later asks; the live window can answer it.
+    const asked = { ...f, probe: "p1" };
+    assert.deepEqual(answered(asked, "NEW", "c-new"), { ...asked, alive: "p1" });
+  }
+  assert.deepEqual(placed({ token: "OLD", copy: "c-old" }, { token: "NEW", id: "o" }), { token: "NEW", id: "o" }, "another token's record goes");
 });

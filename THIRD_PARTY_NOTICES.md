@@ -12,7 +12,7 @@ its top.
 | `mods/roundup-workspace-chrome/` `refresh.svg`, `bot.svg`, `notes.svg`, `skip.svg`, `check.svg`, `circle-alert.svg` | [Lucide](https://lucide.dev) icons | ISC | (c) Lucide Contributors 2022, portions (c) Cole Bemis 2013-2022 (Feather, MIT) |
 | `mods/roundup-files/main.js`, `disk.js`, `git.js`, `actions.js`, `icon.js` (git parsing, search index, rows in a virtual list, keys, context menu, sending a path to an agent, icon matching) | `filetree` and `file-icons` from [cybertron288/herdr-mods](https://github.com/cybertron288/herdr-mods) at `34e7c33` | MIT | (c) 2026 cybertron288 |
 | the same parts of `mods/roundup-files/`, through `filetree` | claude-code-filetree, which `filetree` ports | MIT | (c) 2026 Kurt Buhler |
-| `mods/roundup-preview/` (all of it), and its copy `mods/roundup-files/open-file.js` | `file-preview` (the `cria-file-preview` mod) from [gsydler/herdr-cria](https://github.com/gsydler/herdr-cria) at `82ce1eb` | Apache-2.0 | gsydler |
+| `mods/roundup-preview/` (all of it), and its copies `mods/roundup-files/open-file.js` and `paths.js` | `file-preview` (the `cria-file-preview` mod) from [gsydler/herdr-cria](https://github.com/gsydler/herdr-cria) at `82ce1eb` | Apache-2.0 | gsydler |
 
 ## MIT licence text (Symbols, cybertron288/herdr-mods, claude-code-filetree)
 

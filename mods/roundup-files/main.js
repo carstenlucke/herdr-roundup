@@ -11,14 +11,14 @@
 // keys, the context menu as a popup of this mod. See THIRD_PARTY_NOTICES.md.
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, InputState, Input, Scrollbar, Popup, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
-import { spaces, panes, focused, readTextFile, watchFolder, theme, settings, window, props, notify, openOverlay, closeOverlay, shared, setShared, nextCommand, run, exec, home, appHome } from "herdr";
+import { spaces, panes, focused, readTextFile, watchFolder, theme, settings, window, props, notify, openOverlay, closeOverlay, shared, setShared, nextCommand, run } from "herdr";
 import { iconFor, rootIcon } from "./icon.js";
 import { listDir, buildIndex, diskSearch, kinds, indexDepth, compare, prunedName, prunedAbove, realPath, PER_FOLDER, INDEX_DIRS, INDEX_PATHS } from "./disk.js";
 import { readGit, listFiles, emptyGit, ancestors, dirOf, within, NEW, MODIFIED, DELETED } from "./git.js";
 import { openExternal, revealExternal, copy, sendToAgent, relTo } from "./actions.js";
 // A copy of roundup-preview's: how it opens and which pane already shows a file. sync.sh
 // checks that the two copies match.
-import { FLOAT, TAB_REQUESTS, openTab, timerOf, floatSpec, newToken, taken, windowGone, sameFloat } from "./open-file.js";
+import { FLOAT, openTab, timerOf, floatSpec, newToken, isOpen, unanswered, placed } from "./open-file.js";
 // Also roundup-preview's: the window writes a followed link's path in its own form (/ on Windows).
 import { samePath } from "./paths.js";
 
@@ -125,21 +125,17 @@ export default class Files extends View {
     this.width = 368; this.measuredWidth = null; this.query = ""; this.hits = null; this.searchSeq = 0; this.shown = [];
     this.seenRequest = shared(REQUEST)?.n ?? 0;
     this.uid = newToken();
-    // A floating window can outlive this copy's start (the mod reloaded): the panel takes it over,
-    // so its Open in tab comes here. One gone with a restart or a layout switch leaves FLOAT
-    // behind, as FLOAT is saved: checkFloat clears it then.
-    const float = shared(FLOAT);
-    if (float) { setShared(FLOAT, { ...float, owner: this.uid }); this.checkFloat(float, cx); }
-    // Drawn or not (a hidden panel isn't drawn): the window's Open in tab requests for this copy,
-    // and a window without an owner taken over (its copy started again after FLOAT was cleared).
-    cx.timer.every(500, (cx) => this.takeTabs(cx));
+    // A floating window can outlive this copy's start (the mod reloaded); one gone with a restart,
+    // a layout switch or a crash leaves FLOAT behind, as FLOAT is saved: askFloat tells them apart.
+    if (shared(FLOAT)) this.askFloat(cx);
     this.input = InputState.new({ placeholder: "Search files" });
     // Only a change of the text searches: reset() empties the field while drawing, where
     // search's notify would be refused, and has emptied this.query already.
     this.input.on("change", (_e, cx) => { const v = this.input.value(); if (v !== this.query) this.search(v, cx); });
     this.input.on("submit", (_e, cx) => {
       const r = this.shown.find((x) => x.rel === this.cursor) ?? this.shown[0];
-      // A preview hides the input: the keys (Esc, Left) go to the panel then.
+      // A file opens in a roundup-preview tab: the list takes the keyboard back from the field, so
+      // the panel's keys (Space, Esc, arrows) apply when it comes back.
       if (r && !r.dir) this.handle.focus();
       this.activate(r, cx);
     });
@@ -753,39 +749,22 @@ export default class Files extends View {
   openFloat(rel) {
     this.stopFollow();
     const file = join(this.root, rel), on = this.on ?? null;
-    const token = newToken(), id = openOverlay(floatSpec({ file, on, token }));
-    setShared(FLOAT, { id, file, on, token, owner: this.uid });
+    // The new token goes in first: a window copy that starts inside openOverlay writes its record
+    // (its `copy`, by which it answers a probe) only over its own token, and keeps it then.
+    const token = newToken(), record = { file, on, token };
+    setShared(FLOAT, record);
+    const id = openOverlay(floatSpec(record));
+    setShared(FLOAT, placed(shared(FLOAT), { ...record, id }));
   }
 
-  // Whether the window FLOAT names (`float`) is still open, asked once at start. Mods can't list
-  // overlays; `herdr-app status` can, by name only. So only a status that lists overlays as
-  // names, none of them roundup-preview, clears FLOAT, and only while FLOAT is still that record
-  // (a copy of the window starting meanwhile writes its own `id` and `copy`); no answer, another
-  // app home (status would ask another window) or any other answer keeps it.
-  checkFloat(float, cx) {
-    if (appHome().replace(/[\\/]+$/, "") !== `${home()}/.config/herdr-app`) return;
-    cx.spawn(async () => {
-      let status = null;
-      for (const cmd of ["herdr-app", `${home()}/.local/bin/herdr-app`]) {
-        const r = await exec(cmd, ["status"]).catch(() => null);
-        if (r?.code !== 0) continue;
-        try { status = JSON.parse(r.stdout); } catch {}
-        break;
-      }
-      if (windowGone(status) && sameFloat(shared(FLOAT), float)) setShared(FLOAT, null);
-    });
-  }
-
-  // The floating window's Open in tab (preview.js toTab): this copy owns the window, so it opens
-  // the tab here, where its looks outlive the window. Taken out before they run, once.
-  takeTabs(cx) {
-    const f = shared(FLOAT);
-    if (f && !f.owner) setShared(FLOAT, { ...f, owner: this.uid });
-    const tabs = shared(TAB_REQUESTS);
-    if (!tabs || !Object.values(tabs).some((r) => r.owner === this.uid)) return;
-    const { mine, rest } = taken(tabs, this.uid, Date.now());
-    setShared(TAB_REQUESTS, rest);
-    for (const r of mine) openTab({ panes, run, shared, setShared }, r.file, r.on ?? null, timerOf(cx), undefined, r.space);
+  // Whether the window FLOAT names is still there, asked once at start: mods can't list overlays.
+  // A fresh probe, always (an answer may be saved from the last run); the window's copy answers
+  // from a timer within 500ms. Until then isOpen() is false: nothing follows the cursor. Unanswered
+  // after 1500ms, FLOAT goes, unless a newer probe (another panel copy) or window took it since.
+  askFloat(cx) {
+    const probe = newToken();
+    setShared(FLOAT, { ...shared(FLOAT), probe });
+    cx.timer.after(1500, () => { if (unanswered(shared(FLOAT), probe)) setShared(FLOAT, null); });
   }
 
   closeFloat() {
@@ -799,7 +778,7 @@ export default class Files extends View {
   // The window shows `rel` of this folder now.
   floats(rel) {
     const f = shared(FLOAT);
-    return Boolean(f?.file) && samePath(f.file, join(this.root, rel)) && (f.on ?? null) === (this.on ?? null);
+    return isOpen(f) && Boolean(f.file) && samePath(f.file, join(this.root, rel)) && (f.on ?? null) === (this.on ?? null);
   }
 
   // While the window is open it follows the cursor, as Quick Look follows the selection. From
@@ -810,9 +789,9 @@ export default class Files extends View {
     this.stopFollow();
     const now = () => {
       const r = this.shown.find((x) => x.rel === this.cursor);
-      if (shared(FLOAT) && r && !r.dir && !r.gone && !this.floats(r.rel)) this.openFloat(r.rel);
+      if (isOpen(shared(FLOAT)) && r && !r.dir && !r.gone && !this.floats(r.rel)) this.openFloat(r.rel);
     };
-    if (!wait || !shared(FLOAT)) { now(); return; }
+    if (!wait || !isOpen(shared(FLOAT))) { now(); return; }
     this.following = cx.timer.after(wait, () => { this.following = null; now(); });
   }
 
@@ -986,7 +965,7 @@ export default class Files extends View {
     else if (k === "home") this.move(rows, -rows.length, cx);
     else if (k === "end") this.move(rows, rows.length, cx);
     else if (k === "/") this.input.focus();
-    else if (k === "escape" && shared(FLOAT)) this.closeFloat();
+    else if (k === "escape" && isOpen(shared(FLOAT))) this.closeFloat();
     else if (k === "escape" && this.query) this.clearSearch(cx);
     else if (!cur) return;
     else if (k === "right") { if (cur.dir && !cur.open) this.toggle(cur, cx); else if (cur.dir) this.move(rows, 1, cx); }

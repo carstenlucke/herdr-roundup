@@ -609,7 +609,11 @@ elsewhere (`platform` is the Windows key there). A double-click,
 Space or Quick look runs `openOverlay(floatSpec({file, on, token}))`
 (`open-file.js`: `kind: "window"`, `key: "roundup-preview"`, so opening again
 replaces it in place) and writes shared `roundup-preview.float` (`{id, file,
-on, token, owner, copy}`; `owner` is the panel copy's id). The window's copy (`props().float` = the token) clears that key
+on, token, copy}`; `copy` is the window's running copy, which writes the key
+too when it starts, only over its own token). So the panel writes the new
+token before `openOverlay` and adds the `id` after it, keeping a `copy` the
+window wrote meanwhile (`placed`): its copy may start inside `openOverlay`.
+The window's copy (`props().float` = the token) clears that key
 in `close()` only while it still holds its token and its `copy`, since a
 replaced window closes after the new one wrote it, and a copy that starts
 again (the mod reloaded) writes the key back with its own `copy` before the
@@ -617,26 +621,23 @@ copy before closes. When the
 window follows a link or goes Back, it writes the file it shows into the
 key's `file`, again only while it holds its token; the panel compares that
 with a row's path by `samePath`, since a link's path comes with `/` on Windows.
-A panel copy that starts while the key is set takes it over (`owner`), and
-asks `herdr-app status` once whether the window still exists: a window
-doesn't survive a restart or a layout switch, the key does. Mods can't list
-overlays and `status` lists them by name only, so only an answer whose
-`overlays` are names, none of them `roundup-preview`, clears the key, and
-only while the key is still the record it found (same token, `id` and
-`copy`); no answer (no `herdr-app` on the path or in `~/.local/bin`),
-another `appHome()` than `~/.config/herdr-app`, any other answer, or any
-`roundup-preview` overlay (its ⋯ menu too) keeps it.
-The window's Open in tab doesn't open the tab itself: its timers end when
-it closes. It adds `{at, owner, file, on, space}` under a fresh token to
-shared `roundup-preview.tab-requests` and closes; the panel copy named
-`owner` looks every 500ms from a timer (a hidden panel isn't drawn, so not
-from `render`), takes its own requests out (`taken`) and runs `openTab` for
-them, so a request from a second window can't replace one not yet taken.
-Requests older than 30s are dropped the next time the map is written. The
-same look takes over a key without an owner: a window copy that starts
-again after the key was cleared writes it back with none. Without an owner
-when Open in tab is pressed, the window opens the tab itself and waits for
-the record, as before.
+The key is saved, the window isn't: it doesn't survive a restart, a layout
+switch or a crash, and mods can't list overlays. So a panel copy that starts
+while the key is set asks: it writes a fresh `probe` into the key (always,
+since an answer may be saved from the last run), and the window's copy,
+from a 500ms timer that ends with the window, answers with `alive` = that
+probe, only while the key names its token and its `copy`; it writes nothing
+when not asked. The panel follows the window only while the key has no
+probe or an answered one (`isOpen`); a window opened, or a window copy
+started, writes the key without either, so it counts at once. After 1500ms a
+probe still in the key unanswered clears it (`unanswered`); a newer probe
+(another panel copy asked since) or a window opened since is left alone,
+the newer probe's own timer decides. A setShared re-renders every mod and is
+saved, so the window answers when asked instead of writing a heartbeat.
+The window's Open in tab opens the tab itself, in the space in front
+(`openTab`): `tab.new` goes out at once, and the window closes only once the
+record in `roundup-preview.open.v2` is settled (at most five looks, 200ms
+apart), since its timers end when it closes.
 In the window a press drags it unless stopped, so `preview.js` stops
 `mouse_down` on its controls and its body and focuses its handle there, for
 Esc, unless a field or editor in them took the keyboard on that press: the
@@ -839,9 +840,17 @@ global `tab.close` and `pane.close`.
   its own. Counting the panes of the whole overlapping group works only
   with an observer that outlives each open's five looks; until `run()`
   names the pane it made (issue #17), this stays.
-- **An Open in tab can be lost with its panel:** the window hands it to the
-  panel copy that owns it; when that copy ended in between (the mod
-  reloaded while the request waited), nobody takes it, and it goes after 30s.
+- **Open in tab keeps the window up to a second:** the window opens the tab
+  and waits for its pane before it closes (its timers end with it). Closed
+  by hand meanwhile, the tab isn't recorded: the next click on the file
+  opens a second tab instead of focusing the first, and its open stays in
+  `roundup-preview.opening` without an end, so opens in the next 10s record
+  none either. Handing the open to the panel let the window close at once,
+  but lost it when that panel copy had ended.
+- **A slow window answer drops the key:** a window that doesn't answer a
+  probe within 1500ms (a blocked app) loses the key though it is open; the
+  panel stops following it and its `close()` has nothing to clear. The next
+  Space or double-click replaces it (same window `key`).
 
 ## Done when
 

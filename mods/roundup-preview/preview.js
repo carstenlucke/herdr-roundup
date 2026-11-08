@@ -13,7 +13,7 @@ import { dirname, native, localPath, changedFile } from "./paths.js";
 import { VIEWERS } from "./viewers/index.js";
 import { openMenu } from "./menu.js";
 import { iconButton } from "./viewers/controls.js";
-import { MOVED, FLOAT, TAB_REQUESTS, openTab, timerOf, newToken, requested } from "./open-file.js";
+import { MOVED, FLOAT, openTab, timerOf, newToken, fresh, answered } from "./open-file.js";
 import { formatSize } from "./size.js";
 import { programs } from "./programs.js";
 import { systemOf } from "./platform.js";
@@ -33,10 +33,17 @@ export class Preview {
     this.show(file && localPath(file, this.system), cx);
     // A window that starts again (the mod reloaded) writes FLOAT back if it is gone, and marks it
     // with this copy, so the copy before, closing late, leaves it alone. Not over a newer window.
+    // Starting proves it is there: the record drops a probe a panel copy may have left (fresh).
+    // FLOAT outlives the window, so a panel copy starting while it is set asks (`probe`); this
+    // copy answers from a timer, which ends with the window. It writes only when asked.
     if (this.float) {
       this.copy = newToken();
       const f = shared(FLOAT);
-      if (!f || f.token === this.float) setShared(FLOAT, { owner: null, ...f, id: overlay, file: this.file, on, token: this.float, copy: this.copy });
+      if (!f || f.token === this.float) setShared(FLOAT, { ...fresh(f), id: overlay, file: this.file, on, token: this.float, copy: this.copy });
+      cx.timer.every(500, () => {
+        const next = answered(shared(FLOAT), this.float, this.copy);
+        if (next) setShared(FLOAT, next);
+      });
     }
   }
 
@@ -50,7 +57,7 @@ export class Preview {
   // reload: the same file changed on disk; the old view stays until the new one is ready.
   show(file, cx, reload = false) {
     const previous = reload ? this.state : null;
-    if (!reload) this.release();
+    if (!reload) { this.release(); this.bytes = null; }
     this.file = file; this.error = null;
     if (!file) { this.error = "No file to show"; return; }
     if (!reload) this.watch(cx);
@@ -122,18 +129,14 @@ export class Preview {
   }
 
   // From the floating window to a tab: the pane already showing the file comes to the front,
-  // else a new tab, recorded (shared OPEN) as roundup-files records its own. The window's timers
-  // end when it closes, so the panel copy that owns it opens the tab (TAB_REQUESTS) and the
-  // window closes at once. Without an owner the window opens it and waits for the record.
+  // else a new tab in the space in front, recorded (shared OPEN) as roundup-files records its
+  // own. The window's timers end when it closes, so it stays until the record is settled (at
+  // most five looks, 200ms apart); the tab itself opens at once.
   toTab(cx) {
-    const file = this.file, on = this.on, overlay = props()?.overlay, f = shared(FLOAT);
+    const file = this.file, on = this.on, overlay = props()?.overlay;
     if (!file || this.tabRequested) return;
     this.tabRequested = true;
-    const owner = f?.token === this.float ? f.owner : null;
-    if (!owner) { openTab({ panes, run, shared, setShared }, file, on, timerOf(cx), () => closeOverlay(overlay)); return; }
-    const now = Date.now();
-    setShared(TAB_REQUESTS, requested(shared(TAB_REQUESTS), newToken(), { at: now, owner, file, on, space: focused()?.space ?? null }, now));
-    closeOverlay(overlay);
+    openTab({ panes, run, shared, setShared }, file, on, timerOf(cx), () => closeOverlay(overlay), focused()?.space ?? null);
   }
 
   // The name or the folder, which a click copies: the name, or the file's full path.
