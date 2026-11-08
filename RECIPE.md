@@ -134,6 +134,9 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
     `arrow-up-right`, stroke 2.5) after it in `accent`, its hover "Link to
     <target>" as written; one that points nowhere has a `dim` name, a
     half-faded icon, the arrow in `ansi1` and "Broken link to <target>".
+    Herdr ships its UI font Geist without an italic, so `roundup-files`
+    brings `fonts/Geist-Italic.ttf` (Geist 1.8.2, OFL); a `ui_font` without
+    an italic shows link names upright.
     Selected row on `selected`, hovered on `hover`.
   - **Footer** (only when needed, 11px `dim`): "Folders show their first 500
     entries", "First 200 matches", "Changed shows the first 2,000 paths",

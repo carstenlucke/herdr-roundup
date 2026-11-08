@@ -1000,7 +1000,8 @@ export default class Files extends View {
       .child(div().flex_1().min_w(0).truncate().text_color(ignored || r.broken ? t.dim : color ?? t.foreground)
         .when(r.gone, (el) => el.line_through()).when(r.link != null, (el) => el.italic()).child(r.name))
       // A link: its name in italics and an arrow after it, red when it points nowhere; its
-      // target on hover.
+      // target on hover. Herdr ships Geist upright only, and gpui doesn't slant a font that
+      // has no italic: fonts/Geist-Italic.ttf is that italic.
       .when(r.link != null, (el) => el.child(div().id(`rf-link-${rel}`).flex_none().tooltip(linkTip(r))
         .child(svg(ICON("link")).size(14).text_color(r.broken ? t.ansi1 : t.accent))))
       .when(Boolean(counts), (el) => el.children(counts.map((n, i) => n
