@@ -7,12 +7,20 @@
 #   rsvg-convert -z 2 layouts/Herdr-Roundup.svg -o preview.png
 # Settings shows the SVG; README.md and RECIPE.md show the PNG.
 # A third argument draws one of the scenes the project's site shows instead, cropped to what it
-# is about (scripts/site.sh renders them all): see SCENES at the end.
+# is about (scripts/site.sh renders them all): SCENES below names them, CROPS at the end crops
+# them. `python3 scripts/preview.py --scenes` prints their names.
 import base64, json, os, re, sys
 from html import escape
 
+SCENES = ["spaces", "files", "files-changed", "search", "symlink", "pane-header", "rename",
+          "close-menu", "close-confirm", "update", "preview-tab", "float"]
+if sys.argv[1:] == ["--scenes"]:
+    print("\n".join(SCENES))
+    sys.exit()
 REPO, OUT = sys.argv[1], sys.argv[2]
 SCENE = sys.argv[3] if len(sys.argv) > 3 else "window"
+if SCENE != "window" and SCENE not in SCENES:
+    sys.exit(f"preview.py: unknown scene {SCENE!r}; the scenes are: window, {', '.join(SCENES)}")
 LAYOUT = json.load(open(f"{REPO}/layouts/Herdr-Roundup.json"))
 VERSION = LAYOUT["version"]
 # The release the update scene offers: the next minor one.
@@ -683,12 +691,13 @@ found = [
     ("test/facets.test.ts", 1, dict(st="?")),
 ]
 ly = sy + 28 + 4
+# AGENTS.md's row in the All view: the symlink scene hovers it, and its crop follows it.
+LINK_Y = ly + 26 * [rel for rel, _, _ in tree].index("AGENTS.md")
 tree_mark = len(out)
 rows = {"all": tree, "changed": changed, "search": found}[VIEW]
 for i, (rel, depth, kw) in enumerate(rows):
     if SCENE == "symlink" and rel == "AGENTS.md":
         kw = dict(kw, hover=True)
-        LINK_Y = ly + 26 * i
     frow(ly + 26 * i, rel, depth, **kw)
 if ly + 26 * len(rows) > PY + PH - 1:
     clip_since(tree_mark, X0, PY + 1, X1 - X0, PH - 2, rx=9)
@@ -707,11 +716,11 @@ text(W - 14, SY + 18, "⌘⇧P  commands", 11, "dim", anchor="end")
 
 # ---- roundup-preview's floating window: README.md, rendered ----
 # Only in the window and the float scene: the others show what's under it.
+# floatSpec: 0.6 of the window's width, 0.75 of its height; dragged up a little, so the
+# panes' last lines show below it.
+FW, FH = round(W * 0.6), round(H * 0.75)
+FX, FT = (W - FW) // 2, (H - FH) // 2 - 22
 if SCENE in ("window", "float"):
-    # floatSpec: 0.6 of the window's width, 0.75 of its height; dragged up a little, so the
-    # panes' last lines show below it.
-    FW, FH = round(W * 0.6), round(H * 0.75)
-    FX, FT = (W - FW) // 2, (H - FH) // 2 - 22
     rect(FX - 6, FT + 14, FW + 12, FH + 10, "#000000", rx=16, op=0.6)
     out[-1] = out[-1].replace("/>", ' filter="url(#shadow)"/>')
     rect(FX, FT, FW, FH, "background", rx=10)
@@ -937,9 +946,13 @@ if SCENE == "close-menu":
         dict(label="Always"),
     ])
 
+# The two dialogs' sizes, which their crops follow.
+CONFIRM_W, CONFIRM_H = 400, 170
+RENAME_W, RENAME_H = 380, 196
+
 if SCENE == "close-confirm":
     # cmd-w while both agents work: roundup-confirm asks, Cancel holding the keyboard.
-    DW_, DH_ = 400, 170
+    DW_, DH_ = CONFIRM_W, CONFIRM_H
     dx, dy = (W - DW_) / 2, (H - DH_) / 2
     overlay(dx, dy, DW_, DH_, rx=12)
     dialog_head(dx, dy, DW_, 'Close tab "search-filters"?')
@@ -951,7 +964,7 @@ if SCENE == "close-confirm":
 
 if SCENE == "rename":
     # A double-click on the left pane's name: roundup-pane's dialog, a name being typed.
-    DW_, DH_ = 380, 196
+    DW_, DH_ = RENAME_W, RENAME_H
     dx, dy = (W - DW_) / 2, (H - DH_) / 2
     overlay(dx, dy, DW_, DH_, rx=12)
     dialog_head(dx, dy, DW_, "Rename pane")
@@ -1042,20 +1055,22 @@ if SCENE == "preview-tab":
         ty += 24
 
 # What each scene is cropped to: x, y, width, height. A fourth argument "full" keeps the window.
-CROP = {
+CROPS = {
     "spaces": (0, 0, SB + 1, 480),
     "files": (PX - 8, 0, W - PX + 8, 600),
     "files-changed": (PX - 8, 0, W - PX + 8, 600),
     "search": (PX - 8, 42, W - PX + 8, 352),
-    "symlink": (PX - 8, 566, W - PX + 8, 200),
+    "symlink": (PX - 8, LINK_Y - 107, W - PX + 8, 200),
     "pane-header": (RX - 8, 42, RW + 16, 120),
-    "rename": ((W - 380) / 2 - 60, (H - 196) / 2 - 50, 500, 296),
+    "rename": ((W - RENAME_W) / 2 - 60, (H - RENAME_H) / 2 - 50, RENAME_W + 120, RENAME_H + 100),
     "close-menu": (WX, 0, 520, 290),
-    "close-confirm": ((W - 400) / 2 - 60, (H - 170) / 2 - 50, 520, 270),
+    "close-confirm": ((W - CONFIRM_W) / 2 - 60, (H - CONFIRM_H) / 2 - 50, CONFIRM_W + 120, CONFIRM_H + 100),
     "update": (0, 0, 420, 440),
     "preview-tab": (WX, 0, PX - WX, 640),
-    "float": (round(W * 0.2) - 40, (H - round(H * 0.75)) // 2 - 22 - 40, round(W * 0.6) + 80, round(H * 0.75) + 90),
-}.get(SCENE)
+    "float": (FX - 40, FT - 40, FW + 80, FH + 90),
+}
+assert set(CROPS) == set(SCENES), "CROPS and SCENES name different scenes"
+CROP = CROPS.get(SCENE)
 if CROP and not (len(sys.argv) > 4 and sys.argv[4] == "full"):
     cx_, cy_, cw_, ch_ = (r(v) for v in CROP)
     out[0] = f'<svg xmlns="http://www.w3.org/2000/svg" width="{cw_}" height="{ch_}" viewBox="{cx_} {cy_} {cw_} {ch_}">'
