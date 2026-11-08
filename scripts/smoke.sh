@@ -195,7 +195,12 @@ cleanup() {
       core=$(HC_SESSION=$SESSION hc server status 2>/dev/null | jq -r '.core.id // empty')
       if [ -n "$core" ] && [ "$core" != "$USER_CORE" ]; then
         HC_SESSION=$SESSION hc ls > "$OUT/hc-ls-at-exit.json" 2>&1
-        HC_SESSION=$SESSION hc server stop >/dev/null 2>&1 || echo "smoke.sh: couldn't stop core session $SESSION" >&2
+        if HC_SESSION=$SESSION hc server stop >/dev/null 2>&1; then
+          # Its state folder stays behind otherwise, one per run. Only ours: hrs-<pid>, never default.
+          case $SESSION in hrs-[0-9]*) rm -rf "${HOME:?}/.local/state/herdr-core/$SESSION" ;; esac
+        else
+          echo "smoke.sh: couldn't stop core session $SESSION" >&2
+        fi
       fi
     fi
     rm -f "$TH"
