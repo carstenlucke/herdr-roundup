@@ -51,6 +51,7 @@ Click the logo or the name for the menu: check now, update, read the release not
 - To change one of Herdr's mods, clone it into this repo and point the layout at the clone:
   `herdr-app do mod.clone '{"name":"tabs","as":"roundup-tabs"}'`, move `~/.config/herdr-app/mods/roundup-tabs` into `mods/`, then set `"mod": "roundup-tabs"` in `layouts/Herdr-Roundup.json`.
 - Mod folders carry the `roundup-` prefix: a folder's name is the mod's identity (layout blocks, `roundup-x.command` keys, `openOverlay`), and an install renames a mod whose name is taken.
+- `scripts/smoke.sh` runs the L3 rows of `tests/CATALOG.md` in a second, isolated Herdr window (own home and core session; yours stays untouched): it comes to the front for about two minutes, prints ok/FAIL/SHOT per row and keeps the shots (`--offline` skips the GitHub check, `--help` for more).
 - Reference: `~/.config/herdr-app/AGENTS.md` (layouts, mods, keys, settings) and `~/.config/herdr-app/herdr.d.ts` (the mod API). `herdr-app commands` lists every app command.
 
 ## License
