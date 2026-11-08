@@ -714,6 +714,28 @@ add(f'<circle cx="{WX + 243}" cy="{SY + 14}" r="3" fill="{paint("dim")[0]}"/>')
 spans(WX + 252, SY + 18, [("9 agents", "muted", 400), ("  · 1 needs you", "blocked", 400)], 11.5, UI)
 text(W - 14, SY + 18, "⌘⇧P  commands", 11, "dim", anchor="end")
 
+# ---- roundup-preview's header controls, in the floating window and in a preview tab ----
+# `y` is the middle of the header's 42px.
+def viewer_button(x, y, glyph, color="muted", sw=2):
+    """A header button: 28px, rounded 7, a 14px icon."""
+    rect(x, y - 14, 28, 28, "chrome", rx=7)
+    icon(glyph, x + 7, y - 7, 14, color, sw=sw)
+
+def viewer_switch(right, y, items):
+    """The switch (Preview | Raw): 2px padding, buttons 10px aside and 2px apart, the one on
+    raised. `items` are (label, on); it ends at `right`. Returns its left edge."""
+    w = 2 + sum(10 + tw(l, 12) + 10 for l, _ in items) + 2 * (len(items) - 1) + 2
+    x = right - w
+    rect(x, y - 12.5, w, 25, "chrome", rx=7)
+    sx = x + 2
+    for label, on in items:
+        bw = 10 + tw(label, 12) + 10
+        if on:
+            rect(sx, y - 10.5, bw, 21, "raised", rx=5)
+        text(sx + 10, y + 4, label, 12, "foreground" if on else "muted")
+        sx += bw + 2
+    return x
+
 # ---- roundup-preview's floating window: README.md, rendered ----
 # Only in the window and the float scene: the others show what's under it.
 # floatSpec: 0.6 of the window's width, 0.75 of its height; dragged up a little, so the
@@ -736,30 +758,15 @@ if SCENE in ("window", "float"):
     text(px_, hy + 4, "3.1 KB", 12, "dim")
     line(FX + 1, FT + 41.5, FX + FW - 1, FT + 41.5, "border")
 
-    def button(x, glyph, color="muted"):
-        rect(x, hy - 14, 28, 28, "chrome", rx=7)
-        icon(glyph, x + 7, hy - 7, 14, color, sw=2)
-
     bx = FX + FW - 10 - 28
-    button(bx, "close")
+    viewer_button(bx, hy, "close")
     bx -= 8 + 28
-    button(bx, "to-tab")
+    viewer_button(bx, hy, "to-tab")
     bx -= 8 + 28
-    button(bx, "more")
-    # Preview | Raw: 2px padding, buttons 10px aside, Preview on.
-    seg = [("Preview", True), ("Raw", False)]
-    sw_ = 2 + sum(10 + tw(l, 12) + 10 for l, _ in seg) + 2 * (len(seg) - 1) + 2
-    bx -= 8 + sw_
-    rect(bx, hy - 12.5, sw_, 25, "chrome", rx=7)
-    sx_ = bx + 2
-    for label, on in seg:
-        bw = 10 + tw(label, 12) + 10
-        if on:
-            rect(sx_, hy - 10.5, bw, 21, "raised", rx=5)
-        text(sx_ + 10, hy + 4, label, 12, "foreground" if on else "muted")
-        sx_ += bw + 2
+    viewer_button(bx, hy, "more")
+    bx = viewer_switch(bx - 8, hy, [("Preview", True), ("Raw", False)])
     bx -= 6 + 28
-    button(bx, "toc")
+    viewer_button(bx, hy, "toc")
 
     # The document: a 920px column, 40px aside, 28px from the top, 14.5px text.
     add(f'<defs><clipPath id="doc"><rect x="{FX + 1}" y="{FT + 42}" width="{FW - 2}" height="{FH - 43}" rx="9"/></clipPath></defs>')
@@ -1003,22 +1010,10 @@ if SCENE == "preview-tab":
     text(px_ + tw("/Users/sam/code/atlas-search-filters", 12) + 8, hy + 4, "1.1 KB", 12, "dim")
     line(x + 1, PY + 31 + 41.5, x + w - 1, PY + 31 + 41.5, "border")
     bx = x + w - 10 - 28
-    rect(bx, hy - 14, 28, 28, "chrome", rx=7)
-    icon("more", bx + 7, hy - 7, 14, "muted", sw=2)
-    seg = [("Tree", True), ("Raw", False)]
-    sw_ = 2 + sum(10 + tw(l, 12) + 10 for l, _ in seg) + 2 + 2
-    bx -= 8 + sw_
-    rect(bx, hy - 12.5, sw_, 25, "chrome", rx=7)
-    sx_ = bx + 2
-    for label, on in seg:
-        bw = 10 + tw(label, 12) + 10
-        if on:
-            rect(sx_, hy - 10.5, bw, 21, "raised", rx=5)
-        text(sx_ + 10, hy + 4, label, 12, "foreground" if on else "muted")
-        sx_ += bw + 2
+    viewer_button(bx, hy, "more")
+    bx = viewer_switch(bx - 8, hy, [("Tree", True), ("Raw", False)])
     bx -= 6 + 28
-    rect(bx, hy - 14, 28, 28, "chrome", rx=7)
-    icon("collapse", bx + 7, hy - 7, 14, "muted", sw=1.5)
+    viewer_button(bx, hy, "collapse", sw=1.5)
     # The tree: 24px rows, 18px a level; keys ansi4, strings ansi2, numbers ansi1, true/false/null ansi6.
     pkg = [
         (0, None, "▾", "{ 9 keys }", "dim"),
