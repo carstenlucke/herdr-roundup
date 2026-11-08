@@ -6,7 +6,7 @@
 // cybertron288/herdr-mods `filetree` (MIT, (c) 2026 cybertron288), itself a port of
 // claude-code-filetree (MIT, (c) 2026 Kurt Buhler). See THIRD_PARTY_NOTICES.md.
 import { exec, home, window } from "herdr";
-import { listScript, parseListing } from "./listing.js";
+import { listScript, parseListing, BLOCKED_AT_MOST } from "./listing.js";
 
 export const PER_FOLDER = 500;
 // listDir reads at most this many entries of a folder: 100,000 took 5 s and 2.5 MB of output,
@@ -69,9 +69,10 @@ export function compare(a, b) {
 }
 export const sortEntries = (list) => list.sort((a, b) => Number(b.dir) - Number(a.dir) || compare(a.name, b.name));
 
-// One folder: [{ name, dir, link, broken }] (link: a link's target as written, "" when it
-// can't be read or didn't fit LIST_BUDGET, null for no link; broken: a link that points
-// nowhere), folders first, the first PER_FOLDER of them in that order.
+// One folder: [{ name, dir, link, broken, blocked }] (link: a link's target as written, ""
+// when it can't be read or didn't fit LIST_BUDGET, null for no link; broken: a link that
+// points nowhere; blocked: one whose target is out of reach, so whether it's there can't be
+// told), folders first, the first PER_FOLDER of them in that order.
 // `more`: it held more. Up to READ_AT_MOST entries (and LIST_BUDGET bytes) are read and
 // sorted first: a cut while reading drops in the shell's order (dotfiles come last) rather
 // than the shown one, so only a folder larger than that may miss a few of its first PER_FOLDER.
@@ -87,11 +88,12 @@ export async function listDir(path, on) {
     // LIST_BUDGET: JSON takes at most 6 bytes per UTF-16 unit of a string (\uXXXX; else at
     // most 3 in UTF-8), 128 cover an entry's keys, values and commas, 64 the frame. An entry
     // past the budget ends the list (cut); a target that doesn't fit becomes "", after dir and
-    // broken came from it.
-    const r = await exec("powershell", ["-NoProfile", "-Command", `[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); & { param($p) $rem = ${LIST_BUDGET} - 64; $cut = $false; $e = [Collections.Generic.List[object]]::new(); foreach ($i in @(Get-ChildItem -LiteralPath $p -Force -ErrorAction Stop | Where-Object Name -ne '.git' | Select-Object -First ${READ_AT_MOST})) { $c = 128 + 6 * $i.Name.Length; if ($c -gt $rem) { $cut = $true; break }; $rem -= $c; $rp = [bool]($i.Attributes -band [IO.FileAttributes]::ReparsePoint); $isLink = $rp -and ($i.LinkType -in 'SymbolicLink','Junction'); $t = if ($isLink) { $tg = $i.Target; if ($tg) { @($tg)[0] } else { '' } } else { $null }; $at = if ($t) { [IO.Path]::Combine([IO.Path]::GetDirectoryName($i.FullName), $t) } else { $null }; $dir = [bool]($i.PSIsContainer -and (-not $isLink -or ($at -and [IO.Directory]::Exists($at)))); $broken = [bool]($at -and -not (Test-Path -LiteralPath $at)); if ($t) { if (6 * $t.Length -le $rem) { $rem -= 6 * $t.Length } else { $t = '' } }; $e.Add(@{ name=$i.Name; dir=$dir; link=$t; broken=$broken }) }; ConvertTo-Json -InputObject @{ e = $e; cut = $cut } -Compress -Depth 4 } ${psQuote(path)}`], { on });
+    // broken came from it. A target Test-Path doesn't find is asked once more, for the first
+    // BLOCKED_AT_MOST: no access to it makes the link blocked, not broken.
+    const r = await exec("powershell", ["-NoProfile", "-Command", `[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); & { param($p) $rem = ${LIST_BUDGET} - 64; $cut = $false; $nb = 0; $e = [Collections.Generic.List[object]]::new(); foreach ($i in @(Get-ChildItem -LiteralPath $p -Force -ErrorAction Stop | Where-Object Name -ne '.git' | Select-Object -First ${READ_AT_MOST})) { $c = 128 + 6 * $i.Name.Length; if ($c -gt $rem) { $cut = $true; break }; $rem -= $c; $rp = [bool]($i.Attributes -band [IO.FileAttributes]::ReparsePoint); $isLink = $rp -and ($i.LinkType -in 'SymbolicLink','Junction'); $t = if ($isLink) { $tg = $i.Target; if ($tg) { @($tg)[0] } else { '' } } else { $null }; $at = if ($t) { [IO.Path]::Combine([IO.Path]::GetDirectoryName($i.FullName), $t) } else { $null }; $dir = [bool]($i.PSIsContainer -and (-not $isLink -or ($at -and [IO.Directory]::Exists($at)))); $broken = $false; $blocked = $false; if ($at -and -not (Test-Path -LiteralPath $at)) { if ($nb -lt ${BLOCKED_AT_MOST}) { $nb++; try { $null = [IO.File]::GetAttributes($at) } catch [UnauthorizedAccessException] { $blocked = $true } catch { $broken = $true } } else { $broken = $true } }; if ($t) { if (6 * $t.Length -le $rem) { $rem -= 6 * $t.Length } else { $t = '' } }; $e.Add(@{ name=$i.Name; dir=$dir; link=$t; broken=$broken; blocked=$blocked }) }; ConvertTo-Json -InputObject @{ e = $e; cut = $cut } -Compress -Depth 4 } ${psQuote(path)}`], { on });
     if (r.code !== 0) throw new Error(r.stderr || "Cannot list this folder");
     const result = JSON.parse(r.stdout || "{}"), e = result.e ?? [];
-    return { entries: (Array.isArray(e) ? e : [e]).map((x) => ({ name: x.name, dir: Boolean(x.dir), link: x.link ?? null, broken: Boolean(x.broken) })), cut: Boolean(result.cut) };
+    return { entries: (Array.isArray(e) ? e : [e]).map((x) => ({ name: x.name, dir: Boolean(x.dir), link: x.link ?? null, broken: Boolean(x.broken), blocked: Boolean(x.blocked) })), cut: Boolean(result.cut) };
   };
   let read;
   if (windows(on)) read = await windowsDirectory();

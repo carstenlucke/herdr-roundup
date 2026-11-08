@@ -8,7 +8,7 @@ The Files panel now shows which entries are symlinks and where they point. Befor
 
 - **Symlinks are marked:** a link's name is in italics, with a small arrow in the accent color after it.
 - **The target on hover:** rest the pointer on the arrow and it says where the link points, for example "Link to CLAUDE.md". The target is shown as the link writes it, relative or absolute.
-- **Broken links stand out:** a link whose target is missing has a dimmed name, a faded icon and a red arrow, and its hover says "Broken link to …".
+- **Broken links stand out:** a link whose target is missing has a dimmed name, a faded icon and a red arrow, and its hover says "Broken link to …". A link whose target lies behind a folder you have no access to isn't called broken: it shows as a link, and its hover adds "(no access to check it)".
 - The marker shows wherever the panel reads the folder from disk: in **All**, and in folders that **Changed** opens from disk. Search results and git's own lists don't show it.
 - Nothing else changes: a link to a folder still opens as a folder, and a link to a file still opens in the preview.
 

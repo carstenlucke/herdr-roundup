@@ -134,6 +134,11 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
     `arrow-up-right`, stroke 2.5) after it in `accent`, its hover "Link to
     <target>" as written; one that points nowhere has a `dim` name, a
     half-faded icon, the arrow in `ansi1` and "Broken link to <target>".
+    One whose target lies past a folder you may not search isn't broken:
+    it shows as a link, its hover "Link to <target> (no access to check
+    it)"; the first 200 such links of a folder are told apart, the shell
+    walking each target back to the nearest path there is and following
+    links on the way (at most 8, each read once).
     A folder's listing prints at most 7 MiB (exec takes 8): a target that
     doesn't fit is left out whole, its hover just "Link", and entries past
     it end the folder as its 10,000 limit does.

@@ -25,7 +25,7 @@ import { samePath } from "./paths.js";
 const NAME = "roundup-files";
 const ICON = (name) => `mods/${NAME}/${name}.svg`;
 // A link row's tooltip: where it points, as written.
-const linkTip = (r) => `${r.broken ? "Broken link" : "Link"}${r.link ? ` to ${r.link}` : ""}`;
+const linkTip = (r) => `${r.broken ? "Broken link" : "Link"}${r.link ? ` to ${r.link}` : ""}${r.blocked ? " (no access to check it)" : ""}`;
 const ROW = 26;
 const FIND_LIMIT = 200;
 // Changed shows at most this many of git's paths (in git's order): its rows are built on every
@@ -599,9 +599,10 @@ export default class Files extends View {
   }
 
   // ── rows ─────────────────────────────────────────────────────────────────────────────
-  // Every row: { rel, name, dir, depth, open, gone, disk, link, broken }. gone: not on disk
-  // (deleted). link, broken: as listDir has them, on rows read from disk; other rows (search,
-  // a folder only git lists) leave them out, so test them with != null and as booleans.
+  // Every row: { rel, name, dir, depth, open, gone, disk, link, broken, blocked }. gone: not on
+  // disk (deleted). link, broken, blocked: as listDir has them, on rows read from disk; other
+  // rows (search, a folder only git lists) leave them out, so test them with != null and as
+  // booleans.
   // disk: a folder that opens from disk (this.folders); in Changed, the others fold (this.shut).
   rows() {
     const out = [], q = this.query.trim().toLowerCase();
@@ -616,7 +617,7 @@ export default class Files extends View {
   diskRows(prefix, depth, out) {
     for (const e of this.entries.get(prefix) ?? []) {
       const rel = prefix ? `${prefix}/${e.name}` : e.name, open = e.dir && this.folders.has(rel);
-      out.push({ rel, name: e.name, dir: e.dir, depth, open, gone: false, disk: e.dir, link: e.link, broken: e.broken });
+      out.push({ rel, name: e.name, dir: e.dir, depth, open, gone: false, disk: e.dir, link: e.link, broken: e.broken, blocked: e.blocked });
       if (open && depth < 40) this.diskRows(rel, depth + 1, out);
     }
   }
@@ -679,17 +680,17 @@ export default class Files extends View {
       for (const rel of kids.get(p) ?? []) if (!list.has(rel)) list.set(rel, dirs.has(rel));
       for (const [rel, dir] of order([...list])) {
         const e = here.get(rel), name = baseOf(rel), onDisk = Boolean(e), gone = !onDisk && g.gone.has(rel);
-        const link = e?.link ?? null, broken = e?.broken ?? false;
+        const link = e?.link ?? null, broken = e?.broken ?? false, blocked = e?.blocked ?? false;
         if (dir && onDisk) {
           const open = this.folders.has(rel) || (Boolean(q) && kids.has(rel));
-          out.push({ rel, name, dir, depth, open, gone, disk: true, link, broken });
+          out.push({ rel, name, dir, depth, open, gone, disk: true, link, broken, blocked });
           if (open && depth < 40) mixed(rel, depth + 1);
         } else if (dir && !gone) {
           // Only in git's list (its files deleted): it folds, as in walk.
           const open = Boolean(q) || !this.shut.has(rel);
           out.push({ rel, name, dir, depth, open, gone, disk: false });
           if (open && depth < 40) mixed(rel, depth + 1);
-        } else out.push({ rel, name, dir, depth, open: false, gone, disk: false, link, broken });
+        } else out.push({ rel, name, dir, depth, open: false, gone, disk: false, link, broken, blocked });
       }
     };
     walk("", 0);
