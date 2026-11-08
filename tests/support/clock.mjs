@@ -20,16 +20,22 @@ export const clock = {
     return t;
   },
 
-  // Moves time forward, firing every timer that comes due on the way, in order. A handler's own
-  // promises settle before the next timer fires.
+  // Moves time forward, firing every timer that comes due on the way, in order. Before the next
+  // timer fires, a handler gets a few turns of the event loop (`flush`), not more: one that waits on
+  // virtual time (cx.sleep) or on slow real I/O goes on in the background, and what it throws later
+  // still lands in `cx.errors`. A test that needs such a handler finished uses `waitFor()`.
+  // `every()` is rescheduled once its handler has had those turns, so calls of a slow async handler
+  // overlap: harness behaviour, not GPUI's (gpui-kit.d.ts says nothing about awaiting a promise).
   async advance(ms) {
+    await flush(); // spawns started just before have scheduled their timers
     const end = this.now + ms;
     for (;;) {
       const due = this.timers.filter((t) => !t.cancelled && !t.done && t.at <= end).sort((a, b) => a.at - b.at)[0];
       if (!due) break;
       this.now = due.at;
       if (due.every === null) due.done = true;
-      try { await due.handler(due.cx); } catch (e) { due.cx?.errors?.push(e); }
+      const run = Promise.resolve().then(() => due.handler(due.cx)).catch((e) => { due.cx?.errors?.push(e); });
+      await Promise.race([run, flush()]);
       if (due.every !== null && !due.cancelled) due.at = this.now + due.every;
       await flush();
     }

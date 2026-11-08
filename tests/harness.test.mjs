@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { tmpdir } from "node:os";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
-import { herdr, reset, mount, makeCx, clock, fetch, byId, byText, hasId, ids, click, fire, texts, space, tab } from "./support/harness.mjs";
+import { herdr, reset, mount, makeCx, clock, fetch, waitFor, byId, byText, hasId, ids, click, fire, texts, space, tab } from "./support/harness.mjs";
 
 beforeEach(reset);
 
@@ -57,6 +57,71 @@ test("a mounted View renders from the fixtures; cx timers run on the virtual clo
   clock.useFakeNow(1000);
   await clock.advance(10);
   assert.equal(Date.now(), 1010);
+});
+
+test("advance() does not hang on a handler that sleeps: a new sleep, an earlier one, one past the end", async () => {
+  const cx = makeCx();
+  const done = [];
+  cx.timer.after(10, async (cx) => { await cx.sleep(10); done.push("new"); });
+  const earlier = cx.sleep(25);
+  cx.timer.after(5, async () => { await earlier; done.push("earlier"); });
+  cx.timer.after(10, async (cx) => { await cx.sleep(100); done.push("late"); });
+  await clock.advance(30);
+  assert.equal(clock.now, 30);
+  assert.deepEqual(done, ["new", "earlier"]);
+  await clock.advance(100);
+  assert.deepEqual(done, ["new", "earlier", "late"]);
+  assert.deepEqual(cx.errors, []);
+});
+
+test("advance() lets a spawn started just before it schedule its sleep first", async () => {
+  const cx = makeCx();
+  let woke = null;
+  cx.spawn(async (cx) => { await cx.sleep(10); woke = clock.now; });
+  await clock.advance(30);
+  assert.equal(woke, 10);
+});
+
+test("advance() gives a handler a few turns, not its whole I/O; a later failure still reaches cx.errors", async () => {
+  const cx = makeCx();
+  let release, fail;
+  const io = new Promise((r) => { release = r; });
+  const failing = new Promise((_, reject) => { fail = reject; });
+  let finished = false;
+  cx.timer.after(10, async () => { await io; finished = true; });
+  cx.timer.after(20, async () => { await failing; });
+  await clock.advance(30);
+  assert.equal(clock.now, 30);
+  assert.equal(finished, false);
+  release();
+  fail(new Error("later"));
+  await waitFor(() => finished && cx.errors.length === 1);
+  assert.match(cx.errors[0].message, /later/);
+});
+
+test("every() is rescheduled after its handler's turns, so slow async calls overlap (harness behaviour)", async () => {
+  const cx = makeCx();
+  const log = [];
+  let open = 0, most = 0;
+  const timer = cx.timer.every(10, async (cx) => {
+    most = Math.max(most, ++open);
+    log.push(["start", clock.now]);
+    await cx.sleep(15);
+    open--;
+    log.push(["end", clock.now]);
+  });
+  await clock.advance(30);
+  assert.deepEqual(log, [["start", 10], ["start", 20], ["end", 25], ["start", 30]]);
+  assert.equal(most, 2);
+  timer.cancel();
+  await clock.advance(15);
+  assert.equal(open, 0);
+  assert.deepEqual(log.slice(4), [["end", 35], ["end", 45]]);
+});
+
+test("space() numbers its tabs by their place in the list, over an index they carry", () => {
+  assert.deepEqual(space("s1", [tab("a"), tab("b")]).tabs.map((t) => t.index), [1, 2]);
+  assert.deepEqual(space("s1", [tab("a", { index: 7 }), tab("b")]).tabs.map((t) => t.index), [1, 2]);
 });
 
 test("exec runs real processes, records them, and hooks answer or fail them; hc only records", async () => {

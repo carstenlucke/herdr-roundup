@@ -134,7 +134,7 @@ export const tab = (id, extra = {}) => ({
 });
 export const space = (id, tabs = [], extra = {}) => ({
   id, index: 1, name: id, named: false, folder: "", machine: null, branch: null, active: false, status: null,
-  tabs: tabs.map((t, i) => ({ index: i + 1, ...t })), ...extra,
+  tabs: tabs.map((t, i) => ({ ...t, index: i + 1 })), ...extra, // a tab's index is its place in the list
 });
 export const pane = (paneId, tabId, extra = {}) => ({
   pane: paneId, terminal: null, tab: tabId, title: "", cwd: null, branch: null, status: null, app: null,
