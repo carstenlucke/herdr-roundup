@@ -339,8 +339,8 @@ Source keys: `PR #6 c <sha>` is a fix commit inside PR #6 whose message names th
 | OPN-11 | Context menu items per file/folder/deleted file, Open and Reveal local only. | RECIPE now | L1 | input: "menuItems per local file, remote file, folder and deleted file" | extract `menuItems(m, mac)` (same as FIL-95) | M |
 | OPN-12 | A menu request runs only in the copy whose `uid` = `from` with the same root and `on`; float and tab run deferred in `cx.spawn`, not inside `render`. | PR #16 rc 4503805893; RECIPE now | L2 | — | cx.spawn recorder | H |
 | OPN-13 | While a preview tab is focused, the tree keeps the last terminal folder of that space; before any, the first terminal with a cwd, else `space.folder`. | PR #16 body; RECIPE now | L1 | location: "A tab without terminals keeps the last folder shown in this space"; "Before any folder was shown: …" | extract `location()` (same as FIL-88) | H |
-| OPN-14 | Opening `a.md` in a tab gives a tab "a.md" with a roundup-preview pane, and OPEN names it; a second open adds no tab and focuses it. | PR #16 body; RECIPE Done when | L3 | — | debug command `roundup-files.tab:<rel>`; fixture folder | H |
-| OPN-15 | A float debug command makes status list a `roundup-preview` overlay; FLOAT has `id`, `token`, `copy`; `overlay.close {id}` clears FLOAT. | RECIPE now | L3 | — | debug command `roundup-files.float:<rel>` | H |
+| OPN-14 | Opening `a.md` in a tab gives a tab "a.md" with a roundup-preview pane, and OPEN names it; a second open adds no tab and focuses it. | PR #16 body; RECIPE Done when | L3 | smoke.sh OPN-14 | debug command `roundup-files.tab:<rel>`; fixture folder | H |
+| OPN-15 | A float debug command makes status list a `roundup-preview` overlay; FLOAT has `id`, `token`, `copy`; `overlay.close {id}` clears FLOAT. | RECIPE now | L3 | smoke.sh OPN-15 | debug command `roundup-files.float:<rel>` | H |
 
 ### Reuse and duplicate tabs (open-file.js)
 
@@ -373,7 +373,7 @@ Source keys: `PR #6 c <sha>` is a fix commit inside PR #6 whose message names th
 | FLT-07 | With the window open a click on another file re-opens it at once; ↑↓ follow after 150 ms of rest (holding ↓ over 5 rows → one `openOverlay`); opening or closing cancels a pending follow; folders and deleted files are skipped. | PR #16 rc 4503805747, 4504122545 | L2 | — | fake timer | H |
 | FLT-08 | After the window follows a link or goes Back, FLOAT.file is the shown file (only while it holds its token); a Windows `/`-spelled path matches its `\` row. | PR #16 rc 4504147701, 4504219483 | L1 | open-file-float: "After the window follows a link or goes Back, FLOAT.file is the shown file while it holds its token"; "floatShows: the file FLOAT names, on the same machine, however the path is written" | extract `floatShows(f, file, on)` into open-file.js (both copies) | H |
 | FLT-09 | The window never writes MOVED; only a tab with a token does. | PR #16 rc 4503805636 | L2 | — | herdr stub | H |
-| FLT-10 | With the window open, reinstalling roundup-files keeps FLOAT and answers the probe; a stale FLOAT after a restart with no window is gone within ~1.5 s. | PR #16 rc 4504309260, 4504410643 | L3 | — | float debug command; mod reload | M |
+| FLT-10 | With the window open, reinstalling roundup-files keeps FLOAT and answers the probe; a stale FLOAT after a restart with no window is gone within ~1.5 s. | PR #16 rc 4504309260, 4504410643 | L3 | smoke.sh FLT-10 (a reload, then a restart) | float debug command; mod reload | M |
 
 ### Window: Open in tab, keyboard
 
@@ -384,7 +384,7 @@ Source keys: `PR #6 c <sha>` is a fix commit inside PR #6 whose message names th
 | WIN-03 | A press in the window's controls or body focuses its handle and stops propagation, unless a `keepsKeys` child (PDF Go to, read-only Editor) handled it first. | PR #16 rc 4504147571, 4504309105 | L2 | — | gpui stub running child then parent | H |
 | WIN-04 | A press on the header's free part focuses the handle without stopping propagation (drag still works), and Esc then closes the overlay. | PR #16 rc 4504147832, 4504219696 | L2 | — | gpui stub | H |
 | WIN-05 | In the window name and folder are plain text and Open in tab/Close show; a tab has the copiers and neither button nor Esc handler. | RECIPE now | L2 | — | gpui stub | L |
-| WIN-06 | From the window, Open in tab opens the tab, then the overlay is gone, FLOAT is null and OPEN names the new pane. | PR #16 rc 4504410737; RECIPE Done when | L3 | — | float debug command; a `to-tab` debug command in the overlay copy | H |
+| WIN-06 | From the window, Open in tab opens the tab, then the overlay is gone, FLOAT is null and OPEN names the new pane. | PR #16 rc 4504410737; RECIPE Done when | L3 | smoke.sh WIN-06 | float debug command; a `to-tab` debug command in the overlay copy | H |
 
 ## roundup-preview (LNK, VW, CHG, MNU, PTH)
 
@@ -447,7 +447,7 @@ Source keys: `PR #6 c <sha>` is a fix commit inside PR #6 whose message names th
 | CHG-05 | The STAGE script copies to `<key>-<mtime ns+size>.<ext>`, touches an existing copy with `-c`, copies again one pruned in between, reports GONE for a missing source; an edit within the same second gives a new name. | PR #16 rc 4505948213, 4506011450; RECIPE now | L2 | — | real sh on temp dirs | H |
 | CHG-06 | Prune deletes only files older than 14 days in `data/roundup-preview/` and is awaited before staging or rendering. | PR #16 rc 4505948213, 4505990837 | L2 | — | real `find` on aged files | H |
 | CHG-07 | `key()` (FNV-1a, base 36) is stable per path and differs for two. | media.js | L1 | cache-key: "key (FNV-1a, base 36) is stable per path and differs for two" | move `key` to a pure file | L |
-| CHG-08 | Rewriting an open .md on disk changes the shown content within ~1 s, Raw still on. | PR #16 body; RECIPE now | L3 | — | debug readout of the loaded revision | M |
+| CHG-08 | Rewriting an open .md on disk changes the shown content within ~1 s, Raw still on. | PR #16 body; RECIPE now | L3 | smoke.sh CHG-08 | debug readout of the loaded revision | M |
 
 ### ⋯ menu, editor, external programs
 
@@ -510,7 +510,8 @@ Each extraction moves logic out of a `main.js` (or a file importing `herdr`/`gpu
 
 ## Open questions
 
-- `resolveLink("/r/a.md", "file://host/x")` gives `{file:"/host/x"}`: a file URL naming another host becomes a local path on POSIX. Refuse it, as Windows shares are, before writing that row?
+- `resolveLink("/r/a.md", "file://host/x")` gives `{file:"/host/x"}`: a file URL naming another host becomes a local path on POSIX. Refuse it, as Windows shares are, before writing that row? (Issue #20.)
+- TAB-05, seen live (smoke.sh, shot 51): a tab nobody named is called by its position ("3"), as herdr.d.ts says, so `tabName`'s `/^tb\d+$/` never matches: the tab bar and the close dialog ("Close tab 3?") show the position, not the program. Herdr's own `tabs` mod has the same line. Keep it as Herdr does, or use `!tab.named` to show the program?
 
 ## RECIPE.md drift found while building this
 
