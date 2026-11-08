@@ -20,3 +20,17 @@ export function wholeLines(text) {
   const end = text.lastIndexOf("\n");
   return end < 0 ? text : text.slice(0, end + 1);
 }
+
+/** A read's text as it is shown: null (the file went) and text with a NUL (binary) throw. */
+export function checked(text) {
+  if (text === null) throw new Error(GONE);
+  if (text.includes("\0")) throw new Error("Binary file · no text preview");
+  return withoutBom(text);
+}
+
+/** At most this many characters show as code. */
+export const LIMIT = 400000;
+
+/** What the code view shows: over LIMIT characters, or any text that is only a file's head
+ *  (`cut`) however short, it ends with a note that the file is truncated. */
+export const codeValue = (text, cut = false) => (text.length > LIMIT || cut ? text.slice(0, LIMIT) + "\n… (file truncated)" : text);

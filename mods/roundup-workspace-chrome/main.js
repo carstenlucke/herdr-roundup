@@ -4,6 +4,7 @@ import { theme, run, props, window, shared, setShared, updates, layout, appHome,
 import { get, available, due, check, install, openNotes } from "./update.js";
 import { menuView, menuHeight, DETAILS, MENU_OPEN } from "./menu.js";
 import { info } from "./info.js";
+import { pressOf, pressMoved, isClick, herdrVersion, subLine } from "./brand.js";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -25,10 +26,6 @@ function toggleSidebar() {
   setShared("sidebar.collapsed", !narrow());
   run("layout.resize", { id: "sidebar", px: narrow() ? (shared("sidebar.width") ?? 268) : window()?.platform === "macos" ? 76 : 44 });
 }
-
-// "0.1.13" from the layout's file: layout() leaves out fields Herdr doesn't know, such as the root's "version" and
-// "cloned_from". A copy of this layout isn't Herdr's.
-const herdrVersion = (file) => file?.cloned_from?.name === "main" ? file.cloned_from.version : null;
 
 export default class WorkspaceChrome extends View {
   init(_props, cx) {
@@ -102,19 +99,14 @@ export default class WorkspaceChrome extends View {
       cx.notify();
     });
   }
-  // A press on the logo and name drags the window as anywhere in the row (it isn't stopped), and its release
-  // still clicks. A click doesn't move the pointer; a drag does, the window trailing it by a few px.
-  pressed(e) { this.press = { x: e.position.x, y: e.position.y, far: 0, moves: 0 }; }
-  moved(e) {
-    if (!this.press) return;
-    this.press.moves++;
-    this.press.far = Math.max(this.press.far, Math.abs(e.position.x - this.press.x) + Math.abs(e.position.y - this.press.y));
-  }
+  // A press on the logo and name drags the window as anywhere in the row; brand.js tells a click from a drag.
+  pressed(e) { this.press = pressOf(e); }
+  moved(e) { pressMoved(this.press, e); }
   openMenu(e) {
     const press = this.press;
     this.press = null;
     // A double-click maximizes the window, as in the rest of the row.
-    if (!press || press.far >= 3 || press.moves >= 10 || e.click_count > 1) return;
+    if (!isClick(press, e)) return;
     // Without a version read there is no menu; the card on hover stays, showing "Installed –".
     const installed = this.file?.version;
     if (!installed) return;
@@ -134,7 +126,7 @@ export default class WorkspaceChrome extends View {
   }
   brand(t) {
     const installed = this.file?.version, release = available(installed);
-    const sub = !installed ? null : release ? `${release.version} available` : this.checking ? `${installed} · checking…` : installed;
+    const sub = subLine(installed, release, this.checking);
     // Lit and a pointer on hover, as the buttons beside it, so it reads as something to click. The padding hangs into
     // the row's margin and gap, so at 268 px the name keeps its width (2 px to spare beside the search button).
     const trigger = h_flex().id("brand-name").gap(8).items_center().h(36).pl(6).ml(-6).pr(4).mr(-4).rounded(8).cursor_pointer()

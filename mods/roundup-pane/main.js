@@ -21,25 +21,11 @@ import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import { panes, terminals, props, run, theme, settings, home, hc, shared, setShared, openOverlay, closeOverlay, notify } from "herdr";
 import { closePane, givenName, fallbackName, NAME_LABEL, NAMES } from "./close.js";
 import { menuView, shortcut } from "./menu.js";
-
-const MAX_NAME = 48;
+import { folder, paneId, cutName } from "./header-text.js";
 
 function icon(p, size, color) {
   if (!p?.icon) return null;
   return p.tint ? svg(p.icon).size(size).flex_none().text_color(color) : image(p.icon).w(size).h(size).flex_none();
-}
-
-function folder(cwd) {
-  if (!cwd) return "";
-  const h = home();
-  return cwd === h ? "~" : cwd.startsWith(h + "/") ? "~" + cwd.slice(h.length) : cwd;
-}
-
-// What the id chip shows and what a double-click copies.
-function paneId(p) {
-  if (p.terminal) return { shown: p.terminal, copied: p.terminal };
-  const short = p.pane.replace(/^((?:[^/]+\/)?p[0-9a-f]{6})[0-9a-f]+$/, "$1…");
-  return { shown: short, copied: p.pane };
 }
 
 // Herdr's pane menu (`menu`, tab "pane") item for item, with Close pane going through closePane.
@@ -60,8 +46,7 @@ function menuRows(target) {
 }
 
 async function saveName(target, raw) {
-  // By code point, so a cut never leaves half an emoji.
-  const name = Array.from(raw.trim()).slice(0, MAX_NAME).join("").trim();
+  const name = cutName(raw);
   if (target.terminal) {
     const r = await hc(["label", target.terminal, `${NAME_LABEL}=${name}`]).catch((e) => ({ code: 1, stderr: String(e), stdout: "" }));
     if (r.code !== 0) notify({ title: "Couldn't rename the pane", body: (r.stderr || r.stdout).trim(), level: "error" });
@@ -177,7 +162,7 @@ export default class Pane extends View {
         .tooltip(`${id.copied} · double-click to copy`)
         .on_click((e, cx) => { if (e.click_count === 2) { cx.stop_propagation(); this.copyId(cx, id); } })
         .child(this.copied ? "copied" : id.shown))
-      .child(div().flex_1().truncate().text_color(t.dim).child(folder(p.cwd)))
+      .child(div().flex_1().truncate().text_color(t.dim).child(folder(p.cwd, home())))
       .when(st === "working", el => el.child(svg("mods/workspace-chrome/spinner.svg").size(12).flex_none().text_color(t.working).spin(900)))
       .when(st === "blocked", el => el.child(div().flex_none().px(6).h(18).flex().items_center().rounded(5).bg(t.blocked + "26").text_size(10.5).font_semibold().text_color(t.blocked).child("Needs you")))
       .when(st === "done", el => el.child(div().size(7).flex_none().rounded(4).bg(t.done)))

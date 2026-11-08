@@ -9,16 +9,10 @@ import { svgSize } from "./svg-size.js";
 import { imageExtension } from "./mime.js";
 import { programs, pictureSize } from "./programs.js";
 import { readText } from "./viewers/text.js";
+import { key, downloadKey } from "./cache-key.js";
 
 const DIR = () => `${appHome().split("\\").join("/")}/data/roundup-preview`;
 const here = () => programs(window()?.platform);
-
-// A short, stable name for a path (FNV-1a).
-export function key(text) {
-  let h = 2166136261;
-  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619);
-  return (h >>> 0).toString(36);
-}
 
 // Size in pixels of a cached picture, by its name in data/roundup-preview/.
 async function measure(name) {
@@ -43,7 +37,7 @@ export async function stageImage(file) {
 /** The same for a web image: downloaded, then kept only when it is an image. Each download
  *  has names of its own: two previews fetching the same URL would overwrite each other's file. */
 export async function fetchImage(url) {
-  const k = `${key(url)}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  const k = downloadKey(url, Date.now(), Math.random());
   const r = await exec(...here().fetch(url, DIR(), k));
   if (r.code !== 0) throw new Error(r.stderr.trim() || "Download failed");
   const ext = imageExtension(r.stdout.trim()), tmp = `${DIR()}/${k}.download`;

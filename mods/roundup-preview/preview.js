@@ -13,7 +13,7 @@ import { dirname, native, localPath, changedFile, normalize } from "./paths.js";
 import { VIEWERS } from "./viewers/index.js";
 import { openMenu } from "./menu.js";
 import { iconButton } from "./viewers/controls.js";
-import { MOVED, FLOAT, openTab, timerOf, newToken, fresh, answered } from "./open-file.js";
+import { MOVED, FLOAT, openTab, timerOf, newToken, fresh, answered, startFile, floatMoved, releasesFloat } from "./open-file.js";
 import { formatSize } from "./size.js";
 import { programs } from "./programs.js";
 import { systemOf } from "./platform.js";
@@ -35,8 +35,7 @@ export class Preview {
     this.size = { width: 900, height: 700 };
     // A copy that starts again (a restart, the mod reloaded) shows the file it showed, not the one
     // it opened with: a tab's MOVED, the window's FLOAT. So OPEN and FLOAT stay right about it.
-    const was = this.float ? (shared(FLOAT)?.token === this.float ? shared(FLOAT).file : null) : token ? shared(MOVED)?.[token] : null;
-    const start = was ?? file;
+    const start = startFile({ file, token, float: this.float }, shared(FLOAT), shared(MOVED));
     this.show(start && localPath(start, this.system), cx);
     // A window that starts again (the mod reloaded) writes FLOAT back if it is gone, and marks it
     // with this copy, so the copy before, closing late, leaves it alone. Not over a newer window.
@@ -150,8 +149,8 @@ export class Preview {
   // window updates FLOAT's file instead, while FLOAT still names it, so the panel's floats() sees it.
   moved() {
     if (this.float) {
-      const f = shared(FLOAT);
-      if (f?.token === this.float) setShared(FLOAT, { ...f, file: this.file });
+      const next = floatMoved(shared(FLOAT), this.float, this.file);
+      if (next) setShared(FLOAT, next);
     } else if (this.token) setShared(MOVED, { ...(shared(MOVED) ?? {}), [this.token]: this.file });
   }
 
@@ -164,8 +163,7 @@ export class Preview {
     this.watching = null; this.poll?.cancel(); this.release();
     // The window is gone: roundup-files learns there is none, unless another one (opened again
     // in its place) or a later copy of this one (the mod reloaded) already took FLOAT.
-    const f = shared(FLOAT);
-    if (this.float && f?.token === this.float && (f.copy ?? this.copy) === this.copy) setShared(FLOAT, null);
+    if (releasesFloat(shared(FLOAT), this.float, this.copy)) setShared(FLOAT, null);
   }
 
   // From the floating window to a tab: the pane already showing the file comes to the front,

@@ -2,18 +2,11 @@
 import { div } from "gpui-kit";
 import { Editor, EditorState } from "gpui-base";
 import { readTextFile, exec, theme, settings, window } from "herdr";
-import { GONE, withoutBom, readFailure, tooLong, wholeLines } from "../text-file.js";
+import { readFailure, tooLong, wholeLines, checked, codeValue } from "../text-file.js";
 import { programs } from "../programs.js";
 import { systemOf } from "../platform.js";
 
-const LIMIT = 400000;
-const HEAD = 4 * 1024 * 1024; // more than LIMIT characters in any encoding; readTextFile stops at 1 MiB
-
-function checked(text) {
-  if (text === null) throw new Error(GONE);
-  if (text.includes("\0")) throw new Error("Binary file · no text preview");
-  return withoutBom(text);
-}
+const HEAD = 4 * 1024 * 1024; // more than text-file.js's LIMIT characters in any encoding; readTextFile stops at 1 MiB
 
 export async function readText(file, on) {
   return checked(await readTextFile(file, { on }).catch((e) => { throw new Error(readFailure(String(e?.message ?? e))); }));
@@ -36,7 +29,7 @@ export async function readLongText(file, on) {
 export function codeState(text, language, cut = false) {
   const t = theme();
   return EditorState.new({ language, readonly: true,
-    value: text.length > LIMIT || cut ? text.slice(0, LIMIT) + "\n… (file truncated)" : text,
+    value: codeValue(text, cut),
     font_family: settings().font_family, font_size: 13,
     syntax: { keyword: t.ansi5, string: t.ansi2, comment: t.dim, function: t.ansi4, type: t.ansi3, number: t.ansi1, constant: t.ansi6 } });
 }

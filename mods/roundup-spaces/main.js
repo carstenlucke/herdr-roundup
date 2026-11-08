@@ -7,6 +7,7 @@
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
+import { place, alpha, badge, gitWhere, changesTip, rebuilt as isRebuilt } from "./space-text.js";
 import { spaces, machines, panes, terminals, agents, run, openOverlay, exec, hc, theme, settings, shared, setShared, watchFolder, window, layout } from "herdr";
 import { parseStatus, parseRevParse } from "./git-parse.js";
 
@@ -22,12 +23,6 @@ function find(node, id) {
 // The sidebar's rail goes by its width, not a flag: dragging its edge narrows it too.
 const narrow = () => (find(layout(), "sidebar")?.size?.px ?? Infinity) < 160;
 
-// Where a space is now: its first terminal's live folder, else where it was made.
-// `ps`: panes(), read once by the caller (each read copies every pane).
-function place(s, ps) {
-  const tabs = new Set((s.tabs ?? []).map((c) => c.id));
-  return ps.find((p) => tabs.has(p.tab) && p.cwd)?.cwd || s.folder;
-}
 // A row with git under its name is two lines high.
 const ROW = 32;
 const ROW_TWO = 44;
@@ -40,21 +35,6 @@ const FALLBACK = 60000;
 const ACTIVE = 10000;
 // Spaces there at start wait this long, at most, for their git, then show together.
 const WAIT = 1500;
-
-// A color with some transparency: the theme's own color under a tinted avatar or badge.
-// #rgb, #rrggbb and #rrggbbaa alike (a layout's `colors` may carry their own alpha).
-// Null for any other form: the caller then draws on a neutral background, so a
-// letter never sits on its own color.
-const alpha = (c, a) => {
-  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})([0-9a-f]{2})?$/i.exec(c ?? "");
-  if (!m) return null;
-  const rgb = m[1].length === 3 ? [...m[1]].map((d) => d + d).join("") : m[1];
-  return `#${rgb}${a}`;
-};
-
-// Agents by urgency: the badge takes the color of the most urgent one.
-const RANK = { blocked: 3, done: 2, working: 1, idle: 0 };
-const rank = (status) => RANK[status] ?? 0;
 
 // A space speaks up only when something in it needs you.
 export function glyph(status) {
@@ -167,9 +147,7 @@ export default class Spaces extends View {
     });
   }
 
-  rebuilt(machine) {
-    return machine?.state === "unreachable" && /^a different core answers there \("[^"]+"\)$/.test(machine.why ?? "");
-  }
+  rebuilt(machine) { return isRebuilt(machine); }
 
   reconnect(machine, cx) {
     const name = machine.name;
@@ -470,17 +448,11 @@ export default class Spaces extends View {
     });
   }
 
-  // Under the name: "repo · branch ↑2 ↓1 ±3". The repo goes when the name already
-  // says it (and in a worktree, whose card names it); the branch when the space is
-  // named after it (a worktree is), and master/main: nearly every space is on one.
+  // Under the name: "repo · branch ↑2 ↓1 ±3" (space-text.js's gitWhere says what goes).
   // A worktree row has the branch icon on its left already. Null: nothing to show.
   gitLine(g, tree, name, t, id) {
-    const raw = g.branch ?? "detached";
-    const same = (a) => a.toLowerCase() === name.toLowerCase();
-    const branch = same(raw) || raw === "main" || raw === "master" ? "" : raw;
-    const repo = tree || same(g.name) ? "" : g.name;
-    const where = [repo, branch].filter(Boolean).join(" \u00b7 ");
-    if (!where && !g.ahead && !g.behind && !g.dirty) return null;
+    const where = gitWhere(g, tree, name);
+    if (where === null) return null;
     return h_flex()
       .min_w(0)
       .gap(5)
@@ -492,19 +464,14 @@ export default class Spaces extends View {
         .child(div().min_w(0).truncate().child(where)))
       .when(g.ahead > 0, (el) => el.child(div().flex_none().text_color(t.muted).child(`\u2191${g.ahead}`)))
       .when(g.behind > 0, (el) => el.child(div().flex_none().text_color(t.muted).child(`\u2193${g.behind}`)))
-      .when(g.dirty > 0, (el) => el.child(div().id(`dirty-${id}`).flex_none().tooltip(`${g.dirty} uncommitted change${g.dirty === 1 ? "" : "s"}`).child(`\u00b1${g.dirty}`)));
+      .when(g.dirty > 0, (el) => el.child(div().id(`dirty-${id}`).flex_none().tooltip(changesTip(g.dirty)).child(`\u00b1${g.dirty}`)));
   }
 
   // How many agents run in the space. Gray while they all rest; else the color
   // of the most urgent one (blocked > done > working).
   crewBadge(id, statuses, t) {
-    const top = statuses.reduce((a, b) => (rank(b) > rank(a) ? b : a));
-    const calm = rank(top) === 0;
+    const { top, calm, n, tip } = badge(statuses);
     const color = calm ? t.dim : tone(t, top);
-    const counts = {};
-    for (const s of statuses) counts[s] = (counts[s] ?? 0) + 1;
-    const n = statuses.length;
-    const tip = `${n} agent${n === 1 ? "" : "s"}: ` + Object.keys(counts).sort((a, b) => rank(b) - rank(a)).map((s) => `${counts[s]} ${s}`).join(", ");
     return h_flex()
       .id(`crew-${id}`)
       .flex_none()
