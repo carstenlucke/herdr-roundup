@@ -77,10 +77,11 @@ export function record(fn, ...args) {
 // The calls to `fn`, as argument lists.
 export const calls = (fn) => (stub.calls[fn] ?? []).map((e) => e.args);
 
-// Runs the hooks for `kind` in order; the first that answers (not undefined) wins. A hook added
-// with `times` is dropped after answering that often.
+// Runs the hooks for `kind`, the one added last first; the first that answers (not undefined) wins,
+// so a test's own hook overrides a catch-all from beforeEach. A hook added with `times` stops
+// answering after that many answers.
 export function hook(kind, call) {
-  for (const h of stub.hooks[kind]) {
+  for (const h of [...stub.hooks[kind]].reverse()) {
     if (h.times === 0) continue;
     const answer = h.fn(call);
     if (answer === undefined) continue;

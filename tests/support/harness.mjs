@@ -92,6 +92,17 @@ export const fetch = fetchFake;
 export { response, clock, flush, makeCx };
 export * from "./gpui-tree.mjs";
 
+// Waits until cond() is truthy (checked after each turn of the event loop), at most `ms`; answers its value.
+export async function waitFor(cond, ms = 2000, what = String(cond)) {
+  const end = performance.now() + ms; // not Date.now: a test may have faked it
+  for (;;) {
+    const v = await cond();
+    if (v) return v;
+    if (performance.now() > end) throw new Error(`waitFor: still not true after ${ms} ms: ${what}`);
+    await new Promise((r) => setTimeout(r, 1));
+  }
+}
+
 export function reset() {
   resetStub();
   clock.reset();
