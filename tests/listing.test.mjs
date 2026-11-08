@@ -23,6 +23,13 @@ before(() => {
   mkdirSync(join(root, "odd"));
   symlinkSync("line\nfeed", join(root, "odd", "nl"));
   symlinkSync("ok", join(root, "odd", "ok"));
+  // For the byte budget: one dangling link with a 100-byte target, short names, a long one.
+  mkdirSync(join(root, "one"));
+  symlinkSync("a".repeat(96) + "äö", join(root, "one", "l"));
+  mkdirSync(join(root, "many"));
+  for (let n = 1; n <= 9; n++) writeFileSync(join(root, "many", `f${n}`), "");
+  mkdirSync(join(root, "wide"));
+  writeFileSync(join(root, "wide", "äää"), "");
   // A readlink like BusyBox's: one path only.
   bin = join(root, "bin");
   mkdirSync(bin);
@@ -32,10 +39,11 @@ before(() => {
 after(() => rmSync(root, { recursive: true, force: true }));
 
 const shells = ["/bin/sh", "/bin/dash", "/bin/bash"].filter(existsSync);
-const list = (shell, folder, env = process.env, most = 10000) => {
-  const out = execFileSync(shell, ["-c", listScript(most), "roundup-files", join(root, folder)], { env, encoding: "utf8" });
-  return Object.fromEntries(parseListing(out).map((e) => [e.name, e]));
-};
+const raw = (shell, folder, env = process.env, most = 10000, budget = 7 * 1024 * 1024) =>
+  execFileSync(shell, ["-c", listScript(most, budget), "roundup-files", join(root, folder)], { env });
+const read = (...a) => parseListing(raw(...a).toString("utf8"));
+const list = (...a) => Object.fromEntries(read(...a).entries.map((e) => [e.name, e]));
+const oneArg = () => ({ ...process.env, PATH: `${bin}:${process.env.PATH}` });
 
 for (const shell of shells) {
   test(`${shell}: kinds, names and targets`, () => {
@@ -79,6 +87,56 @@ for (const shell of shells) {
       assert.equal(e["to-sub"].link, "sub");
       assert.equal(e.broken.link, "missing");
       assert.equal(e["file.txt"].link, null);
+    }
+  });
+
+  test(`${shell}: a target is shown whole up to the exact byte, else left out`, () => {
+    // "B\0l\0" and the target's NUL are held back, then 100 bytes of target; 4 for the frame.
+    for (const env of [process.env, oneArg()]) {
+      const fits = read(shell, "one", env, 10000, 109), short = read(shell, "one", env, 10000, 108);
+      assert.deepEqual(fits, { entries: [{ name: "l", dir: false, link: "a".repeat(96) + "äö", broken: true }], cut: false });
+      assert.deepEqual(short, { entries: [{ name: "l", dir: false, link: "", broken: true }], cut: false });
+    }
+  });
+
+  test(`${shell}: the budget ends the entries whole, and says so`, () => {
+    // 4 for the frame, 5 bytes per entry ("f\0f1\0").
+    for (const [budget, n] of [[19, 3], [18, 2], [4, 0]]) {
+      assert.ok(raw(shell, "many", process.env, 10000, budget).length <= budget);
+      const r = read(shell, "many", process.env, 10000, budget);
+      assert.equal(r.entries.length, n);
+      assert.equal(r.cut, true);
+      for (const e of r.entries) assert.match(e.name, /^f\d$/);
+    }
+    assert.equal(read(shell, "many", process.env, 10000, 49).cut, false);
+  });
+
+  test(`${shell}: names count in bytes`, () => {
+    // "äää" is 6 bytes: 9 with its kind and NULs.
+    assert.deepEqual(read(shell, "wide", process.env, 10000, 13), { entries: [{ name: "äää", dir: false, link: null, broken: false }], cut: false });
+    assert.equal(read(shell, "wide", process.env, 10000, 12).entries.length, 0);
+  });
+
+  test(`${shell}: under any budget the output fits and nothing moves`, () => {
+    for (const folder of ["folder", "odd"]) {
+      const full = read(shell, folder).entries;
+      for (let budget = 4; budget <= 90; budget++) { // "folder" prints 77 bytes in full
+        const runs = [process.env, oneArg()].map((env) => {
+          const out = raw(shell, folder, env, 10000, budget);
+          assert.ok(out.length <= budget, `${folder} at ${budget}: ${out.length} bytes`);
+          return parseListing(out.toString("utf8"));
+        });
+        // One readlink for all, or one per link: the same result.
+        assert.deepEqual(runs[0], runs[1]);
+        const { entries, cut } = runs[0];
+        assert.equal(cut, entries.length < full.length);
+        entries.forEach((e, k) => {
+          const f = full[k];
+          assert.deepEqual({ ...e, link: null }, { ...f, link: null });
+          if (f.link == null) assert.equal(e.link, null);
+          else assert.ok(e.link === f.link || e.link === "", `${e.name}: ${JSON.stringify(e.link)}`);
+        });
+      }
     }
   });
 

@@ -134,6 +134,9 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
     `arrow-up-right`, stroke 2.5) after it in `accent`, its hover "Link to
     <target>" as written; one that points nowhere has a `dim` name, a
     half-faded icon, the arrow in `ansi1` and "Broken link to <target>".
+    A folder's listing prints at most 7 MiB (exec takes 8): a target that
+    doesn't fit is left out whole, its hover just "Link", and entries past
+    it end the folder as its 10,000 limit does.
     Herdr ships its UI font Geist without an italic, so `roundup-files`
     brings `fonts/Geist-Italic.ttf` (Geist 1.8.2, OFL); a `ui_font` without
     an italic shows link names upright.
