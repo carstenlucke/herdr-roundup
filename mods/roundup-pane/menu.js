@@ -16,6 +16,11 @@ export function shortcut(actions) {
   return "";
 }
 
+// The menu's heights in px, so its popup can be sized to fit (tests/menu-height.test.mjs):
+// the padding at top and bottom, a row, a separator line with its margin, and the heading
+// over the three choices (its line, then 11 px text: 3 above, 14 high, 2 below).
+export const PAD = 5, ROW = 31, LINE = 4 + 1 + 4, HEAD = LINE + 3 + 14 + 2;
+
 // Rows are { label, icon, act, keys?, sep? }. The three choices for `kind` ("tab" or "pane") follow
 // under "Ask before closing a tab/pane", a check where the commands carry their icon.
 // ↑/↓ move, Enter runs, Esc closes. `view.at` is the highlighted row, `view.handle` the menu's focus.
@@ -24,7 +29,7 @@ export function menuView(view, rows, kind) {
   const list = [...rows, ...MODES.map(([m, label], i) => ({ label, mode: m, head: i === 0, act: () => setConfirmMode(kind, m) }))];
   const choose = (i) => { closeOverlay(props().overlay); list[i].act(); };
   const line = () => div().mx(7).my(4).h(1).bg(t.border);
-  return v_flex().id("menu").track_focus(view.handle).w_full().min_h(0).p(5).bg(t.popover).text_size(12.8)
+  return v_flex().id("menu").track_focus(view.handle).w_full().min_h(0).p(PAD).bg(t.popover).text_size(12.8)
     .on_key_down((e, cx) => {
       if (e.key === "down") view.at = (view.at + 1) % list.length;
       else if (e.key === "up") view.at = (view.at + list.length - 1) % list.length;
@@ -36,7 +41,7 @@ export function menuView(view, rows, kind) {
     .children(list.map((it, i) => v_flex()
       .when(Boolean(it.sep), el => el.child(line()))
       .when(Boolean(it.head), el => el.child(line()).child(div().px(8).pt(3).pb(2).text_size(11).text_color(t.dim).child(`Ask before closing a ${kind}`)))
-      .child(h_flex().id(`mi-${i}`).h(31).px(8).gap(9).rounded(7).items_center().text_color(t.foreground)
+      .child(h_flex().id(`mi-${i}`).h(ROW).px(8).gap(9).rounded(7).items_center().text_color(t.foreground)
         .when(i === view.at, el => el.bg(t.selected)).hover(s => s.bg(t.hover))
         .on_click(() => choose(i))
         .child(it.mode
