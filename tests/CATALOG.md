@@ -511,7 +511,6 @@ Each extraction moves logic out of a `main.js` (or a file importing `herdr`/`gpu
 ## Open questions
 
 - `resolveLink("/r/a.md", "file://host/x")` gives `{file:"/host/x"}`: a file URL naming another host becomes a local path on POSIX. Refuse it, as Windows shares are, before writing that row? (Issue #20.)
-- TAB-05, seen live (smoke.sh, shot 51): a tab nobody named is called by its position ("3"), as herdr.d.ts says, so `tabName`'s `/^tb\d+$/` never matches: the tab bar and the close dialog ("Close tab 3?") show the position, not the program. Herdr's own `tabs` mod has the same line. Keep it as Herdr does, or use `!tab.named` to show the program?
 
 ## RECIPE.md drift found while building this
 
