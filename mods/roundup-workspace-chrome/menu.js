@@ -7,6 +7,7 @@ import { v_flex, h_flex } from "gpui-base";
 import { theme, props, run, shared, setShared, closeOverlay } from "herdr";
 import { get, put, available } from "./update.js";
 import { info, infoHeight } from "./info.js";
+import { popupHeight } from "./brand.js";
 
 // Whether the logo and name show the facts on hover (true unless switched off here).
 export const DETAILS = "roundup-workspace-chrome.details";
@@ -34,9 +35,8 @@ function rows(m) {
   ];
 }
 
-// The popup's height: 5 px padding each side, the head (6 + its lines + 6) and a divider (9), 31 px a row, 19 px
-// a heading, 9 px a divider.
-export const menuHeight = (m) => rows(m).reduce((h, r) => h + 31 + (r.head ? 19 : 0) + (r.sep ? 9 : 0), 10 + 12 + infoHeight(m) + 9);
+// The popup's height (brand.js's popupHeight).
+export const menuHeight = (m) => popupHeight(rows(m), infoHeight(m));
 
 // ↑/↓ move, Enter runs, Esc closes. `view.at` is the highlighted row, `view.handle` the menu's focus.
 export function menuView(view) {

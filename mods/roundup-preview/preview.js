@@ -7,19 +7,26 @@
 // beside them, Esc closes, and only the header's free part drags the window.
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { props, theme, notify, watchFolder, shared, setShared, exec, window, run, panes, focused, closeOverlay } from "herdr";
+import { props, theme, notify, watchFolder, shared, setShared, exec, window, run, panes, focused, closeOverlay, nextCommand } from "herdr";
 import { viewerFor, basename } from "./kinds.js";
+import { key } from "./cache-key.js";
 import { dirname, native, localPath, changedFile, normalize } from "./paths.js";
 import { VIEWERS } from "./viewers/index.js";
 import { openMenu } from "./menu.js";
-import { iconButton } from "./viewers/controls.js";
-import { MOVED, FLOAT, openTab, timerOf, newToken, fresh, answered } from "./open-file.js";
+import { iconButton, rawOn } from "./viewers/controls.js";
+import { MOVED, FLOAT, openTab, timerOf, newToken, fresh, answered, startFile, floatMoved, releasesFloat } from "./open-file.js";
 import { formatSize } from "./size.js";
 import { programs } from "./programs.js";
 import { systemOf } from "./platform.js";
 
 // How often a file whose folder can't be watched is looked at (watch).
 const POLL = 3000;
+// What each copy shows, written on the "state" command under "tab:<file>" or "float:<file>"
+// (scripts/smoke.sh reads it). One record per kind and file: two shown tab copies of the same
+// file would share one; the smoke test shows one at a time.
+const DEBUG = "roundup-preview.debug";
+// The language of Raw, per viewer that has one (as each viewer's rawToggle names it).
+const RAW = { markdown: "markdown", json: "json", table: "text" };
 
 export class Preview {
   init(_props, cx) {
@@ -35,8 +42,7 @@ export class Preview {
     this.size = { width: 900, height: 700 };
     // A copy that starts again (a restart, the mod reloaded) shows the file it showed, not the one
     // it opened with: a tab's MOVED, the window's FLOAT. So OPEN and FLOAT stay right about it.
-    const was = this.float ? (shared(FLOAT)?.token === this.float ? shared(FLOAT).file : null) : token ? shared(MOVED)?.[token] : null;
-    const start = was ?? file;
+    const start = startFile({ file, token, float: this.float }, shared(FLOAT), shared(MOVED));
     this.show(start && localPath(start, this.system), cx);
     // A window that starts again (the mod reloaded) writes FLOAT back if it is gone, and marks it
     // with this copy, so the copy before, closing late, leaves it alone. Not over a newer window.
@@ -52,6 +58,30 @@ export class Preview {
         if (next) setShared(FLOAT, next);
       });
     }
+    this.commands(cx);
+  }
+
+  // Commands for scripts (scripts/smoke.sh): every shown copy gets them (keys bind none).
+  // "to-tab": the floating window presses Open in tab. "raw": Raw on, where the viewer has it.
+  // "state": the copy writes what it shows to shared DEBUG, under its kind and file: how often
+  // it loaded, Raw, and the text's length and hash, so a script sees a reload without a picture,
+  // and when (`at`), so it can tell a fresh record from an old one.
+  commands(cx) {
+    cx.spawn(async (cx) => {
+      for (;;) {
+        const c = await nextCommand();
+        const state = this.state, raw = RAW[viewerFor(this.file ?? "")];
+        if (c === "to-tab") { if (this.float) this.toTab(cx); }
+        else if (c === "raw" && state && raw && typeof state.text === "string") rawOn(state, raw);
+        else if (c === "state" && this.file) {
+          const text = typeof state?.text === "string" ? state.text : null;
+          setShared(DEBUG, { ...(shared(DEBUG) ?? {}), [`${this.float ? "float" : "tab"}:${this.file}`]: {
+            float: Boolean(this.float), loads: this.loads ?? 0, raw: Boolean(state?.raw),
+            length: text?.length ?? null, hash: text == null ? null : key(text), error: this.error, at: Date.now() } });
+        }
+        cx.notify();
+      }
+    });
   }
 
   env() {
@@ -80,6 +110,7 @@ export class Preview {
         if (this.loading !== loading) { viewer.release?.(state); return; }
         this.release();
         this.state = state;
+        this.loads = (this.loads ?? 0) + 1;
         viewer.start?.(state, env, cx);
       } catch (e) { if (this.loading === loading) { this.release(); this.error = String(e?.message ?? e); } }
       finally { cx.notify(); }
@@ -150,8 +181,8 @@ export class Preview {
   // window updates FLOAT's file instead, while FLOAT still names it, so the panel's floats() sees it.
   moved() {
     if (this.float) {
-      const f = shared(FLOAT);
-      if (f?.token === this.float) setShared(FLOAT, { ...f, file: this.file });
+      const next = floatMoved(shared(FLOAT), this.float, this.file);
+      if (next) setShared(FLOAT, next);
     } else if (this.token) setShared(MOVED, { ...(shared(MOVED) ?? {}), [this.token]: this.file });
   }
 
@@ -164,8 +195,7 @@ export class Preview {
     this.watching = null; this.poll?.cancel(); this.release();
     // The window is gone: roundup-files learns there is none, unless another one (opened again
     // in its place) or a later copy of this one (the mod reloaded) already took FLOAT.
-    const f = shared(FLOAT);
-    if (this.float && f?.token === this.float && (f.copy ?? this.copy) === this.copy) setShared(FLOAT, null);
+    if (releasesFloat(shared(FLOAT), this.float, this.copy)) setShared(FLOAT, null);
   }
 
   // From the floating window to a tab: the pane already showing the file comes to the front,

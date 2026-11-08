@@ -1,7 +1,7 @@
 // How a file opens in roundup-preview: a new tab, or a split beside the focused
 // pane, or the pane already showing it, or the floating window. No Herdr imports: openTab
 // gets Herdr's functions passed in, so tests/open-file.test.mjs runs it in node.
-import { pathKey } from "./paths.js";
+import { pathKey, samePath } from "./paths.js";
 
 // Shared keys. Each preview tab opened here carries a token in its props (props.token).
 // OPEN: token -> { pane, file, on }, the pane the opener made and the file it opened with.
@@ -125,6 +125,26 @@ export function floatSpec({ file, on = null, token }) {
 
 /** Whether FLOAT `f` names a window to follow: written fresh (no probe), or its probe answered. */
 export const isOpen = (f) => Boolean(f) && (f.probe == null || f.alive === f.probe);
+
+/** Whether FLOAT `f` names an open window showing `file` on machine `on`, however the path is
+ *  written: the window writes a followed link's path in its own form (/ on Windows). */
+export const floatShows = (f, file, on) => isOpen(f) && Boolean(f.file) && samePath(f.file, file) && (f.on ?? null) === (on ?? null);
+
+/** FLOAT once window `token` shows `file` (it followed a link or went Back); null when FLOAT
+ *  names another window, which it then leaves alone. */
+export const floatMoved = (f, token, file) => (f?.token === token ? { ...f, file } : null);
+
+/** Whether window `token`'s copy `copy`, closing, clears FLOAT `f`: not when another window
+ *  (opened again in its place) or a later copy of this one (the mod reloaded) took it. */
+export const releasesFloat = (f, token, copy) => Boolean(token) && f?.token === token && (f.copy ?? copy) === copy;
+
+/** The file a preview copy starts with. One that starts again (a restart, the mod reloaded)
+ *  shows the file it showed, not the one it opened with (`file`): a tab its token's MOVED
+ *  (`moved`), the window FLOAT's file (`f`) while FLOAT holds its token (`float`). */
+export function startFile({ file, token = null, float = null }, f, moved) {
+  const was = float ? (f?.token === float ? f.file : null) : token ? moved?.[token] : null;
+  return was ?? file;
+}
 
 /** FLOAT `f` without a probe or its answer: a window opened or a copy started just now. */
 export function fresh(f) {

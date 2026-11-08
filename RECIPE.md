@@ -472,11 +472,11 @@ mod pane's is in shared `roundup-pane.names` (pane id → name). See
 same mod, `openOverlay({ mod: "roundup-pane", kind: "dialog", width: 380,
 height: 196, props: { rename: { pane, terminal, value, fallback } } })`,
 shaped like Herdr's `prompt`. It is also the `terminal_menu`: a popup
-(`mod.json` `overlay` 240×296), `props()` `{tab: "pane", target: {pane,
+(`mod.json` `overlay` 240×332), `props()` `{tab: "pane", target: {pane,
 terminal}, overlay}`, Herdr's pane menu item for item, drawn by `menu.js`.
-Closing is `closePane(pane, name)` from `close.js` (see `roundup-tabs`). Its
-key command `close` reaches every shown header; only the copy whose pane is
-`focused().pane` acts. Commands: `pane.focus`, `pane.split`, `pane.zoom`,
+Closing is `closePane(pane)` from `close.js` (see `roundup-tabs`). It has no
+key command: `cmd-shift-w` goes to `roundup-tabs.close-pane`, since a command
+of this mod would reach every shown header. Commands: `pane.focus`, `pane.split`, `pane.zoom`,
 `pane.close`, `tab.close`, `terminal.right_click`, `terminal.park`. Its own
 art: `rename.svg` (a pencil) and the shipped header's `split-right`,
 `split-down`, `zoom`, `unzoom`, `close`; the working spinner is Herdr's
@@ -551,7 +551,12 @@ when its first record has more `;` than `,` outside quoted cells. Programs on ma
 `sh` (`wc -c`, `head -c`, `stat`, `cp`), `sips` (sizes), `osascript -l
 JavaScript` with PDFKit (pages, 1600px wide), `curl` and `file` (web
 images, after the click), `find`/`mv`/`rm` in its cache only, `git
-rev-parse`, the login shell for `$EDITOR`, `open`.
+rev-parse`, the login shell for `$EDITOR`, `open`. Key commands, for scripts
+(`scripts/smoke.sh`; none bound), reach every shown copy: `to-tab` (the floating
+window's Open in tab), `raw` (Raw on, where the viewer has it), `state` (each copy
+writes `{float, loads, raw, length, hash, error, at}` of its text under `tab:<file>`
+or `float:<file>` to shared `roundup-preview.debug`; two shown tabs of one file
+share a record).
 
 **`roundup-files`** (clone of `files` 0.1.13, `place: "none"`, title
 "Files", `focusable: true`). `main.js` draws the panel and, with
@@ -681,7 +686,10 @@ closes it. Copy uses `cx.write_to_clipboard` and `notify`; Send `focused()`,
 and Reveal `open` / `open -R` (PowerShell `Invoke-Item` / `explorer.exe
 /select` on Windows, `xdg-open` elsewhere). Key commands (none bound):
 `focus`, `search`, `view:all`, `view:changed`, `source:git`,
-`source:disk`, `menu`. Own art: Symbols 0.0.26 by Miguel Solorio in
+`source:disk`, `menu`, and for scripts (`scripts/smoke.sh`) `tab:<rel>` (as
+Enter) and `float:<rel>` (as a double-click): every shown panel runs them, so a
+script shows one, on the right folder; `rel` is a path below it, anything else
+(absolute, `..`, no folder yet) does nothing. Own art: Symbols 0.0.26 by Miguel Solorio in
 `icons/` (245 SVGs, with `icons/LICENSE`) and `icons.js`, all written by
 `scripts/build-icons.mjs` (`docs/adr/0002-file-icon-set.md`); Herdr's
 `chevron-right`, `chevron-down`, `chevron-left`, `branch` and `search`.
@@ -690,7 +698,7 @@ and Reveal `open` / `open -R` (PowerShell `Invoke-Item` / `explorer.exe
 `picker`, `menu` and `machine-add` as overlays.
 
 **Keys:** the `layout:Herdr-Roundup` section binds `cmd-w` to
-`roundup-tabs.close` and `cmd-shift-w` to `roundup-pane.close`, in place of
+`roundup-tabs.close` and `cmd-shift-w` to `roundup-tabs.close-pane`, in place of
 global `tab.close` and `pane.close`.
 
 ## Watch out
@@ -944,6 +952,6 @@ global `tab.close` and `pane.close`.
   jumps there; in a code file or Raw, a selection copies with Cmd-C. Open
   in tab opens the tab even though the window closes at once, and the next
   Cmd-double-click on that file brings the tab back.
-- `node --test tests/` passes (Node 22 or later).
+- `node --test 'tests/*.test.mjs'` passes (Node 22.15 or later).
 - A folder without git shows "Not a git repository" and its files; one with
   more than 500 entries says so in the footer.

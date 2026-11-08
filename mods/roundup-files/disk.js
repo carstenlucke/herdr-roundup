@@ -7,18 +7,15 @@
 // claude-code-filetree (MIT, (c) 2026 Kurt Buhler). See THIRD_PARTY_NOTICES.md.
 import { exec, home, window } from "herdr";
 import { listScript, parseListing, BLOCKED_AT_MOST } from "./listing.js";
+import { PER_FOLDER, INDEX_DIRS, INDEX_PATHS, PRUNE, HOME_PRUNE, psQuote, trimSlash, sortEntries,
+  atHome as atHomeIn, prunedName as prunedNameIn, prunedAbove as prunedAboveIn, indexDepth as indexDepthIn } from "./disk-rules.js";
 
-export const PER_FOLDER = 500;
 // listDir reads at most this many entries of a folder: 100,000 took 5 s and 2.5 MB of output,
 // on every refresh, and past about 330,000 the output passes exec's 8 MiB.
 const READ_AT_MOST = 10000;
 // And prints at most this many bytes: names are short, but a link's target may take 4 KB.
 // Past it the entries end (more) and a target that doesn't fit is left out ("").
 const LIST_BUDGET = 7 * 1024 * 1024;
-// Search: folders it never enters, how deep and how much it reads.
-const PRUNE = [".git", "node_modules", "target", ".venv", "venv", "__pycache__", "dist", "build", ".next", ".nuxt", ".cache", ".gradle", ".idea", "vendor", "Pods", ".tox", ".mypy_cache", ".pytest_cache", "coverage"];
-const HOME_PRUNE = ["Library", "AppData", ".Trash"];
-export const INDEX_DIRS = 20000, INDEX_PATHS = 40000;
 // The characters of paths kinds() puts on one command line. Windows takes at most 32,767: room
 // left for the script, the root and the quoting it adds. sh's limit (ARG_MAX) is far higher.
 const WINDOWS_LINE = 24000, SH_LINE = 100000;
@@ -28,46 +25,21 @@ const windows = (on) => !on && window()?.platform === "windows";
 export const diskSearch = (on) => !windows(on);
 // buildIndex can't read the disk there: search keeps to git's files.
 const noIndex = (message) => Object.assign(new Error(message), { noIndex: true });
-export const psQuote = (s) => "'" + s.replace(/['‘’‚‛]/g, "$&$&") + "'";
 // A machine without sh (Windows over `on`): exec says so when it tries.
 const noSh = (e, on) => on && String(e).includes("cannot start sh: program not found");
 // The home of `on`'s machine: this one's from home(), another's once learnHome has read it
 // ("" until then, which is no folder's).
 const homes = new Map();
-const homeOf = (on) => (on ? homes.get(on) ?? "" : home());
-const trimSlash = (p) => p.replace(/\/+$/, "") || "/";
+export const homeOf = (on) => (on ? homes.get(on) ?? "" : home());
 async function learnHome(on) {
   if (!on || homes.has(on)) return;
   const r = await exec("sh", ["-c", 'printf %s "$HOME"'], { on }).catch(() => null);
   if (r?.code === 0 && r.stdout) homes.set(on, trimSlash(r.stdout));
 }
-const isHome = (root, on) => Boolean(homeOf(on)) && trimSlash(root) === trimSlash(homeOf(on));
-const atHomeOf = (root, on) => root === "/" || isHome(root, on);
-// Whether a folder at rel below root (on `on`) is never indexed. A file there is. HOME_PRUNE:
-// at home only its top level (~/Library, not a project's Library), at / at any depth.
-export const prunedName = (root, rel, on) => {
-  const name = rel.slice(rel.lastIndexOf("/") + 1);
-  return PRUNE.includes(name) || (HOME_PRUNE.includes(name) && (root === "/" || (isHome(root, on) && !rel.includes("/"))));
-};
-// Whether rel lies inside a pruned folder below root (rel itself may still be a file).
-export const prunedAbove = (root, rel, on) => {
-  const parts = rel.split("/");
-  return parts.slice(0, -1).some((_, i) => prunedName(root, parts.slice(0, i + 1).join("/"), on));
-};
-
-// Natural order, case-insensitive ("file2" before "file10"); this runtime has no Intl.
-export function compare(a, b) {
-  const x = a.toLowerCase().match(/\d+|\D+/g) ?? [], y = b.toLowerCase().match(/\d+|\D+/g) ?? [];
-  for (let i = 0; i < Math.min(x.length, y.length); i++) {
-    if (x[i] === y[i]) continue;
-    const nx = /^\d/.test(x[i]), ny = /^\d/.test(y[i]);
-    // Runs past 2^53 can come out the same Number: then their digits decide, below.
-    if (nx && ny && (Number(x[i]) !== Number(y[i]) || x[i].length !== y[i].length)) return Number(x[i]) - Number(y[i]) || x[i].length - y[i].length;
-    return x[i] < y[i] ? -1 : 1;
-  }
-  return x.length - y.length || (a < b ? -1 : a > b ? 1 : 0);
-}
-export const sortEntries = (list) => list.sort((a, b) => Number(b.dir) - Number(a.dir) || compare(a.name, b.name));
+// The rules of disk-rules.js with this home: (root, rel, on) as before.
+const atHomeOf = (root, on) => atHomeIn(root, homeOf(on));
+export const prunedName = (root, rel, on) => prunedNameIn(root, rel, homeOf(on));
+export const prunedAbove = (root, rel, on) => prunedAboveIn(root, rel, homeOf(on));
 
 // One folder: [{ name, dir, link, broken, blocked }] (link: a link's target as written, ""
 // when it can't be read or didn't fit LIST_BUDGET, null for no link; broken: a link that
@@ -166,7 +138,7 @@ export async function realPath(root) {
 }
 
 // How many levels below root (on `on`) buildIndex reads.
-export const indexDepth = (root, on) => (atHomeOf(root, on) ? 5 : 12);
+export const indexDepth = (root, on) => indexDepthIn(root, homeOf(on));
 
 // args in pieces of at most `max` characters (with a separator each).
 function pieces(args, max) {

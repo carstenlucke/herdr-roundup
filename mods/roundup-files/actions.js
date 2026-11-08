@@ -4,14 +4,8 @@
 // Adapted from cybertron288/herdr-mods `filetree` (MIT, (c) 2026 cybertron288).
 // See THIRD_PARTY_NOTICES.md.
 import { agents, exec, focused, notify, panes, run, window } from "herdr";
-import { psQuote } from "./disk.js";
-
-export function relTo(root, abs) {
-  if (!root || !abs) return null;
-  const a = abs.replace(/\\/g, "/"), r = root.replace(/\\/g, "/").replace(/\/+$/, "");
-  if (a === r) return "";
-  return a.startsWith(r + "/") ? a.slice(r.length + 1) : null;
-}
+import { psQuote } from "./disk-rules.js";
+import { relTo } from "./tree.js";
 
 // This computer only.
 export async function openExternal(abs) {

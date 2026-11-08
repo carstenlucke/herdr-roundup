@@ -13,42 +13,28 @@ import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, InputState, Input, Scrollbar, Popup, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { spaces, panes, focused, readTextFile, watchFolder, theme, settings, window, props, notify, openOverlay, closeOverlay, shared, setShared, nextCommand, run } from "herdr";
 import { iconFor, rootIcon } from "./icon.js";
-import { listDir, buildIndex, diskSearch, kinds, indexDepth, compare, prunedName, prunedAbove, realPath, PER_FOLDER, INDEX_DIRS, INDEX_PATHS } from "./disk.js";
-import { readGit, listFiles, emptyGit, ancestors, dirOf, within, NEW, MODIFIED, DELETED } from "./git.js";
-import { openExternal, revealExternal, copy, sendToAgent, relTo } from "./actions.js";
+import { listDir, buildIndex, diskSearch, kinds, prunedName, realPath, homeOf } from "./disk.js";
+import { INDEX_PATHS } from "./disk-rules.js";
+import { readGit, listFiles, emptyGit, NEW, MODIFIED, DELETED } from "./git.js";
+import { openExternal, revealExternal, copy, sendToAgent } from "./actions.js";
+import { dirOf, baseOf, ancestors, relTo, join } from "./tree.js";
+import { diskRows, hitRows, changedRows, rowStatus } from "./rows.js";
+import { match, cursorAfter, outdated, classify, applyRecheck, STALE_AGE } from "./search.js";
+import { location } from "./location.js";
+import { ROW, menuItems, menuHeight, keyMenuAt, menuKey, moveIndex, clickAction, scriptRel } from "./input.js";
+import { listNote, footerLines, linkTip, statusColor, changeColors, gitReason, noRepo, GIT_FAILED } from "./panel-text.js";
 // A copy of roundup-preview's: how it opens and which pane already shows a file. sync.sh
 // checks that the two copies match.
-import { FLOAT, openTab, timerOf, floatSpec, newToken, isOpen, unanswered, placed } from "./open-file.js";
-// Also roundup-preview's: the window writes a followed link's path in its own form (/ on Windows).
-import { samePath } from "./paths.js";
+import { FLOAT, openTab, timerOf, floatSpec, newToken, isOpen, unanswered, placed, floatShows } from "./open-file.js";
 
 const NAME = "roundup-files";
 const ICON = (name) => `mods/${NAME}/${name}.svg`;
-// A link row's tooltip: where it points, as written.
-const linkTip = (r) => `${r.broken ? "Broken link" : "Link"}${r.link ? ` to ${r.link}` : ""}${r.blocked ? " (no access to check it)" : ""}`;
-const ROW = 26;
-const FIND_LIMIT = 200;
-// Changed shows at most this many of git's paths (in git's order): its rows are built on every
-// render, about 10 µs a row here, so 2,000 keep a key press near 20 ms (5,000: 70 ms).
-const CHANGED_LIMIT = 2000;
-// A search index older than this is read again on the next search, whatever the watch said.
-const INDEX_AGE = 300000;
-// After a file the index knows changed (it may be gone), the index is read again once it is
-// this old: at most one rebuild per 30 s while files keep changing.
-const DIRTY_AGE = 30000;
-// After a folder changed (or too many paths to list), the index is read again once it is this
-// old: at most one rebuild per 3 s while a build keeps making folders.
-const STALE_AGE = 3000;
-// More new paths than this in one batch read the index again instead of checking each.
-const CHECK_PATHS = 100;
 // How many folders keep their open folders, cursor and preview while another one shows.
 const SAVED = 50;
 // How long ↑ ↓ rest on a row before the floating window follows to it.
 const FOLLOW_MS = 150;
 const LANG = { ts: "js", tsx: "js", mts: "js", cts: "js", jsx: "js", mjs: "js", cjs: "js", toml: "yaml", yml: "yaml", jsonc: "json", svelte: "html", vue: "html", htm: "html", sh: "bash", zsh: "bash" };
 const VIEWS = [["all", "All"], ["changed", "Changed"]];
-// The menu's height: 28 per entry, 9 per divider, 5 of padding above and below.
-const menuHeight = (groups) => groups.reduce((n, g) => n + g.length, 0) * 28 + (groups.length - 1) * 9 + 10;
 // What search in All reads: git's files (without ignored ones; the disk outside a repo and in
 // an ignored folder) or the disk (everything but the pruned folders).
 const SOURCES = ["git", "disk"];
@@ -56,62 +42,10 @@ const SOURCES = ["git", "disk"];
 // the panel copy that opened it: every shown copy reads the request, only that one runs it.
 const REQUEST = `${NAME}.request`;
 
-const baseOf = (rel) => rel.slice(rel.lastIndexOf("/") + 1);
-// What a change in the shown folder's .git does to an index from git: excludes and config
-// (core.excludesFile) change its list, so it is read again; the index (`git add -f`,
-// `git rm --cached` of an ignored file) changes on every add and commit, so it only comes
-// out dirty, read again once DIRTY_AGE old. Anything else in .git: nothing (null).
-const gitMeta = (rel) => (rel === ".git/info/exclude" || rel === ".git/config" ? "stale" : rel === ".git/index" ? "dirty" : null);
-// rel is "/"-separated; a Windows root (C:\ or \\server) gets "\" throughout.
-const join = (root, rel) => {
-  if (!rel) return root;
-  const sep = /^([A-Za-z]:\\|\\\\)/.test(root) ? "\\" : "/";
-  return (/[\\/]$/.test(root) ? root : root + sep) + (sep === "/" ? rel : rel.replace(/\//g, "\\"));
-};
 const message = (e) => String(e?.message ?? e);
-const thousands = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-// What cut an index short, for the footer: "the first 20,000 folders and the first 40,000 files".
-const limits = (cut = []) => cut.map((c) => (c === "dirs" ? `the first ${thousands(INDEX_DIRS)} folders` : `the first ${thousands(INDEX_PATHS)} files`)).join(" and ") || "part of this folder";
-// Why a folder has no repo: git found none, or no git started there.
-const noRepo = (g) => (g.missing ? "Git not found" : "Not a git repository");
-const GIT_FAILED = "Git can't read this folder";
-// Git's colors: new green and deleted red, as in Herdr's `files` and `changes`; modified
-// yellow (ansi3) rather than their `blocked`, which many themes draw close to red.
-const statusColor = (t, s) => (!s ? null : s === "D" || s === "U" ? t.ansi1 : s === "?" || s === "A" || s === "C" ? t.ansi2 : s === "R" ? t.ansi4 : t.ansi3);
-const changeColors = (t) => [t.ansi2, t.ansi3, t.ansi1]; // NEW, MODIFIED, DELETED
 
-// The last terminal folder shown per space, with its machine: for a tab of mod panes only
-// (a preview tab), which has no folder. space.folder is only where the space's first shell
-// started, so without this a click on a file would send the tree to another folder.
+// The last terminal folder shown per space, with its machine (location.js).
 const lastRoot = new Map();
-
-// The focused pane's folder; when the focused pane is a mod, the first terminal of its tab;
-// in a tab without one, the folder last shown in this space.
-function location() {
-  const space = spaces().find((s) => s.active), f = focused();
-  let pane = f?.pane ? panes().find((p) => p.pane === f.pane) : null;
-  if (pane && !pane.terminal) pane = panes().find((p) => p.tab === pane.tab && p.terminal && p.cwd) ?? null;
-  const on = f?.pane === null ? (f.terminal?.includes("/") ? f.terminal.split("/")[0] : null) : space?.machine ?? null;
-  const cwd = pane?.cwd || f?.cwd;
-  if (cwd) { if (space) lastRoot.set(space.id, { cwd, on }); return { cwd, on }; }
-  if (!space) return { cwd: null, on };
-  const tabs = new Set(space.tabs.map((t) => t.id));
-  return lastRoot.get(space.id) ?? { cwd: panes().find((p) => p.terminal && p.cwd && tabs.has(p.tab))?.cwd || space.folder || null, on };
-}
-
-// The context menu's entries for one path, in groups. `local`: on this computer.
-function menuItems(m) {
-  const mac = window()?.platform === "macos";
-  return [
-    [!m.dir && !m.gone && ["float", "Quick look"],
-      !m.dir && !m.gone && ["tab", "Open in tab"],
-      !m.dir && !m.gone && ["preview", "Preview in panel"],
-      m.local && !m.dir && !m.gone && ["open", "Open with default app"],
-      m.local && !m.gone && ["reveal", mac ? "Reveal in Finder" : "Show in folder"]],
-    [["copy-rel", "Copy relative path"], ["copy-abs", "Copy absolute path"]],
-    [["send", "Send @path to agent"]],
-  ].map((g) => g.filter(Boolean)).filter((g) => g.length);
-}
 
 export default class Files extends View {
   init(_props, cx) {
@@ -148,7 +82,7 @@ export default class Files extends View {
       this.refresh(cx);
       // A known file or folder changed while no other change came after it: the hits may still
       // list it (a folder's hold normally reads it again before this).
-      if (this.index && (this.index.dirty || this.index.stale) && this.outdated(this.index)) this.searchAgain(cx);
+      if (this.index && (this.index.dirty || this.index.stale) && outdated(this.index, Date.now())) this.searchAgain(cx);
     });
     // Commands (keys.json: "roundup-files.<command>"). "focus" also comes from Herdr: pane.go
     // moved onto this panel (mod.json "focusable"), or a popup over it closed.
@@ -160,9 +94,23 @@ export default class Files extends View {
         else if (c.startsWith("view:")) this.setView(c.slice(5), cx);
         else if (c.startsWith("source:")) this.setSource(c.slice(7), cx);
         else if (c === "menu") { const r = this.shown.find((x) => x.rel === this.cursor); if (r && !this.file) this.openKeyMenu(r); }
+        // For scripts (scripts/smoke.sh), with a path below the shown folder: what Enter on a
+        // file does (its tab in roundup-preview) and what a double-click does (the floating window).
+        // Every shown panel gets them: a script shows one panel, already on the right folder.
+        else if (c.startsWith("tab:") || c.startsWith("float:")) this.scriptOpen(c, cx);
         cx.notify();
       }
     });
+  }
+
+  // tab:<rel> / float:<rel>: a path the panel's folder has (input.js scriptRel), with the cursor
+  // on it as the context menu's REQUEST does. Without a folder yet, or for any other path, nothing.
+  scriptOpen(c, cx) {
+    const tab = c.startsWith("tab:"), rel = scriptRel(c.slice(tab ? 4 : 6));
+    if (!this.root || rel === null) return;
+    this.cursor = rel;
+    if (tab) this.openPreview(rel, cx);
+    else this.openFloat(rel);
   }
 
   setView(view, cx) {
@@ -220,7 +168,7 @@ export default class Files extends View {
   current(ctx) { return this.ctx === ctx; }
 
   sync(cx) {
-    const { cwd, on } = location();
+    const { cwd, on } = location({ spaces, panes, focused }, lastRoot);
     if (cwd === this.root && on === this.on) return;
     const file = this.reset(cwd, on);
     this.refresh(cx);
@@ -302,51 +250,17 @@ export default class Files extends View {
     });
   }
 
-  // A folder the index knows, or the root (too many changes to list), means the folder
-  // structure may have changed: the index is read again. A path it doesn't know, and one it
-  // took in that way, is checked on its own (recheck), so a save through a temporary file
-  // doesn't read the whole index again; one it can't place this way reads it again. A file
-  // it knows may have been deleted: the index is read again once it is DIRTY_AGE old, not on
-  // every save; after a folder changed, once it is STALE_AGE old (reindex), not on every
-  // batch a build sends. Paths the index never holds don't count: .git and, from the disk, the pruned
-  // folders, from git, what it ignores. From git, a changed .gitignore counts, and so does what
-  // in .git changes git's list without a path changing (gitMeta). Only the .git in the shown
-  // folder is watched: in a worktree (.git is a file there), below a repo's top folder and for
-  // a global excludes file, the index catches such a change only once it is INDEX_AGE old.
-  // A change during an index build may be missing from it: that index comes out dirty.
+  // A batch of the folder watch (search.js's classify has the rules): the index goes stale
+  // (read again once STALE_AGE old, reindex), dirty (once DIRTY_AGE old) or checks paths on
+  // their own (recheck); the tree refreshes unless the batch changed nothing it shows. Only
+  // the .git in the shown folder is watched: in a worktree (.git is a file there), below a
+  // repo's top folder and for a global excludes file, the index catches such a change only
+  // once it is INDEX_AGE old.
   changed(paths, cx) {
-    const index = this.index, job = this.indexing, fromGit = index?.from === "git";
-    const check = [];
-    // A path it can't place, or none at all, refreshes as well: it can't tell.
-    let shown = !paths.length;
-    for (const abs of paths) {
-      const rel = relTo(this.root, abs) ?? relTo(this.ctx.real, abs);
-      if (rel === null) { shown = true; continue; }
-      if (rel === ".git") { this.ctx.base = null; this.ctx.drops++; } // a repo made or removed here: rev-parse again
-      if (!shown && !this.unseen(rel)) shown = true;
-      // Either source may end up read from the other (ensureIndex): both rules are kept.
-      const meta = gitMeta(rel);
-      if (job) {
-        if (baseOf(rel) === ".gitignore" || meta || !this.unindexed(rel, true)) job.changedGit = true;
-        if (!this.unindexed(rel, false)) job.changedDisk = true;
-      }
-      if (!index) continue;
-      if (fromGit && (baseOf(rel) === ".gitignore" || meta === "stale")) { index.stale = true; continue; }
-      if (fromGit && meta === "dirty") { index.dirty = true; continue; }
-      if (this.unindexed(rel, fromGit)) continue;
-      // From the disk, a new path named like a pruned folder (a build's `dist`, say): recheck
-      // tells a file from a folder. One recheck can't place is most likely the folder.
-      if (!fromGit && !index.known.has(rel) && prunedName(this.root, rel, this.on) && !this.placeable(index, rel)) continue;
-      if (rel === "" || index.dirs.has(rel)) index.stale = true;
-      else if (index.added.has(rel) || (!index.known.has(rel) && this.placeable(index, rel))) check.push(rel);
-      // A capped index can't place it, and reading it again would be cut short as well.
-      else if (!index.known.has(rel)) { if (index.full) index.stale = true; else index.dirty = true; }
-      else index.dirty = true;
-    }
-    if (index && !index.stale && check.length) {
-      if (check.length > CHECK_PATHS) index.stale = true;
-      else this.recheck(index, check, cx);
-    }
+    const index = this.index;
+    const { shown, drops, recheck } = classify(paths, { root: this.root, real: this.ctx.real, home: homeOf(this.on), git: this.git, folders: this.folders, index, job: this.indexing });
+    if (drops) { this.ctx.base = null; this.ctx.drops += drops; } // a repo made or removed here: rev-parse again
+    if (recheck.length) this.recheck(index, recheck, cx);
     if (index) this.reindex(index, cx);
     if (shown) this.refresh(cx);
   }
@@ -354,33 +268,10 @@ export default class Files extends View {
   // Reads the index again when it is due. A stale one younger than STALE_AGE is read once
   // that has passed (one hold per index), so a build making folders costs one read per 3 s.
   reindex(index, cx) {
-    if (this.outdated(index)) { this.searchAgain(cx); return; }
+    if (outdated(index, Date.now())) { this.searchAgain(cx); return; }
     if (!index.stale || index.held) return;
     index.held = true;
-    cx.timer.after(STALE_AGE - (Date.now() - index.at), (cx) => { if (this.index === index && this.outdated(index)) this.searchAgain(cx); });
-  }
-
-  // Whether a change at rel leaves the tree and git's marks as they are, so it needn't
-  // refresh: its folder isn't open, and git ignores it (a build in node_modules or target) or
-  // there is no repo. .git isn't ignored: a commit or `git add` refreshes, and outside a repo
-  // a `git init` in the shown folder does. A tracked file an ignore rule matches isn't ignored
-  // either (isIgnored), so its edits show at once. The 10s timer still catches what this misses.
-  unseen(rel) {
-    const g = this.git;
-    if (!rel || !g.known) return false;
-    const dir = dirOf(rel);
-    if (!dir || this.folders.has(dir)) return false;
-    if (!g.repo) return !rel.startsWith(".git/");
-    return this.isIgnored(rel) && !g.status.has(rel);
-  }
-
-  // Whether recheck can take rel into the index: not into one a limit cut short; from the
-  // disk, only into a folder the index holds (unindexed already left out what is too deep).
-  placeable(index, rel) {
-    if (!index.full) return false;
-    if (index.from === "git") return true;
-    const dir = dirOf(rel);
-    return !dir || index.dirs.has(dir);
+    cx.timer.after(STALE_AGE - (Date.now() - index.at), (cx) => { if (this.index === index && outdated(index, Date.now())) this.searchAgain(cx); });
   }
 
   // Reads what rels are now and puts that into the index: a new file goes in (from git, with
@@ -428,43 +319,7 @@ export default class Files extends View {
       }
     } catch { return "stale"; }
     if (!this.current(ctx) || this.index !== index || index.stale) return "same";
-    // Past a limit, nothing is taken in: the index is read again, which cuts it and says so.
-    // From git only the files count (listFiles caps no folders); folders aren't files.
-    const newDirs = new Set(dirs.filter((d) => !index.dirs.has(d) && !index.known.has(d)));
-    const newFiles = new Set(files.filter((f) => !index.known.has(f) && !newDirs.has(f)));
-    if (index.files + newFiles.size > INDEX_PATHS) return "stale";
-    if (index.from === "disk" && index.dirs.size + newDirs.size > INDEX_DIRS) return "stale";
-    let moved = false;
-    const take = (rel) => { if (index.known.has(rel)) return; index.all.push(rel); index.lower.push(rel.toLowerCase()); index.known.add(rel); index.added.add(rel); moved = true; };
-    for (const d of dirs) if (!index.dirs.has(d)) { if (index.known.has(d)) index.files--; index.dirs.add(d); take(d); }
-    for (const f of files) if (!index.known.has(f)) { take(f); index.files++; }
-    // What it took in and is gone now, with what it took in below it.
-    const here = new Set([...files, ...dirs]);
-    const gone = rels.filter((rel) => index.added.has(rel) && !here.has(rel));
-    const out = (p) => index.added.has(p) && !here.has(p) && gone.some((g) => p === g || p.startsWith(`${g}/`));
-    if (gone.length) {
-      const drop = new Set([...index.added].filter(out));
-      index.lower = index.lower.filter((_, i) => !drop.has(index.all[i]));
-      index.all = index.all.filter((p) => !drop.has(p));
-      for (const p of drop) { if (!index.dirs.delete(p)) index.files--; index.added.delete(p); index.known.delete(p); }
-      moved = true;
-    }
-    return moved ? "moved" : "same";
-  }
-
-  // Whether an index never holds rel: .git and, from git, what it ignores; from the disk, what
-  // lies inside a pruned folder or deeper than it reads. A path named like a pruned folder
-  // may be a file, which the disk index holds: changed() leaves that to recheck.
-  unindexed(rel, fromGit) {
-    if (!rel) return false;
-    if (rel.split("/").includes(".git")) return true;
-    return fromGit ? this.isIgnored(rel) : prunedAbove(this.root, rel, this.on) || rel.split("/").length > indexDepth(this.root, this.on);
-  }
-
-  // Whether the next search reads the index again.
-  outdated(i) {
-    const age = Date.now() - i.at;
-    return (i.stale && age >= STALE_AGE) || age >= INDEX_AGE || (i.dirty && age >= DIRTY_AGE);
+    return applyRecheck(index, rels, files, dirs);
   }
 
   // A search rerun in the background: the list keeps its scroll unless the cursor's row went.
@@ -527,18 +382,10 @@ export default class Files extends View {
         const index = await this.ensureIndex(ctx);
         if (seq !== this.searchSeq || !this.current(ctx)) return;
         // index.lower: index.all in lower case, made once per index, not per keystroke.
-        const matches = [], named = [];
-        index.all.forEach((rel, i) => {
-          const low = index.lower[i];
-          if (!low.includes(q)) return;
-          matches.push(rel);
-          if (baseOf(low).includes(q)) named.push(rel);
-        });
-        this.hits = [...new Set([...named, ...matches])].slice(0, FIND_LIMIT);
-        // The cursor stays on a hit or on a folder above one: both are rows of the hit tree.
-        const before = this.cursor, kept = Boolean(before) && this.hits.some((h) => h === before || h.startsWith(`${before}/`));
-        if (!kept) this.cursor = this.hits[0] ?? "";
-        if (!quiet || this.cursor !== before) this.scrollTo = this.cursor;
+        this.hits = match(index, q);
+        const { cursor, scroll } = cursorAfter(this.hits, this.cursor, quiet);
+        this.cursor = cursor;
+        if (scroll) this.scrollTo = cursor;
       } catch (e) { if (seq === this.searchSeq && this.current(ctx)) { this.hits = []; this.searchError = message(e); } }
       finally { if (seq === this.searchSeq) this.searching = false; cx.notify(); }
     });
@@ -555,7 +402,7 @@ export default class Files extends View {
   // Where git has said it has no files here (no repo, no git, root ignored), it isn't asked.
   ensureIndex(ctx) {
     const i = this.index, source = this.searchSource(), f = ctx.failed;
-    if (i && i.source === source && !this.outdated(i)) return Promise.resolve(i);
+    if (i && i.source === source && !outdated(i, Date.now())) return Promise.resolve(i);
     if (f && f.source === source && f.git === this.git) return Promise.reject(f.error);
     if (this.indexing?.source !== source) {
       const job = { source };
@@ -569,7 +416,7 @@ export default class Files extends View {
             if (!e?.noIndex) throw e;
             ctx.noDisk = true;
             if (source === "disk") built = fromGit = await files();
-            if (!built) throw new Error(this.current(ctx) && this.gitReason() ? `${this.gitReason()} · ${e.message}` : e.message);
+            if (!built) throw new Error(this.current(ctx) && gitReason(this.git) ? `${gitReason(this.git)} · ${e.message}` : e.message);
           }
         }
         const index = { dirs: built.dirs, all: built.all, lower: built.all.map((rel) => rel.toLowerCase()), full: built.full, cut: built.cut, files: built.all.length - built.dirs.size, source: ctx.noDisk ? "git" : source, from: fromGit ? "git" : "disk", known: new Set(built.all), added: new Set(), pending: new Set(), checking: false, at: Date.now(), stale: false, held: false, dirty: Boolean(fromGit ? job.changedGit : job.changedDisk) };
@@ -585,12 +432,6 @@ export default class Files extends View {
     return this.indexing.promise;
   }
 
-  // Why git's files can't serve a search here, once git has answered.
-  gitReason() {
-    const g = this.git;
-    return !g.known ? "" : g.rootIgnored ? "Git ignores this folder" : g.repo ? "Git can't list this folder" : noRepo(g);
-  }
-
   clearSearch(cx) {
     this.query = ""; this.hits = null; this.searchSeq++; this.searching = false; this.searchError = null;
     this.input.set_value("");
@@ -599,111 +440,16 @@ export default class Files extends View {
   }
 
   // ── rows ─────────────────────────────────────────────────────────────────────────────
-  // Every row: { rel, name, dir, depth, open, gone, disk, link, broken, blocked }. gone: not on
-  // disk (deleted). link, broken, blocked: as listDir has them, on rows read from disk; other
-  // rows (search, a folder only git lists) leave them out, so test them with != null and as
-  // booleans.
-  // disk: a folder that opens from disk (this.folders); in Changed, the others fold (this.shut).
+  // The rows shown (rows.js); changedCut: Changed left paths out.
   rows() {
-    const out = [], q = this.query.trim().toLowerCase();
+    const q = this.query.trim().toLowerCase();
     this.changedCut = false;
-    if (this.error) return out; // the folder failed to load: only the error shows
-    if (this.view === "changed") return this.changedRows(q);
-    if (this.hits) return this.hitRows();
-    this.diskRows("", 0, out);
-    return out;
+    if (this.error) return []; // the folder failed to load: only the error shows
+    const tree = { entries: this.entries, folders: this.folders, shut: this.shut };
+    if (this.view === "changed") { const { rows, cut } = changedRows(this.git, q, tree); this.changedCut = cut; return rows; }
+    if (this.hits) return hitRows(this.hits, this.index?.dirs ?? new Set(), this.git.gone);
+    return diskRows(tree);
   }
-
-  diskRows(prefix, depth, out) {
-    for (const e of this.entries.get(prefix) ?? []) {
-      const rel = prefix ? `${prefix}/${e.name}` : e.name, open = e.dir && this.folders.has(rel);
-      out.push({ rel, name: e.name, dir: e.dir, depth, open, gone: false, disk: e.dir, link: e.link, broken: e.broken, blocked: e.blocked });
-      if (open && depth < 40) this.diskRows(rel, depth + 1, out);
-    }
-  }
-
-  // Search matches as a tree: each match under its folders, all open. Git still lists a file
-  // deleted but not yet committed; it shows struck through, as in Changed. A path with
-  // matches below it is a folder even when the index's folders (capped at INDEX_DIRS) lack it.
-  hitRows() {
-    const out = [], keep = new Set(), kids = new Map(), dirs = this.index?.dirs ?? new Set();
-    for (const h of this.hits) { keep.add(h); for (const a of ancestors(h)) keep.add(a); }
-    for (const rel of keep) { const p = dirOf(rel); if (!kids.has(p)) kids.set(p, []); kids.get(p).push(rel); }
-    const isDir = (rel) => dirs.has(rel) || kids.has(rel);
-    const walk = (p, depth) => {
-      const list = (kids.get(p) ?? []).sort((a, b) => Number(isDir(b)) - Number(isDir(a)) || compare(baseOf(a), baseOf(b)));
-      for (const rel of list) {
-        out.push({ rel, name: baseOf(rel), dir: isDir(rel), depth, open: kids.has(rel), gone: this.git.gone.has(rel), disk: false });
-        if (kids.has(rel)) walk(rel, depth + 1);
-      }
-    };
-    walk("", 0);
-    return out;
-  }
-
-  // Exactly the paths git status lists, as a tree: deleted files too, untracked folders and
-  // submodules as one row that opens from disk. A search filters them. The first
-  // CHANGED_LIMIT of them (changedCut: more were left out).
-  changedRows(q) {
-    const g = this.git, out = [], kids = new Map(), dirs = new Set([...g.untracked, ...g.links]);
-    const add = (rel) => { const p = dirOf(rel); if (!kids.has(p)) kids.set(p, new Set()); kids.get(p).add(rel); };
-    let taken = 0;
-    for (const rel of g.files.keys()) {
-      if (q && !rel.toLowerCase().includes(q)) continue;
-      if (taken++ >= CHANGED_LIMIT) { this.changedCut = true; break; }
-      add(rel);
-      for (const a of ancestors(rel)) { dirs.add(a); add(a); }
-    }
-    const order = (list) => list.sort((a, b) => Number(b[1]) - Number(a[1]) || compare(baseOf(a[0]), baseOf(b[0])));
-    // A folder git lists file by file: what it lists.
-    const walk = (p, depth) => {
-      for (const [rel, dir] of order([...(kids.get(p) ?? [])].map((rel) => [rel, dirs.has(rel)]))) {
-        const gone = g.gone.has(rel);
-        if (dir && !gone && (g.untracked.has(rel) || g.links.has(rel))) {
-          const open = this.folders.has(rel) || (Boolean(q) && kids.has(rel));
-          out.push({ rel, name: baseOf(rel), dir: true, depth, open, gone: false, disk: true });
-          if (open) mixed(rel, depth + 1);
-        } else if (dir && !gone) {
-          const open = Boolean(q) || !this.shut.has(rel);
-          out.push({ rel, name: baseOf(rel), dir: true, depth, open, gone: false, disk: false });
-          if (open) walk(rel, depth + 1);
-        } else out.push({ rel, name: baseOf(rel), dir, depth, open: false, gone, disk: false });
-      }
-    };
-    // A folder that opens from disk: what it holds there and, with it, what git lists below it
-    // that isn't there (a file deleted next to new ones). During a search it opens for what
-    // the search found in it, and shows what is on disk once opened.
-    const mixed = (p, depth) => {
-      const disk = this.folders.has(p) ? this.entries.get(p) ?? [] : [], here = new Map();
-      for (const e of disk) here.set(`${p}/${e.name}`, e);
-      const list = new Map([...here].map(([rel, e]) => [rel, e.dir]));
-      for (const rel of kids.get(p) ?? []) if (!list.has(rel)) list.set(rel, dirs.has(rel));
-      for (const [rel, dir] of order([...list])) {
-        const e = here.get(rel), name = baseOf(rel), onDisk = Boolean(e), gone = !onDisk && g.gone.has(rel);
-        const link = e?.link ?? null, broken = e?.broken ?? false, blocked = e?.blocked ?? false;
-        if (dir && onDisk) {
-          const open = this.folders.has(rel) || (Boolean(q) && kids.has(rel));
-          out.push({ rel, name, dir, depth, open, gone, disk: true, link, broken, blocked });
-          if (open && depth < 40) mixed(rel, depth + 1);
-        } else if (dir && !gone) {
-          // Only in git's list (its files deleted): it folds, as in walk.
-          const open = Boolean(q) || !this.shut.has(rel);
-          out.push({ rel, name, dir, depth, open, gone, disk: false });
-          if (open && depth < 40) mixed(rel, depth + 1);
-        } else out.push({ rel, name, dir, depth, open: false, gone, disk: false, link, broken, blocked });
-      }
-    };
-    walk("", 0);
-    return out;
-  }
-
-  // A tracked file is never ignored, though a rule matches it (added with -f), nor its folders.
-  isIgnored(rel) {
-    const g = this.git;
-    return (g.rootIgnored || within(g.ignored, rel)) && !g.forced.has(rel);
-  }
-
-  underUntracked(rel) { return this.git.rootUntracked || within(this.git.untracked, rel); }
 
   // ── preview ──────────────────────────────────────────────────────────────────────────
   closePreview() {
@@ -740,13 +486,18 @@ export default class Files extends View {
   // opens or closes on the first; a file gets the cursor (and the floating window, when it is
   // open, follows), the second shows it in the floating window. With `tab` the first only
   // selects and the second opens a tab (closing the window if it shows that file).
+  // input.js's clickAction decides.
   click(r, n, cx, tab = false) {
     if (!r) return;
     this.cursor = r.rel;
-    if (r.dir || r.gone) { if (n === 1) this.activate(r, cx); return; }
-    if (n === 1) { if (tab) this.stopFollow(); else this.follow(cx); }
-    else if (n === 2 && tab) { if (this.floats(r.rel)) this.closeFloat(); this.openPreview(r.rel, cx); }
-    else if (n === 2) { if (!this.floats(r.rel)) this.openFloat(r.rel); }
+    for (const step of clickAction(r, n, tab, (rel) => this.floats(rel))) {
+      if (step === "activate") this.activate(r, cx);
+      else if (step === "follow") this.follow(cx);
+      else if (step === "stopFollow") this.stopFollow();
+      else if (step === "closeFloat") this.closeFloat();
+      else if (step === "openPreview") this.openPreview(r.rel, cx);
+      else if (step === "openFloat") this.openFloat(r.rel);
+    }
   }
 
   // ── floating preview ─────────────────────────────────────────────────────────────────
@@ -783,8 +534,7 @@ export default class Files extends View {
 
   // The window shows `rel` of this folder now.
   floats(rel) {
-    const f = shared(FLOAT);
-    return isOpen(f) && Boolean(f.file) && samePath(f.file, join(this.root, rel)) && (f.on ?? null) === (this.on ?? null);
+    return floatShows(shared(FLOAT), join(this.root, rel), this.on);
   }
 
   // While the window is open it follows the cursor, as Quick Look follows the selection. From
@@ -823,6 +573,9 @@ export default class Files extends View {
   }
 
   // ── context menu ─────────────────────────────────────────────────────────────────────
+  // The context menu's entries for one path, in groups (input.js).
+  items(m) { return menuItems(m, window()?.platform === "macos"); }
+
   menuOf(r) {
     return { from: this.uid, root: this.root, on: this.on, rel: r.rel, abs: join(this.root, r.rel), dir: r.dir, gone: r.gone, local: !this.on };
   }
@@ -830,7 +583,7 @@ export default class Files extends View {
   // A right-click: the menu as a popup of this mod, at the pointer.
   openMenu(r) {
     const m = this.menuOf(r);
-    openOverlay({ mod: NAME, kind: "popup", width: 228, height: menuHeight(menuItems(m)), props: { menu: m } });
+    openOverlay({ mod: NAME, kind: "popup", width: 228, height: menuHeight(this.items(m)), props: { menu: m } });
   }
 
   // The Menu key, Shift-F10, the `menu` command: the panel draws the menu itself, pinned below
@@ -839,7 +592,7 @@ export default class Files extends View {
     const at = this.shown.findIndex((x) => x.rel === r.rel);
     if (at < 0) return;
     const m = this.menuOf(r);
-    this.kmenu = { m, items: menuItems(m).flat(), at: 0, row: at, depth: r.depth };
+    this.kmenu = { m, items: this.items(m).flat(), at: 0, row: at, depth: r.depth };
     this.scroll.scroll_to_item(at, "center");
     this.handle.focus();
   }
@@ -857,20 +610,9 @@ export default class Files extends View {
     cx.notify();
   }
 
-  // Where the keyboard menu hangs in the list's box: below its row's name. openKeyMenu centred
-  // the row, so with the list's height its place is known: in the middle, or at the top or
-  // bottom when the list can't scroll that far. Null before the list was measured.
+  // Where the keyboard menu hangs in the list's box (input.js). Null before the list was measured.
   // (A virtual list's rows can't hold the menu: they take no click handlers.)
-  keyMenuAt(n) {
-    const k = this.kmenu;
-    if (!this.listHeight) return null;
-    const h = this.listHeight / this.zoom() - 4; // the list, inside the box's bottom padding
-    const offset = Math.max(0, Math.min(k.row * ROW + ROW / 2 - h / 2, n * ROW - h));
-    const top = k.row * ROW - offset, left = 4 + 8 + k.depth * 14 + 18;
-    // Where it wouldn't fit below its row, it opens above it.
-    const tall = menuHeight(menuItems(k.m)) + 4; // with its 2px margin and 1px border
-    return top + ROW + tall > h ? { top, left, up: true } : { top: top + ROW, left };
-  }
+  keyMenuAt(n) { return keyMenuAt(this.kmenu, n, this.listHeight, this.zoom()); }
 
   // on_size_change measures in the window's pixels, which Herdr's zoom makes larger than the
   // mod's: settings() has the zoom (Herdr's picker divides the same way).
@@ -899,7 +641,7 @@ export default class Files extends View {
         .on_click((_e, cx) => pick(id, cx)).child(label);
     };
     return v_flex().p(5).text_color(t.foreground)
-      .children(menuItems(m).flatMap((g, i) => [...(i ? [div().h(1).mx(6).my(4).bg(t.border)] : []), ...g.map(item)]));
+      .children(this.items(m).flatMap((g, i) => [...(i ? [div().h(1).mx(6).my(4).bg(t.border)] : []), ...g.map(item)]));
   }
 
   // What the menu asked for, run by the panel: its tasks outlive the closed popup.
@@ -931,10 +673,7 @@ export default class Files extends View {
   // ── keyboard ─────────────────────────────────────────────────────────────────────────
   move(rows, delta, cx) {
     if (!rows.length) return;
-    const at = rows.findIndex((r) => r.rel === this.cursor);
-    // Without a selected row, down starts at the top and up at the bottom.
-    const from = at >= 0 ? at : delta > 0 ? -1 : rows.length;
-    const next = Math.max(0, Math.min(rows.length - 1, from + delta));
+    const next = moveIndex(rows.length, rows.findIndex((r) => r.rel === this.cursor), delta);
     this.cursor = rows[next].rel;
     this.scroll.scroll_to_item(next);
     this.follow(cx, FOLLOW_MS);
@@ -944,13 +683,10 @@ export default class Files extends View {
     const k = e.key, rows = this.shown, cur = rows.find((r) => r.rel === this.cursor);
     if (e.modifiers?.platform || e.modifiers?.control || e.modifiers?.alt) return;
     if (this.kmenu) {
-      const km = this.kmenu, n = km.items.length;
-      if (k === "down" || k === "tab") km.at = (km.at + 1) % n;
-      else if (k === "up") km.at = (km.at - 1 + n) % n;
-      else if (k === "home" || k === "pageup") km.at = 0;
-      else if (k === "end" || k === "pagedown") km.at = n - 1;
-      else if (k === "enter" || k === "space") this.runKeyMenu(km.items[km.at][0], cx);
-      else if (k === "escape" || k === "left" || k === "menu" || (k === "f10" && e.modifiers?.shift)) this.closeKeyMenu();
+      const km = this.kmenu, next = menuKey(km.at, km.items.length, k, e.modifiers?.shift);
+      if (next.at !== undefined) km.at = next.at;
+      else if (next.run !== undefined) this.runKeyMenu(km.items[next.run][0], cx);
+      else if (next.close) this.closeKeyMenu();
       cx.stop_propagation(); cx.notify(); return;
     }
     if (this.typing) {
@@ -989,9 +725,7 @@ export default class Files extends View {
   // ── drawing ──────────────────────────────────────────────────────────────────────────
   row(r, t) {
     const g = this.git, rel = r.rel;
-    // An ignored path below an untracked folder (newdir/node_modules) is dimmed, not new.
-    const own = g.status.get(rel), ignored = !own && this.isIgnored(rel);
-    const status = own ?? (!ignored && this.underUntracked(rel) ? "?" : null);
+    const { status, ignored } = rowStatus(g, rel);
     const color = statusColor(t, status);
     const lines = g.diff.get(rel), counts = r.dir ? g.counts.get(rel) : null, selected = rel === this.cursor;
     const showLines = Boolean(lines?.[0] || lines?.[1]) && (!r.dir || this.width >= 360);
@@ -1083,23 +817,6 @@ export default class Files extends View {
       .child(svg(ICON("branch")).size(13));
   }
 
-  note(rows) {
-    const g = this.git;
-    if (this.error) return this.error;
-    if (!this.root) return "No folder";
-    if (this.view === "changed") {
-      if (!g.known) return "Reading git…";
-      if (!g.repo) return noRepo(g);
-      if (g.failed) return GIT_FAILED;
-      return rows.length ? null : this.query.trim() ? "No matching changes" : g.rootUntracked ? "This whole folder is new to git" : g.rootIgnored ? "Git ignores this whole folder" : "No changes";
-    }
-    if (this.searching && !rows.length) return "Searching…";
-    if (this.hits && this.searchError) return this.searchError;
-    if (this.hits) return rows.length ? null : this.index?.from === "git" ? "No matches · ignored files left out" : "No matches";
-    if (this.loading && !rows.length) return "Loading files…";
-    return rows.length ? null : "Empty folder";
-  }
-
   render(cx) {
     if (this.menu) return this.renderMenu();
     this.sync(cx);
@@ -1128,11 +845,8 @@ export default class Files extends View {
       if (at >= 0) { this.scroll.scroll_to_item(at, "center"); this.scrollTo = null; }
       else if (!this.pending.size && !this.loading) this.scrollTo = null;
     }
-    const note = this.note(rows), more = [];
-    if (this.limited && !this.hits) more.push(`Folders show their first ${PER_FOLDER} entries`);
-    if (this.hits?.length >= FIND_LIMIT) more.push(`First ${FIND_LIMIT} matches`);
-    if (this.view === "changed" && this.changedCut) more.push(`Changed shows the first ${thousands(CHANGED_LIMIT)} paths`);
-    if (this.hits && this.index && !this.index.full) more.push(`Search covers ${limits(this.index.cut)}`);
+    const note = listNote({ error: this.error, root: this.root, view: this.view, git: this.git, query: this.query, searching: this.searching, hits: this.hits, searchError: this.searchError, index: this.index, loading: this.loading }, rows);
+    const more = footerLines({ limited: this.limited, hits: this.hits, view: this.view, changedCut: this.changedCut, index: this.index });
     return root
       .child(this.summary(t))
       .child(h_flex().id("rf-search").flex_none().mx(8).mt(8).mb(4).h(28).px(8).gap(6).items_center().rounded(7).bg(t.canvas ?? t.surface)
