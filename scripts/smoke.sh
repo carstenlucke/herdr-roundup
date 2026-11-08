@@ -214,7 +214,10 @@ trap 'exit 130' INT TERM
 # The test home: a symlink at $TH (also a dangling one counts as taken) to a folder in $WORK.
 [ ! -e "$TH" ] && [ ! -L "$TH" ] || die "$TH exists already"
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/herdr-smoke.XXXXXX")
-WORK=$(cd "$WORK" && pwd -P)
+# Through a second variable: a failing cd would set WORK to "" before set -e ends the script,
+# and cleanup would then leave the folder behind.
+work_real=$(cd "$WORK" && pwd -P)
+WORK=$work_real
 mkdir "$WORK/home" "$WORK/fx"
 ln -s "$WORK/home" "$TH"
 OWN_TH=1
