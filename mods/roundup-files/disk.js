@@ -32,7 +32,7 @@ const noSh = (e, on) => on && String(e).includes("cannot start sh: program not f
 // The home of `on`'s machine: this one's from home(), another's once learnHome has read it
 // ("" until then, which is no folder's).
 const homes = new Map();
-const homeOf = (on) => (on ? homes.get(on) ?? "" : home());
+export const homeOf = (on) => (on ? homes.get(on) ?? "" : home());
 async function learnHome(on) {
   if (!on || homes.has(on)) return;
   const r = await exec("sh", ["-c", 'printf %s "$HOME"'], { on }).catch(() => null);

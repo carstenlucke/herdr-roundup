@@ -13,11 +13,12 @@ import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, InputState, Input, Scrollbar, Popup, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { spaces, panes, focused, readTextFile, watchFolder, theme, settings, window, props, notify, openOverlay, closeOverlay, shared, setShared, nextCommand, run } from "herdr";
 import { iconFor, rootIcon } from "./icon.js";
-import { listDir, buildIndex, diskSearch, kinds, indexDepth, prunedName, prunedAbove, realPath, PER_FOLDER, INDEX_DIRS, INDEX_PATHS } from "./disk.js";
+import { listDir, buildIndex, diskSearch, kinds, prunedName, realPath, homeOf, PER_FOLDER, INDEX_DIRS, INDEX_PATHS } from "./disk.js";
 import { readGit, listFiles, emptyGit, NEW, MODIFIED, DELETED } from "./git.js";
 import { openExternal, revealExternal, copy, sendToAgent } from "./actions.js";
 import { dirOf, baseOf, ancestors, relTo, join } from "./tree.js";
-import { diskRows, hitRows, changedRows, isIgnored, rowStatus, CHANGED_LIMIT } from "./rows.js";
+import { diskRows, hitRows, changedRows, rowStatus, CHANGED_LIMIT } from "./rows.js";
+import { match, cursorAfter, outdated, classify, applyRecheck, STALE_AGE, FIND_LIMIT } from "./search.js";
 // A copy of roundup-preview's: how it opens and which pane already shows a file. sync.sh
 // checks that the two copies match.
 import { FLOAT, openTab, timerOf, floatSpec, newToken, isOpen, unanswered, placed } from "./open-file.js";
@@ -29,17 +30,6 @@ const ICON = (name) => `mods/${NAME}/${name}.svg`;
 // A link row's tooltip: where it points, as written.
 const linkTip = (r) => `${r.broken ? "Broken link" : "Link"}${r.link ? ` to ${r.link}` : ""}${r.blocked ? " (no access to check it)" : ""}`;
 const ROW = 26;
-const FIND_LIMIT = 200;
-// A search index older than this is read again on the next search, whatever the watch said.
-const INDEX_AGE = 300000;
-// After a file the index knows changed (it may be gone), the index is read again once it is
-// this old: at most one rebuild per 30 s while files keep changing.
-const DIRTY_AGE = 30000;
-// After a folder changed (or too many paths to list), the index is read again once it is this
-// old: at most one rebuild per 3 s while a build keeps making folders.
-const STALE_AGE = 3000;
-// More new paths than this in one batch read the index again instead of checking each.
-const CHECK_PATHS = 100;
 // How many folders keep their open folders, cursor and preview while another one shows.
 const SAVED = 50;
 // How long ↑ ↓ rest on a row before the floating window follows to it.
@@ -55,11 +45,6 @@ const SOURCES = ["git", "disk"];
 // the panel copy that opened it: every shown copy reads the request, only that one runs it.
 const REQUEST = `${NAME}.request`;
 
-// What a change in the shown folder's .git does to an index from git: excludes and config
-// (core.excludesFile) change its list, so it is read again; the index (`git add -f`,
-// `git rm --cached` of an ignored file) changes on every add and commit, so it only comes
-// out dirty, read again once DIRTY_AGE old. Anything else in .git: nothing (null).
-const gitMeta = (rel) => (rel === ".git/info/exclude" || rel === ".git/config" ? "stale" : rel === ".git/index" ? "dirty" : null);
 const message = (e) => String(e?.message ?? e);
 const thousands = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 // What cut an index short, for the footer: "the first 20,000 folders and the first 40,000 files".
@@ -140,7 +125,7 @@ export default class Files extends View {
       this.refresh(cx);
       // A known file or folder changed while no other change came after it: the hits may still
       // list it (a folder's hold normally reads it again before this).
-      if (this.index && (this.index.dirty || this.index.stale) && this.outdated(this.index)) this.searchAgain(cx);
+      if (this.index && (this.index.dirty || this.index.stale) && outdated(this.index, Date.now())) this.searchAgain(cx);
     });
     // Commands (keys.json: "roundup-files.<command>"). "focus" also comes from Herdr: pane.go
     // moved onto this panel (mod.json "focusable"), or a popup over it closed.
@@ -294,51 +279,17 @@ export default class Files extends View {
     });
   }
 
-  // A folder the index knows, or the root (too many changes to list), means the folder
-  // structure may have changed: the index is read again. A path it doesn't know, and one it
-  // took in that way, is checked on its own (recheck), so a save through a temporary file
-  // doesn't read the whole index again; one it can't place this way reads it again. A file
-  // it knows may have been deleted: the index is read again once it is DIRTY_AGE old, not on
-  // every save; after a folder changed, once it is STALE_AGE old (reindex), not on every
-  // batch a build sends. Paths the index never holds don't count: .git and, from the disk, the pruned
-  // folders, from git, what it ignores. From git, a changed .gitignore counts, and so does what
-  // in .git changes git's list without a path changing (gitMeta). Only the .git in the shown
-  // folder is watched: in a worktree (.git is a file there), below a repo's top folder and for
-  // a global excludes file, the index catches such a change only once it is INDEX_AGE old.
-  // A change during an index build may be missing from it: that index comes out dirty.
+  // A batch of the folder watch (search.js's classify has the rules): the index goes stale
+  // (read again once STALE_AGE old, reindex), dirty (once DIRTY_AGE old) or checks paths on
+  // their own (recheck); the tree refreshes unless the batch changed nothing it shows. Only
+  // the .git in the shown folder is watched: in a worktree (.git is a file there), below a
+  // repo's top folder and for a global excludes file, the index catches such a change only
+  // once it is INDEX_AGE old.
   changed(paths, cx) {
-    const index = this.index, job = this.indexing, fromGit = index?.from === "git";
-    const check = [];
-    // A path it can't place, or none at all, refreshes as well: it can't tell.
-    let shown = !paths.length;
-    for (const abs of paths) {
-      const rel = relTo(this.root, abs) ?? relTo(this.ctx.real, abs);
-      if (rel === null) { shown = true; continue; }
-      if (rel === ".git") { this.ctx.base = null; this.ctx.drops++; } // a repo made or removed here: rev-parse again
-      if (!shown && !this.unseen(rel)) shown = true;
-      // Either source may end up read from the other (ensureIndex): both rules are kept.
-      const meta = gitMeta(rel);
-      if (job) {
-        if (baseOf(rel) === ".gitignore" || meta || !this.unindexed(rel, true)) job.changedGit = true;
-        if (!this.unindexed(rel, false)) job.changedDisk = true;
-      }
-      if (!index) continue;
-      if (fromGit && (baseOf(rel) === ".gitignore" || meta === "stale")) { index.stale = true; continue; }
-      if (fromGit && meta === "dirty") { index.dirty = true; continue; }
-      if (this.unindexed(rel, fromGit)) continue;
-      // From the disk, a new path named like a pruned folder (a build's `dist`, say): recheck
-      // tells a file from a folder. One recheck can't place is most likely the folder.
-      if (!fromGit && !index.known.has(rel) && prunedName(this.root, rel, this.on) && !this.placeable(index, rel)) continue;
-      if (rel === "" || index.dirs.has(rel)) index.stale = true;
-      else if (index.added.has(rel) || (!index.known.has(rel) && this.placeable(index, rel))) check.push(rel);
-      // A capped index can't place it, and reading it again would be cut short as well.
-      else if (!index.known.has(rel)) { if (index.full) index.stale = true; else index.dirty = true; }
-      else index.dirty = true;
-    }
-    if (index && !index.stale && check.length) {
-      if (check.length > CHECK_PATHS) index.stale = true;
-      else this.recheck(index, check, cx);
-    }
+    const index = this.index;
+    const { shown, drops, recheck } = classify(paths, { root: this.root, real: this.ctx.real, home: homeOf(this.on), git: this.git, folders: this.folders, index, job: this.indexing });
+    if (drops) { this.ctx.base = null; this.ctx.drops += drops; } // a repo made or removed here: rev-parse again
+    if (recheck.length) this.recheck(index, recheck, cx);
     if (index) this.reindex(index, cx);
     if (shown) this.refresh(cx);
   }
@@ -346,33 +297,10 @@ export default class Files extends View {
   // Reads the index again when it is due. A stale one younger than STALE_AGE is read once
   // that has passed (one hold per index), so a build making folders costs one read per 3 s.
   reindex(index, cx) {
-    if (this.outdated(index)) { this.searchAgain(cx); return; }
+    if (outdated(index, Date.now())) { this.searchAgain(cx); return; }
     if (!index.stale || index.held) return;
     index.held = true;
-    cx.timer.after(STALE_AGE - (Date.now() - index.at), (cx) => { if (this.index === index && this.outdated(index)) this.searchAgain(cx); });
-  }
-
-  // Whether a change at rel leaves the tree and git's marks as they are, so it needn't
-  // refresh: its folder isn't open, and git ignores it (a build in node_modules or target) or
-  // there is no repo. .git isn't ignored: a commit or `git add` refreshes, and outside a repo
-  // a `git init` in the shown folder does. A tracked file an ignore rule matches isn't ignored
-  // either (isIgnored), so its edits show at once. The 10s timer still catches what this misses.
-  unseen(rel) {
-    const g = this.git;
-    if (!rel || !g.known) return false;
-    const dir = dirOf(rel);
-    if (!dir || this.folders.has(dir)) return false;
-    if (!g.repo) return !rel.startsWith(".git/");
-    return this.isIgnored(rel) && !g.status.has(rel);
-  }
-
-  // Whether recheck can take rel into the index: not into one a limit cut short; from the
-  // disk, only into a folder the index holds (unindexed already left out what is too deep).
-  placeable(index, rel) {
-    if (!index.full) return false;
-    if (index.from === "git") return true;
-    const dir = dirOf(rel);
-    return !dir || index.dirs.has(dir);
+    cx.timer.after(STALE_AGE - (Date.now() - index.at), (cx) => { if (this.index === index && outdated(index, Date.now())) this.searchAgain(cx); });
   }
 
   // Reads what rels are now and puts that into the index: a new file goes in (from git, with
@@ -420,43 +348,7 @@ export default class Files extends View {
       }
     } catch { return "stale"; }
     if (!this.current(ctx) || this.index !== index || index.stale) return "same";
-    // Past a limit, nothing is taken in: the index is read again, which cuts it and says so.
-    // From git only the files count (listFiles caps no folders); folders aren't files.
-    const newDirs = new Set(dirs.filter((d) => !index.dirs.has(d) && !index.known.has(d)));
-    const newFiles = new Set(files.filter((f) => !index.known.has(f) && !newDirs.has(f)));
-    if (index.files + newFiles.size > INDEX_PATHS) return "stale";
-    if (index.from === "disk" && index.dirs.size + newDirs.size > INDEX_DIRS) return "stale";
-    let moved = false;
-    const take = (rel) => { if (index.known.has(rel)) return; index.all.push(rel); index.lower.push(rel.toLowerCase()); index.known.add(rel); index.added.add(rel); moved = true; };
-    for (const d of dirs) if (!index.dirs.has(d)) { if (index.known.has(d)) index.files--; index.dirs.add(d); take(d); }
-    for (const f of files) if (!index.known.has(f)) { take(f); index.files++; }
-    // What it took in and is gone now, with what it took in below it.
-    const here = new Set([...files, ...dirs]);
-    const gone = rels.filter((rel) => index.added.has(rel) && !here.has(rel));
-    const out = (p) => index.added.has(p) && !here.has(p) && gone.some((g) => p === g || p.startsWith(`${g}/`));
-    if (gone.length) {
-      const drop = new Set([...index.added].filter(out));
-      index.lower = index.lower.filter((_, i) => !drop.has(index.all[i]));
-      index.all = index.all.filter((p) => !drop.has(p));
-      for (const p of drop) { if (!index.dirs.delete(p)) index.files--; index.added.delete(p); index.known.delete(p); }
-      moved = true;
-    }
-    return moved ? "moved" : "same";
-  }
-
-  // Whether an index never holds rel: .git and, from git, what it ignores; from the disk, what
-  // lies inside a pruned folder or deeper than it reads. A path named like a pruned folder
-  // may be a file, which the disk index holds: changed() leaves that to recheck.
-  unindexed(rel, fromGit) {
-    if (!rel) return false;
-    if (rel.split("/").includes(".git")) return true;
-    return fromGit ? this.isIgnored(rel) : prunedAbove(this.root, rel, this.on) || rel.split("/").length > indexDepth(this.root, this.on);
-  }
-
-  // Whether the next search reads the index again.
-  outdated(i) {
-    const age = Date.now() - i.at;
-    return (i.stale && age >= STALE_AGE) || age >= INDEX_AGE || (i.dirty && age >= DIRTY_AGE);
+    return applyRecheck(index, rels, files, dirs);
   }
 
   // A search rerun in the background: the list keeps its scroll unless the cursor's row went.
@@ -519,18 +411,10 @@ export default class Files extends View {
         const index = await this.ensureIndex(ctx);
         if (seq !== this.searchSeq || !this.current(ctx)) return;
         // index.lower: index.all in lower case, made once per index, not per keystroke.
-        const matches = [], named = [];
-        index.all.forEach((rel, i) => {
-          const low = index.lower[i];
-          if (!low.includes(q)) return;
-          matches.push(rel);
-          if (baseOf(low).includes(q)) named.push(rel);
-        });
-        this.hits = [...new Set([...named, ...matches])].slice(0, FIND_LIMIT);
-        // The cursor stays on a hit or on a folder above one: both are rows of the hit tree.
-        const before = this.cursor, kept = Boolean(before) && this.hits.some((h) => h === before || h.startsWith(`${before}/`));
-        if (!kept) this.cursor = this.hits[0] ?? "";
-        if (!quiet || this.cursor !== before) this.scrollTo = this.cursor;
+        this.hits = match(index, q);
+        const { cursor, scroll } = cursorAfter(this.hits, this.cursor, quiet);
+        this.cursor = cursor;
+        if (scroll) this.scrollTo = cursor;
       } catch (e) { if (seq === this.searchSeq && this.current(ctx)) { this.hits = []; this.searchError = message(e); } }
       finally { if (seq === this.searchSeq) this.searching = false; cx.notify(); }
     });
@@ -547,7 +431,7 @@ export default class Files extends View {
   // Where git has said it has no files here (no repo, no git, root ignored), it isn't asked.
   ensureIndex(ctx) {
     const i = this.index, source = this.searchSource(), f = ctx.failed;
-    if (i && i.source === source && !this.outdated(i)) return Promise.resolve(i);
+    if (i && i.source === source && !outdated(i, Date.now())) return Promise.resolve(i);
     if (f && f.source === source && f.git === this.git) return Promise.reject(f.error);
     if (this.indexing?.source !== source) {
       const job = { source };
@@ -601,8 +485,6 @@ export default class Files extends View {
     if (this.hits) return hitRows(this.hits, this.index?.dirs ?? new Set(), this.git.gone);
     return diskRows(tree);
   }
-
-  isIgnored(rel) { return isIgnored(this.git, rel); }
 
   // ── preview ──────────────────────────────────────────────────────────────────────────
   closePreview() {
