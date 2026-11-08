@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Herdr Roundup</title>
+<meta name="description" content="A layout for Herdr App: spaces that show where each repo stands, a files panel with git built in, a preview for every file, panes with names, and updates through your agent.">
+<meta property="og:title" content="Herdr Roundup">
+<meta property="og:description" content="A layout for Herdr App, quieter and more telling.">
+<meta property="og:image" content="https://carstenlucke.github.io/herdr-roundup/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="750">
+<link rel="icon" href="img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+<nav class="site-nav">
+  <a class="brand" href="#top"><img src="img/logo.png" alt="">Herdr Roundup</a>
+  <div class="links">
+    <a href="#window">Overview</a>
+    <a href="#spaces">Features</a>
+    <a href="#install">Install</a>
+    <a href="#questions">Questions</a>
+  </div>
+  <div class="right">
+    <a class="herdr" href="https://herdr.dev">Herdr App ↗</a>
+    <a class="gh" href="https://github.com/carstenlucke/herdr-roundup" title="Star Herdr Roundup on GitHub"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.4l-5.8 3.1 1.1-6.5L2.6 9.4l6.5-.9z"/></svg>Star</a>
+    <a class="pill" href="#install">Install</a>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="hero-head">
+    <div>
+      <h1>Round up<br><span>the herd.</span></h1>
+      <nav class="stats" aria-label="In numbers">
+        <a href="#mods"><b>7</b><span>mods <i>→</i></span></a>
+        <a href="#viewers"><b>6</b><span>file viewers <i>→</i></span></a>
+        <a href="#install"><b>1</b><span>sentence to install <i>→</i></span></a>
+      </nav>
+    </div>
+    <div>
+      <p class="sub">Herdr Roundup is a layout for <a href="https://herdr.dev">Herdr App</a> that gathers your herd in one window, quieter and more telling. <b>Every space shows where its repo stands</b>, files open in a real preview, panes carry names you give them, and a new release installs through your agent.</p>
+      <div class="cta">
+        <a class="pill" href="#install">Install Herdr Roundup</a>
+        <a class="ghost" href="https://github.com/carstenlucke/herdr-roundup">View on GitHub <span class="arrow">→</span></a>
+      </div>
+    </div>
+  </div>
+  <div class="show" role="region" aria-roledescription="carousel" aria-label="Herdr Roundup windows" tabindex="0">
+    <div class="glow" aria-hidden="true"></div>
+    <div class="frame">
+      <div class="track">
+        <figure class="slide" aria-roledescription="slide"><img draggable="false" src="img/window.webp" width="1920" height="1200" alt="The whole window: spaces with git state, two agents side by side, a README in the floating preview, the files panel" data-title="The whole window" data-text="Spaces with their git state, two agents side by side, a README in the floating preview, the files panel."></figure>
+        <figure class="slide" aria-roledescription="slide"><img draggable="false" src="img/hero-files-changed.webp" width="1920" height="1200" alt="The files panel showing only the changed files" data-title="Only what changed" data-text="The files panel lists exactly what git status lists, with lines added and removed."></figure>
+        <figure class="slide" aria-roledescription="slide"><img draggable="false" src="img/hero-preview-tab.webp" width="1920" height="1200" alt="package.json in a preview tab as a JSON tree" data-title="A preview for every file" data-text="Markdown, PDF, pictures, CSV, JSON and code, in a floating window or a tab of their own."></figure>
+        <figure class="slide" aria-roledescription="slide"><img draggable="false" src="img/hero-update.webp" width="1920" height="1200" alt="The update menu under the logo, offering the next version" data-title="Updates through your agent" data-text="A new release shows on the logo; your agent installs it after asking you."></figure>
+      </div>
+    </div>
+    <div class="show-bar">
+      <p class="show-cap" aria-live="off"><b></b> <span></span></p>
+      <div class="show-nav">
+        <div class="dots" role="tablist"></div>
+        <button class="arr" type="button" data-step="-1" aria-label="Previous window">←</button>
+        <button class="arr" type="button" data-step="1" aria-label="Next window">→</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section class="herd" id="window">
+  <div class="herd-head">
+    <h2>One window. <span>It tells you more.</span></h2>
+    <p>Herdr Roundup keeps the shape of Herdr's default layout: spaces and agents on the left, the tab's panes in the middle, a panel on the right. What changes is how much each part tells you, and how few clicks it takes to look closer.</p>
+  </div>
+  <div class="herd-notes">
+    <div><b>Spaces with their state</b><span>Repo, branch, ahead and behind, uncommitted changes and how many agents work there. <a href="#spaces">More</a></span></div>
+    <div><b>Files with git built in</b><span>All files or only the changed ones, with lines added and removed, and search across folders you haven't opened. <a href="#files">More</a></span></div>
+    <div><b>A preview for every file</b><span>Markdown, PDF, pictures, CSV, JSON and code, in a floating window or a tab of their own. <a href="#preview">More</a></span></div>
+  </div>
+</section>
+
+<div class="doc">
+  <nav class="toc" aria-label="Features">
+    <div class="file">Herdr-Roundup.json</div>
+    <a href="#spaces"><span>01</span>Spaces at a glance</a>
+    <a href="#files"><span>02</span>Files with git built in</a>
+    <a href="#changed"><span>03</span>Only what changed</a>
+    <a href="#search"><span>04</span>Search and links</a>
+    <a href="#preview"><span>05</span>A preview for every file</a>
+    <a href="#panes"><span>06</span>Panes with names</a>
+    <a href="#closing"><span>07</span>Closing asks when it matters</a>
+    <a href="#updates"><span>08</span>Updates through your agent</a>
+    <a href="#install"><span>09</span>Install</a>
+    <a href="#questions"><span>10</span>Questions</a>
+  </nav>
+
+  <div class="md">
+    <section id="spaces">
+      <h2><i>01</i>Spaces at a glance</h2>
+      <div class="side">
+        <div>
+          <p>Each space says where its repo stands, without opening it. Under the name: <b>repo · branch</b>, <code>↑ahead</code> <code>↓behind</code> and <code>±n</code> uncommitted changes. A space on <code>main</code> under its repo's name keeps the line short.</p>
+          <p>The <b>agent badge</b> counts the agents in a space. It stays gray while all of them are idle; otherwise it takes the color of the most urgent one: <span style="color:#f0705f"><span class="dot" style="background:#f0705f"></span>blocked</span>, <span style="color:#76a8ff"><span class="dot" style="background:#76a8ff"></span>done</span> or <span style="color:#e5c07b"><span class="dot" style="background:#e5c07b"></span>working</span>.</p>
+          <p><b>Worktrees of one repo share a card</b>, under the repo's name, and you drag the card as one. The counts refresh after a commit, a checkout or an agent's turn, and when the window comes to the front.</p>
+        </div>
+        <figure class="crop narrow"><button class="zoom" type="button"><img src="img/spaces.webp" width="269" height="480" alt="The spaces list: a card for the repo atlas with three worktrees, each with branch, ahead/behind, changes and an agent badge"></button></figure>
+      </div>
+    </section>
+
+    <section id="files">
+      <h2><i>02</i>Files with git built in</h2>
+      <div class="side">
+        <div>
+          <p>The <b>Files</b> button at the right of the tab bar opens a panel on the focused pane's folder. Every row carries its git state: names in the color of their status, files ending in <code>+N −N</code> and their letter, folders with a count of new, modified and deleted files below them. Paths git ignores are dimmed.</p>
+          <p>The <b>branch row</b> on top shows the branch, ahead and behind, the lines changed and a bar of modified, new and deleted paths. Icons come from Symbols and look right in light and dark themes.</p>
+          <h3>Keys and the menu</h3>
+          <p>Arrows move and open folders, <kbd>Space</kbd> previews, <kbd>Enter</kbd> opens a tab, <kbd>/</kbd> searches, <kbd>Esc</kbd> backs out. The right-click menu (or the Menu key) opens, reveals, copies relative or absolute paths, or sends <code>@path</code> to the tab's agent.</p>
+        </div>
+        <figure class="crop"><button class="zoom" type="button"><img src="img/files.webp" width="384" height="600" alt="The files panel in All: the folder tree with git state on every row"></button></figure>
+      </div>
+    </section>
+
+    <section id="changed">
+      <h2><i>03</i>Only what changed</h2>
+      <div class="side">
+        <div>
+          <p><b>Changed</b> lists exactly what <code>git status</code> lists, deleted files included, as a tree with every folder open. The switch carries the count, so you see how much an agent touched before you look. A deleted file shows struck through; an untracked folder is one row that opens from disk.</p>
+          <p>Large repos stay fast: Changed shows the first 2,000 paths, and the panel says when it cuts a list short. Whether you look at All or Changed stays after a restart.</p>
+        </div>
+        <figure class="crop"><button class="zoom" type="button"><img src="img/files-changed.webp" width="384" height="600" alt="The files panel in Changed: only the five changed files, every folder open"></button></figure>
+      </div>
+    </section>
+
+    <section id="search">
+      <h2><i>04</i>Search, and where links point</h2>
+      <p><b>Search covers folders you haven't opened yet.</b> By default it reads git's files, so <code>node_modules</code> and other ignored folders stay out; the switch at the end of the field searches the disk instead. Matches show as a tree, names that match first.</p>
+      <p><b>Symlinks are marked:</b> the name in italics with a small arrow after it. Rest the pointer on the arrow and it says where the link points. A link whose target is missing has a dimmed name and a red arrow.</p>
+      <div class="pair">
+        <figure class="crop"><button class="zoom" type="button"><img src="img/search.webp" width="384" height="352" alt="A search for facets finds docs/facets.md in a folder that was never opened"></button></figure>
+        <figure class="crop"><button class="zoom" type="button"><img src="img/symlink.webp" width="384" height="200" alt="AGENTS.md in italics with an arrow, its hover saying Link to docs/agents.md"></button></figure>
+      </div>
+    </section>
+
+    <section id="preview">
+      <h2><i>05</i>A preview for every file</h2>
+      <p><b>Double-click a file</b>, or press <kbd>Space</kbd>, and it opens in a window over the layout. While the window is open it follows the selection in the files panel. Drag it by its header; it opens where you left it.</p>
+      <figure class="crop"><button class="zoom" type="button"><img src="img/float.webp" width="944" height="765" alt="The floating preview showing a rendered README over the panes"></button></figure>
+      <p style="margin-top:30px"><b>Cmd-double-click</b> (Ctrl on Windows and Linux) or <kbd>Enter</kbd> opens the file in a tab of its own. A file that already has a tab brings that tab to the front. <b>⋯</b> opens it in your editor, with the default app, or reveals it.</p>
+      <figure class="crop"><button class="zoom" type="button"><img src="img/preview-tab.webp" width="795" height="640" alt="package.json in a preview tab, as a JSON tree with Tree and Raw"></button></figure>
+      <ul id="viewers">
+        <li><b>Markdown</b> rendered, with local images, a table of contents and Preview | Raw. Web images load only after you ask.</li>
+        <li><b>PDF</b> pages with jumping and zoom, <b>pictures</b> fitted with their pixel size.</li>
+        <li><b>CSV and TSV</b> as a table with a fixed header, <b>JSON</b> as a tree that opens row by row.</li>
+        <li><b>Everything else</b> as read-only code with syntax colors.</li>
+      </ul>
+      <p style="margin-top:18px">A preview reloads when the file changes on disk, and a preview tab still shows its file after a restart.</p>
+    </section>
+
+    <section id="panes">
+      <h2><i>06</i>Panes with names</h2>
+      <p>Every pane has a header: the program's icon, the pane's name, the terminal's id in a small chip (<code>t7</code>), its folder and the agent's status. <b>Double-click the chip</b> to copy the id, handy when one agent should talk to another.</p>
+      <figure class="crop"><button class="zoom" type="button"><img src="img/pane-header.webp" width="642" height="120" alt="A pane header: Reviewer, the id t7, the folder, a spinner and the buttons rename, split right, split down, zoom and close"></button></figure>
+      <p style="margin-top:30px"><b>Give a pane a name of your own</b>: double-click its name, or the pencil that appears on hover. The name stays with the terminal; an empty one goes back to the program's. On hover the header also splits, zooms and closes the pane.</p>
+      <figure class="crop" style="max-width:500px"><button class="zoom" type="button"><img src="img/rename.webp" width="500" height="296" alt="The Rename pane dialog with the name Facet filters typed in"></button></figure>
+    </section>
+
+    <section id="closing">
+      <h2><i>07</i>Closing asks when it matters</h2>
+      <p>You choose when closing a tab or a pane asks first: <b>Never</b>, <b>While an agent works</b> (the default) or <b>Always</b>. Tabs have the choice in their right-click menu, panes in the terminal's. <kbd>cmd-w</kbd> closes the tab, <kbd>cmd-shift-w</kbd> the focused pane, both through your choice.</p>
+      <div class="stack">
+        <figure class="crop"><button class="zoom" type="button"><img src="img/close-menu.webp" width="520" height="290" alt="The tab's right-click menu with Ask before closing a tab: Never, While an agent works, Always"></button></figure>
+        <figure class="crop"><button class="zoom" type="button"><img src="img/close-confirm.webp" width="520" height="270" alt="The question Close tab search-filters? with Cancel holding the keyboard"></button></figure>
+      </div>
+      <p style="margin-top:30px">The question says what would end, and it opens with <b>Cancel</b> holding the keyboard: a second <kbd>cmd-w</kbd> or an Enter too many closes nothing. <kbd>Tab</kbd> moves to Confirm, <kbd>Esc</kbd> cancels.</p>
+    </section>
+
+    <section id="updates">
+      <h2><i>08</i>Updates through your agent</h2>
+      <div class="side wide">
+        <div>
+          <p>The installed version sits under the name at the top left. <b>Once a day</b> the layout asks GitHub for its latest release: a plain request with a generic name, so GitHub sees nothing but your IP address.</p>
+          <p>When a newer version is out, the logo gets a point, the new version shows under the name, and one notification appears. Click the logo or the name for the menu: check now, update, read the release notes, skip a version, or check <b>only when you ask</b>.</p>
+          <p><b>Update</b> opens a tab with your agent and a brief. It reads the release notes, tells you what would change, keys you edited yourself included, and <b>asks before it installs anything</b>.</p>
+        </div>
+        <figure class="crop narrow"><button class="zoom" type="button"><img src="img/update.webp" width="420" height="440" alt="The update menu under the logo: details, Check for updates, Update to the next version with an agent, Release notes, Skip"></button></figure>
+      </div>
+    </section>
+
+    <section id="install">
+      <h2><i>09</i>Install</h2>
+      <p>Herdr Roundup needs <a href="https://herdr.dev">Herdr App</a>. The easiest way in is your agent: paste this into it.</p>
+      <div class="box">
+        <div class="line"><code>Read ~/.config/herdr-app/AGENTS.md, then add this layout: https://github.com/carstenlucke/herdr-roundup/tree/main</code><button class="copy" type="button">Copy</button></div>
+      </div>
+      <p style="margin-top:22px">Or by hand, from a clone of the repo:</p>
+      <div class="box">
+        <div class="line"><code>git clone https://github.com/carstenlucke/herdr-roundup.git && cd herdr-roundup</code><button class="copy" type="button">Copy</button></div>
+        <div class="line"><code>scripts/sync.sh</code><button class="copy" type="button">Copy</button></div>
+        <div class="line"><code>herdr-app do layout.switch '{"name":"Herdr-Roundup"}'</code><button class="copy" type="button">Copy</button></div>
+      </div>
+      <p class="under"><code>sync.sh</code> copies the layout, the <code>roundup-*</code> mods and the themes into <code>~/.config/herdr-app</code>, and replaces only the <code>layout:Herdr-Roundup</code> section of your <code>keys.json</code>. Later releases come through the update menu.</p>
+    </section>
+
+    <section id="questions">
+      <h2><i>10</i>Questions</h2>
+      <details id="mods"><summary>Which seven mods come with it?</summary>
+        <ul>
+          <li><code>roundup-workspace-chrome</code>: the sheep, the name and the version at the top left, and the update check.</li>
+          <li><code>roundup-spaces</code>: the spaces list with git state, agent badges and worktree cards.</li>
+          <li><code>roundup-tabs</code>: the tab bar, and when closing a tab asks.</li>
+          <li><code>roundup-pane</code>: pane headers with their id and your names, and when closing a pane asks.</li>
+          <li><code>roundup-confirm</code>: the question before something closes, Cancel first.</li>
+          <li><code>roundup-files</code>: the files panel with All, Changed, search and git state.</li>
+          <li><code>roundup-preview</code>: the floating preview and preview tabs, with six viewers.</li>
+        </ul>
+      </details>
+      <details><summary>Does it change Herdr's own layouts or mods?</summary><p>No. The layout brings its own mods, all named <code>roundup-*</code>, and uses Herdr's shipped ones where it hasn't cloned them. Your global keys, other layouts and Herdr's mods stay as they are.</p></details>
+      <details id="name"><summary>Why "Roundup"?</summary><p>A roundup gathers a herd in one place, and that is what this layout does with your spaces, agents and files in Herdr. There is a second reason: good open-source software has a habit of borrowing from Toy Story (Debian names every release after one of its characters), and in Toy Story 2, <i>Woody's Roundup</i> is the old TV show that gathers the whole gang. A herd, a roundup: it fits.</p></details>
+      <details><summary>Does it work with light themes?</summary><p>Yes. The layout and its mods use the theme's color names, never fixed colors, so they follow light and dark themes alike. The pictures on this page show the dark graphite theme.</p></details>
+      <details><summary>What does it reach outside Herdr?</summary><p>Once a day <code>api.github.com</code>, for the latest release. You can turn that off: choose <b>Only when I ask</b> in the menu under the logo, and the layout asks GitHub only when you click <b>Check for updates</b>. Nothing installs by itself either way: an update runs only when you start it, and your agent asks before it changes anything. The spaces and files panels run <code>git</code>; the files panel also runs <code>find</code> and <code>readlink</code>. The preview reads the file it shows and loads a Markdown file's web images only after you click "Load them". Each release's notes list what its mods run.</p></details>
+      <details><summary>Does it run on Linux and Windows?</summary><p>Wherever Herdr App runs. On Linux, PDF previews need <code>pdftoppm</code> and <code>pdfinfo</code> from poppler-utils. On Windows, search in the files panel reads git's files only; there is no disk search there yet.</p></details>
+      <details><summary>How do I go back to Herdr's default layout?</summary><p>Pick another layout in Herdr's Settings, or run <code>herdr-app do layout.switch '{"name":"main"}'</code>. The roundup mods stay installed but run only where a layout places them.</p></details>
+      <details><summary>Is it free?</summary><p>Yes, open source under the Apache 2.0 licence. Icons and code adapted from others are listed with their licences in <a href="https://github.com/carstenlucke/herdr-roundup/blob/main/THIRD_PARTY_NOTICES.md">THIRD_PARTY_NOTICES.md</a>.</p></details>
+    </section>
+  </div>
+</div>
+
+<section class="end">
+  <img class="sheep" src="img/logo.png" alt="">
+  <h2>The whole herd,<br><span>in one window.</span></h2>
+  <div class="box">
+    <div class="line"><code><span>Tell your agent: </span>Read ~/.config/herdr-app/AGENTS.md, then add this layout: https://github.com/carstenlucke/herdr-roundup/tree/main</code><button class="copy" type="button">Copy</button></div>
+  </div>
+  <p class="under"><a class="ghost" href="https://github.com/carstenlucke/herdr-roundup/releases">Release notes for every version <span class="arrow">→</span></a></p>
+  <div class="star">
+    <svg class="star-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.4l-5.8 3.1 1.1-6.5L2.6 9.4l6.5-.9z"/></svg>
+    <div>
+      <b>Does Herdr Roundup make your days with agents a little better?</b>
+      <p>Then give it a star on GitHub. It takes a second, tells me the work is worth going on with, and helps other Herdr users find the layout.</p>
+    </div>
+    <a class="pill" href="https://github.com/carstenlucke/herdr-roundup">Star on GitHub</a>
+  </div>
+</section>
+
+<footer class="site-foot">
+  <div class="me"><img src="img/logo.png" alt=""><span><b>Herdr Roundup</b><br>A layout for Herdr App.</span><span>Open source, Apache 2.0</span></div>
+  <div><h4>Project</h4><ul><li><a href="https://github.com/carstenlucke/herdr-roundup">GitHub</a></li><li><a href="https://github.com/carstenlucke/herdr-roundup/releases">Releases</a></li><li><a href="https://github.com/carstenlucke/herdr-roundup/issues">Issues</a></li></ul></div>
+  <div><h4>Read</h4><ul><li><a href="https://github.com/carstenlucke/herdr-roundup#readme">README</a></li><li><a href="https://github.com/carstenlucke/herdr-roundup/blob/main/RECIPE.md">RECIPE.md</a></li><li><a href="https://github.com/carstenlucke/herdr-roundup/blob/main/THIRD_PARTY_NOTICES.md">Third-party notices</a></li></ul></div>
+  <div><h4>Herdr</h4><ul><li><a href="https://herdr.dev">Herdr App</a></li><li><a href="https://herdr.dev/gallery/">Gallery</a></li><li><a href="https://herdr.dev/guide/">Guide</a></li></ul></div>
+</footer>
+</div>
+
+<dialog class="lightbox" id="lightbox">
+  <button class="x" type="button">Close · Esc</button>
+  <figure><img alt=""><figcaption></figcaption></figure>
+</dialog>
+
+<script>
+// Click a picture to see it large.
+const box = document.getElementById("lightbox");
+function showBig(src, caption) {
+  box.querySelector("img").src = src;
+  box.querySelector("img").alt = caption;
+  box.querySelector("figcaption").textContent = caption;
+  box.showModal();
+}
+// The hero's windows: one at a time, sliding from right to left. They move on by themselves every
+// 6 s (not with reduced motion, nor while the mouse or the keyboard is on them); arrows, dots,
+// the arrow keys and a swipe move them by hand, Enter shows the current one large.
+const show = document.querySelector(".show");
+const track = show.querySelector(".track");
+const slides = [...track.children];
+const dots = slides.map((_, i) => {
+  const d = document.createElement("button");
+  d.type = "button"; d.setAttribute("role", "tab"); d.setAttribute("aria-label", `Window ${i + 1}`);
+  d.innerHTML = "<i></i>";
+  d.addEventListener("click", () => go(i, true));
+  show.querySelector(".dots").append(d);
+  return d;
+});
+const cap = show.querySelector(".show-cap");
+const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+let at = 0, timer = null, hovered = false, focused = false;
+function go(i, byHand) {
+  at = (i + slides.length) % slides.length;
+  track.style.transform = `translateX(${-100 * at}%)`;
+  slides.forEach((s, k) => s.setAttribute("aria-hidden", k !== at));
+  dots.forEach((d, k) => { d.classList.toggle("on", k === at); d.setAttribute("aria-selected", k === at); });
+  const img = slides[at].querySelector("img");
+  cap.querySelector("b").textContent = img.dataset.title;
+  cap.querySelector("span").textContent = img.dataset.text;
+  if (byHand) restart();
+}
+function restart() {
+  clearInterval(timer);
+  show.classList.remove("run"); void show.offsetWidth;
+  const run = !still && !hovered && !focused;
+  // A screen reader reads the caption out only while the windows stand still (WAI's carousel).
+  cap.setAttribute("aria-live", run ? "off" : "polite");
+  if (!run) return;
+  show.classList.add("run");
+  timer = setInterval(() => go(at + 1), 6000);
+}
+// Only a mouse holds them by hovering: a tap sends pointerenter without a reliable pointerleave.
+// Focus holds them only when it comes from the keyboard: a tap or click focuses the region or a
+// button too, and that focus stays after the pointer has gone. So the page notes which came last.
+const hold = () => { show.classList.toggle("held", hovered || focused); restart(); };
+let byPointer = false;
+addEventListener("pointerdown", () => { byPointer = true; }, true);
+addEventListener("keydown", () => { byPointer = false; }, true);
+show.addEventListener("pointerenter", (e) => { if (e.pointerType === "mouse") { hovered = true; hold(); } });
+show.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse") { hovered = false; hold(); } });
+show.addEventListener("focusin", () => { focused = !byPointer; hold(); });
+show.addEventListener("focusout", (e) => { if (!show.contains(e.relatedTarget)) { focused = false; hold(); } });
+// A click on what already has focus sends no focusin.
+show.addEventListener("pointerdown", () => { if (focused) { focused = false; hold(); } });
+show.querySelectorAll(".arr").forEach(b => b.addEventListener("click", () => go(at + Number(b.dataset.step), true)));
+show.addEventListener("keydown", (e) => {
+  if (!focused) { focused = true; hold(); }
+  if (e.key === "ArrowRight") go(at + 1, true);
+  else if (e.key === "ArrowLeft") go(at - 1, true);
+  else if (e.key === "Enter" && e.target === show) {
+    // Else the same Enter, once the lightbox has its focus, presses its Close.
+    e.preventDefault();
+    const img = slides[at].querySelector("img");
+    showBig(img.currentSrc || img.src, img.dataset.title);
+  }
+});
+let x0 = null, moved = false;
+track.addEventListener("pointerdown", (e) => { x0 = e.clientX; moved = false; });
+track.addEventListener("pointerup", (e) => {
+  if (x0 === null) return;
+  const dx = e.clientX - x0; x0 = null;
+  if (Math.abs(dx) > 40) { moved = true; go(at + (dx < 0 ? 1 : -1), true); }
+});
+track.addEventListener("pointercancel", () => { x0 = null; });
+slides.forEach(s => s.querySelector("img").addEventListener("click", (e) => {
+  if (moved) return;
+  const img = e.currentTarget;
+  showBig(img.currentSrc || img.src, img.dataset.title);
+}));
+go(0);
+restart();
+
+// The other pictures are buttons, so a keyboard reaches them too; the picture's alt names the button.
+document.querySelectorAll(".zoom").forEach(b => b.addEventListener("click", () => {
+  const img = b.querySelector("img");
+  showBig(img.currentSrc || img.src, img.alt);
+}));
+box.addEventListener("click", () => box.close());
+
+// A link to #mods opens its answer, also when the address already ends in #mods (no hashchange then).
+const mods = document.getElementById("mods");
+const openMods = () => { if (location.hash === "#mods") mods.open = true; };
+addEventListener("hashchange", openMods);
+openMods();
+document.querySelectorAll('a[href="#mods"]').forEach(a => a.addEventListener("click", () => { mods.open = true; }));
+
+// Copy buttons.
+document.querySelectorAll(".copy").forEach(b => b.addEventListener("click", async () => {
+  const code = b.parentElement.querySelector("code").cloneNode(true);
+  code.querySelectorAll("span").forEach(s => s.remove());
+  try { await navigator.clipboard.writeText(code.textContent.trim()); b.textContent = "Copied"; }
+  catch { b.textContent = "Select it"; }
+  setTimeout(() => (b.textContent = "Copy"), 1400);
+}));
+
+// The index follows the section in view.
+const links = [...document.querySelectorAll(".toc a")];
+const seen = new IntersectionObserver(entries => {
+  for (const e of entries) if (e.isIntersecting)
+    links.forEach(a => a.classList.toggle("on", a.getAttribute("href") === `#${e.target.id}`));
+}, { rootMargin: "-30% 0px -60% 0px" });
+document.querySelectorAll(".md section").forEach(s => seen.observe(s));
+</script>
+</body>
+</html>

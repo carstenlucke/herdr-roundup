@@ -6,20 +6,34 @@
 #   python3 scripts/preview.py . layouts/Herdr-Roundup.svg
 #   rsvg-convert -z 2 layouts/Herdr-Roundup.svg -o preview.png
 # Settings shows the SVG; README.md and RECIPE.md show the PNG.
+# A third argument draws one of the scenes the project's site shows instead, cropped to what it
+# is about (scripts/site.sh renders them all): SCENES below names them, CROPS at the end crops
+# them. `python3 scripts/preview.py --scenes` prints their names.
 import base64, json, os, re, sys
 from html import escape
 
+SCENES = ["spaces", "files", "files-changed", "search", "symlink", "pane-header", "rename",
+          "close-menu", "close-confirm", "update", "preview-tab", "float"]
+if sys.argv[1:] == ["--scenes"]:
+    print("\n".join(SCENES))
+    sys.exit()
 REPO, OUT = sys.argv[1], sys.argv[2]
-VERSION = json.load(open(f"{REPO}/layouts/Herdr-Roundup.json"))["version"]
+SCENE = sys.argv[3] if len(sys.argv) > 3 else "window"
+if SCENE != "window" and SCENE not in SCENES:
+    sys.exit(f"preview.py: unknown scene {SCENE!r}; the scenes are: window, {', '.join(SCENES)}")
+LAYOUT = json.load(open(f"{REPO}/layouts/Herdr-Roundup.json"))
+VERSION = LAYOUT["version"]
 # Program icons come from the install, as Herdr draws them.
 HOME = os.environ.get("HERDR_APP_HOME", os.path.expanduser("~/.config/herdr-app"))
-W, H = 1920, 1200
+# Scenes about one pane draw a smaller window, so their crop needs less scaling down on the site.
+W, H = {"float": (1440, 900), "preview-tab": (1440, 900)}.get(SCENE, (1920, 1200))
 
 T = {
     "accent": "#96b2d7", "background": "#17191d", "blocked": "#f0705f", "border": "#ffffff18",
     "canvas": "#131518", "chrome": "#101114", "dim": "#696a6d", "done": "#76a8ff",
     "foreground": "#eeeeef", "hover": "#ffffff0e", "muted": "#98999b", "selected": "#ffffff17",
     "terminal": "#d2d4d9", "working": "#e5c07b", "raised": "#2c2e31",
+    "popover": "#25272b", "input": "#ffffff24", "solid": "#eeeeef", "solid-foreground": "#111215",
     "ansi1": "#dc8c95", "ansi2": "#a6bd91", "ansi3": "#d8be87", "ansi4": "#96b2d7",
     "ansi5": "#b5a2ce", "ansi6": "#8cbdc3", "ansi8": "#818793",
 }
@@ -47,6 +61,22 @@ ICON = {
     "toc": '<path d="M3.75 6h16.5M7.5 12h12.75M7.5 18h12.75"/>',
     "more": '<circle cx="5.25" cy="12" r="1.95" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.95" fill="currentColor" stroke="none"/><circle cx="18.75" cy="12" r="1.95" fill="currentColor" stroke="none"/>',
     "to-tab": '<rect x="3" y="5" width="18" height="15" rx="2"/><path d="M3 10h18M9 5v5"/>',
+    # roundup-workspace-chrome's menu icons, and Lucide's square-pen for the tab menu's Rename.
+    "refresh": '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+    "agent": '<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>',
+    "notes": '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>',
+    "skip": '<circle cx="12" cy="12" r="10"/><path d="m9 15 6-6"/>',
+    "check": '<path d="M20 6 9 17l-5-5"/>',
+    "square-pen": '<path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"/>',
+}
+# roundup-pane's and roundup-preview's own icons, drawn on a 16px grid.
+ICON16 = {
+    "rename": '<path d="M10.5 3.2l2.3 2.3L6 12.3l-2.9.6.6-2.9z"/><path d="M9.2 4.5l2.3 2.3"/>',
+    "split-right": '<rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M8 3v10"/>',
+    "split-down": '<rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 8h12"/>',
+    "zoom": '<path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9 7M2.5 13.5 7 9"/>',
+    "x": '<path d="M4 4l8 8M12 4l-8 8"/>',
+    "collapse": '<path d="M5 2.5l3 3 3-3M5 13.5l3-3 3 3"/>',
 }
 
 # Helvetica's widths (1/1000 em) for placing text that follows other text.
@@ -110,9 +140,9 @@ def spans(x, y, parts, size=13, family=MONO):
 
 def icon(name, x, y, size, color, sw=1.5):
     c, o = paint(color)
-    k = size / 24
+    k = size / (16 if name in ICON16 else 24)
     add(f'<g transform="translate({r(x)} {r(y)}) scale({k:.4f})" fill="none" stroke="{c}" stroke-opacity="{o:.3f}" '
-        f'stroke-width="{sw}" stroke-linecap="round" stroke-linejoin="round" color="{c}">{ICON[name]}</g>')
+        f'stroke-width="{sw}" stroke-linecap="round" stroke-linejoin="round" color="{c}">{ICON16.get(name) or ICON[name]}</g>')
 
 # Herdr's program table (built into the app): tint true is a one-color glyph drawn in the
 # text color, tint false a picture drawn as it is.
@@ -177,6 +207,13 @@ def spinner(cx, cy, color, radius=4.5):
     add(f'<circle cx="{r(cx)}" cy="{r(cy)}" r="{radius}" fill="none" stroke="{paint("raised")[0]}" stroke-width="1.5"/>')
     add(f'<path d="M{r(cx)} {r(cy - radius)}a{radius} {radius} 0 0 1 {radius} {radius}" fill="none" stroke="{c}" stroke-width="1.5" stroke-linecap="round"/>')
 
+def clip_since(mark, x, y, w, h, rx=0):
+    """Clips what was drawn since out[mark] to a box, as a list scrolls in its section. Only
+    when needed: a window tall enough draws nothing extra (the default picture stays as it is)."""
+    cid = f"clip{len(out)}"
+    out.insert(mark, f'<defs><clipPath id="{cid}"><rect x="{r(x)}" y="{r(y)}" width="{r(w)}" height="{r(h)}" rx="{rx}"/></clipPath></defs><g clip-path="url(#{cid})">')
+    add('</g>')
+
 # ---- window ----
 add(f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}">')
 add(f'<defs><clipPath id="win"><rect width="{W}" height="{H}" rx="12"/></clipPath>'
@@ -192,11 +229,24 @@ line(SB + .5, 0, SB + .5, H, "border")
 # Brand row, 46px: traffic lights at [12, 16], then the sheep, the name and its version, search and toggle.
 for i, c in enumerate(["#ff5f57", "#febc2e", "#28c840"]):
     add(f'<circle cx="{18 + 20 * i}" cy="22" r="6" fill="{c}"/>')
+UPDATE = SCENE == "update"
+if UPDATE:
+    # The release the update scene offers: the next minor one. Only this scene needs it, so a
+    # version of another shape can't stop the other pictures.
+    _v = VERSION.split(".")
+    NEXT = f"{_v[0]}.{int(_v[1]) + 1}.0"
+second = f"{NEXT} available" if UPDATE else VERSION
+if UPDATE:
+    # The pointer rests on logo and name: their 36px area, rounded 8px, lights up.
+    rect(70, 5, 104 - 70 + tw("Herdr Roundup", 13, 600) + 8, 36, "hover", rx=8)
 logo = base64.b64encode(open(f"{REPO}/mods/roundup-workspace-chrome/logo.png", "rb").read()).decode()
 add(f'<clipPath id="logo"><rect x="76" y="13" width="20" height="20" rx="5"/></clipPath>')
 add(f'<image x="76" y="13" width="20" height="20" clip-path="url(#logo)" href="data:image/png;base64,{logo}"/>')
+if UPDATE:
+    # A newer release: a 10px accent point with a 2px chrome ring, 3px out from the logo's top right.
+    add(f'<circle cx="94" cy="15" r="6" fill="{paint("chrome")[0]}"/><circle cx="94" cy="15" r="5" fill="{paint("accent")[0]}"/>')
 text(104, 21.5, "Herdr Roundup", 13, "foreground", 600)
-text(104, 35, VERSION, 11, "dim")
+text(104, 35, second, 11, "accent" if UPDATE else "dim")
 icon("search", 207.5, 15.5, 15, "muted")
 icon("sidebar", 237.5, 15.5, 15, "muted")
 
@@ -238,6 +288,11 @@ def row(x, y, w, name, letter=None, color=None, tree=False, git=None, crew=None,
         badge(x + w - 8, cy, *crew)
     return h
 
+# Spaces and agents each get half the height between the brand row and the footer; a list
+# longer than its half scrolls, so a shorter window shows less of it.
+AY = 46 + (H - 46 - 69) // 2
+FY = H - 69
+spaces_mark = len(out)
 y = 77 + 6
 # A repo and two worktrees on one card.
 cx, cw = 8, 252
@@ -266,12 +321,14 @@ for it in [
     dict(name="infra", letter="I", color="ansi8", git=("terraform · main", 0, 1, 0), crew=(1, "idle")),
 ]:
     y += row(8, y, 252, **it) + 2
+if y > AY:
+    clip_since(spaces_mark, 0, 46, SB, AY - 46)
 
 # Agents (Herdr's shipped list).
-AY = 46 + (H - 46 - 69) // 2
 text(16, AY + 20, "Agents", 11.5, "dim")
 icon("clock", 238, AY + 9, 13, "dim", sw=2)
 ay = AY + 31
+agents_mark = len(out)
 
 def agent(y, prog, space, task, when, status, active=False):
     if active:
@@ -308,8 +365,10 @@ group("Idle", 4, "dim", [("claude", "mobile-app", "Onboarding flow", "40m", "idl
                          ("codex", "infra", "Terraform plan", "3h", "idle"),
                          ("claude", "api-gateway", "Rate limits", "1d", "idle")])
 
+if ay > FY:
+    clip_since(agents_mark, 0, AY, SB, FY - AY)
+
 # Footer, 69px.
-FY = H - 69
 line(0, FY + .5, SB, FY + .5, "border")
 icon("settings", 16, FY + 11, 14, "muted", sw=2)
 text(39, FY + 23, "Settings", 13, "muted")
@@ -319,10 +378,15 @@ text(39, FY + 51, "Add machine", 13, "dim")
 # ---- work area ----
 WX = SB + 1
 # Tabs, 42px.
-rect(WX + 8, 8, 150, 26, "selected", rx=6)
+# The preview-tab scene brings package.json's tab to the front.
+ACTIVE = "package.json" if SCENE == "preview-tab" else "search-filters"
+first = ACTIVE == "search-filters"
+if first:
+    rect(WX + 8, 8, 150, 26, "selected", rx=6)
 program("claude", WX + 18, 14, 14, "muted")
-text(WX + 38, 25.5, "search-filters", 13, "foreground", 500)
-icon("close", WX + 140, 16, 10, "dim", sw=2.5)
+text(WX + 38, 25.5, "search-filters", 13, "foreground" if first else "muted", 500 if first else 400)
+if first:
+    icon("close", WX + 140, 16, 10, "dim", sw=2.5)
 program("shell", WX + 171, 14, 14, "muted")
 text(WX + 189, 25.5, "zsh", 13, "muted")
 program("vite", WX + 227, 14, 14, "muted")
@@ -331,7 +395,12 @@ text(WX + 245, 25.5, "dev server", 13, "muted")
 tx_ = WX + 245 + tw("dev server", 13)
 for name in ["CONTRIBUTING.md", "query.ts", "package.json"]:
     tx_ += 26
-    text(tx_, 25.5, name, 13, "muted")
+    if name == ACTIVE:
+        rect(tx_ - 10, 8, 10 + tw(name, 13, 500) + 10 + 10 + 8, 26, "selected", rx=6)
+        text(tx_, 25.5, name, 13, "foreground", 500)
+        icon("close", tx_ + tw(name, 13, 500) + 10, 16, 10, "dim", sw=2.5)
+    else:
+        text(tx_, 25.5, name, 13, "muted")
     tx_ += tw(name, 13)
 # The panel buttons (26px, 8px sides, 14px icon, 5px gap), 3px apart, 10px from the edge; Files is on.
 bx = W - 10
@@ -357,9 +426,10 @@ LH = 21  # terminal line height
 TOP = PY + 30 + 12 + 14  # first baseline: header, padding, ascent
 ROWS = (PY + PH - 12 - TOP) // LH + 1
 
-def pane(x, w, prog, name, address, status, focus, lines, bottom):
+def pane(x, w, prog, name, address, status, focus, lines, bottom, hover=False):
     """A pane: roundup-pane's header (icon, name, id chip, folder, status), then the terminal.
-    `lines` run from the top, `bottom` sits on the last rows."""
+    `lines` run from the top, `bottom` sits on the last rows. `hover`: the pointer is on the
+    header, on its pencil, so the header shows rename, split right, split down, zoom and close."""
     rect(x, PY, w, PH, "background", rx=10)
     frame(x, PY, w, PH, "accent" if focus else "border", rx=10)
     line(x + 1, PY + 30.5, x + w - 1, PY + 30.5, "border")
@@ -373,11 +443,25 @@ def pane(x, w, prog, name, address, status, focus, lines, bottom):
     text(hx + 5, PY + 18.5, address, 10.5, "dim", family=MONO)
     hx += chip + 8
     text(hx, PY + 19.5, "~/code/atlas-search-filters", 12, "dim")
+    right = x + w - 10
+    if hover:
+        # 20px buttons (3px padding round a 14px icon), 8px apart, as the header's gap.
+        right -= 5 * 20 + 4 * 8
+        for i, glyph in enumerate(["rename", "split-right", "split-down", "zoom", "x"]):
+            bx_ = right + i * 28
+            if i == 0:
+                rect(bx_, PY + 5, 20, 20, "hover", rx=4)
+            icon(glyph, bx_ + 3, PY + 8, 14, "foreground" if i == 0 else "dim", sw=1.3)
+        right -= 8
     if status == "working":
-        spinner(x + w - 16, PY + 15, "working", 5)
+        spinner(right - 6, PY + 15, "working", 5)
     clip = f"term-{address}"
     add(f'<defs><clipPath id="{clip}"><rect x="{x + 1}" y="{PY + 31}" width="{w - 2}" height="{PH - 32}"/></clipPath></defs>')
     add(f'<g clip-path="url(#{clip})">')
+    # Like a terminal, it scrolls: the lines that don't fit above the bottom rows leave at the top.
+    room = max(0, ROWS - len(bottom))
+    if len(lines) > room:
+        lines = lines[-room:] if room else []
     for i, parts in enumerate(lines):
         if parts:
             spans(x + 14, TOP + LH * i, parts, 13)
@@ -437,7 +521,9 @@ for ry_ in (pb - 15 - LH, pb - 15 + LH):
     add(f'<path d="M{LX + 14} {ry_}h{LW - 28}" stroke="{paint("raised")[0]}"/>')
 rect(LX + 30, pb - 13, 8, 17, "terminal", op=0.85)
 
-pane(RX, RW, "codex", "Codex", "t7", "working", False, [
+# In the panes scene the reviewer has a name of its own, and the pointer is on its header.
+PANES = SCENE in ("pane-header", "rename")
+pane(RX, RW, "codex", "Reviewer" if PANES else "Codex", "t7", "working", False, [
     [("› ", M, 400), ("Review src/search/facets.ts: does an empty hit list", F, 400)],
     [("  still return every facet, at zero?", F, 400)],
     [],
@@ -455,7 +541,7 @@ pane(RX, RW, "codex", "Codex", "t7", "working", False, [
     [("› ", M, 400), ("Ask for a follow-up", D, 400)],
     [],
     [("  ⏎ send   ⌃J newline", D, 400)],
-])
+], hover=SCENE == "pane-header")
 
 # ---- side panel: roundup-files, 368px ----
 # The same folder as the panes: three files modified, two new, three commits ahead.
@@ -470,10 +556,16 @@ sx = X0 + 12 + tw("Files", 13, 600) + 8
 CHANGED = 5
 w_all = 8 + tw("All", 12) + 8
 w_ch = 8 + tw("Changed", 12) + 5 + tw(str(CHANGED), 11) + 8
+# The files-changed scene picks Changed, the search scene types into the search field.
+VIEW = {"files-changed": "changed", "search": "search"}.get(SCENE, "all")
+ALL = VIEW != "changed"
 rect(sx, hcy - 12, 2 + w_all + 2 + w_ch + 2, 24, "raised", rx=7)
-rect(sx + 2, hcy - 10, w_all, 20, "background", rx=5)
-text(sx + 2 + 8, hcy + 4, "All", 12, "foreground")
-text(sx + 4 + w_all + 8, hcy + 4, "Changed", 12, "dim")
+if ALL:
+    rect(sx + 2, hcy - 10, w_all, 20, "background", rx=5)
+else:
+    rect(sx + 4 + w_all, hcy - 10, w_ch, 20, "background", rx=5)
+text(sx + 2 + 8, hcy + 4, "All", 12, "foreground" if ALL else "dim")
+text(sx + 4 + w_all + 8, hcy + 4, "Changed", 12, "dim" if ALL else "foreground")
 text(sx + 4 + w_all + 8 + tw("Changed", 12) + 5, hcy + 4, str(CHANGED), 11, "dim")
 folder = "atlas-search-filters"
 text(X1 - 12, hcy + 4, folder, 12, "dim", anchor="end")
@@ -501,22 +593,30 @@ line(X0, by + 45.5, X1, by + 45.5, "border")
 
 # Search field, 28px, with the source switch at its end, lit: search reads git's files.
 sy = by + 46 + 8
+QUERY = "facets"
 rect(X0 + 8, sy, X1 - X0 - 16, 28, "canvas", rx=7)
-frame(X0 + 8, sy, X1 - X0 - 16, 28, "border", rx=7)
+frame(X0 + 8, sy, X1 - X0 - 16, 28, "accent" if VIEW == "search" else "border", rx=7)
 icon("search", X0 + 16, sy + 7.5, 13, "dim")
-text(X0 + 16 + 13 + 6, sy + 18, "Search files", 12, "dim")
-rect(X1 - 16 - 20, sy + 4, 20, 20, "raised", rx=5)
-icon("branch", X1 - 16 - 20 + 3.5, sy + 7.5, 13, "accent")
+if VIEW == "search":
+    text(X0 + 16 + 13 + 6, sy + 18, QUERY, 12, "foreground")
+    rect(X0 + 16 + 13 + 6 + tw(QUERY, 12) + 1, sy + 7, 1.5, 14, "foreground")
+    icon("close", X1 - 16 - 20 - 8 - 10, sy + 9, 10, "dim", sw=2.5)
+else:
+    text(X0 + 16 + 13 + 6, sy + 18, "Search files", 12, "dim")
+# Changed has no switch: it searches git's paths anyway.
+if VIEW != "changed":
+    rect(X1 - 16 - 20, sy + 4, 20, 20, "raised", rx=5)
+    icon("branch", X1 - 16 - 20 + 3.5, sy + 7.5, 13, "accent")
 
 # The tree: 26px rows, 14px a level. Names in their status color, files end with +N −N and their
 # letter, folders with a dot and count for new, modified and deleted below them, and their +N −N.
 # A symlink: its name in italics and a 14px arrow in accent after it.
 STATUS = {"M": "ansi3", "?": "ansi2", "A": "ansi2", "D": "ansi1"}
 
-def frow(y, rel, depth, folder=False, open_=False, st=None, lines=(0, 0), counts=None, ignored=False, selected=False, link=False):
+def frow(y, rel, depth, folder=False, open_=False, st=None, lines=(0, 0), counts=None, ignored=False, selected=False, link=False, hover=False):
     x0, x1 = X0 + 4, X1 - 4
-    if selected:
-        rect(x0, y, x1 - x0, 26, "selected", rx=6)
+    if selected or hover:
+        rect(x0, y, x1 - x0, 26, "selected" if selected else "hover", rx=6)
     cy = y + 13
     x = x0 + 8 + depth * 14
     if folder:
@@ -574,9 +674,39 @@ tree = [
     ("tsconfig.json", 0, {}),
     ("vite.config.ts", 0, {}),
 ]
+# Changed: exactly what git status lists, as a tree with every folder open.
+changed = [
+    ("src", 0, dict(folder=True, open_=True, counts=(1, 3, 0), lines=(48, 14))),
+    ("src/search", 1, dict(folder=True, open_=True, counts=(0, 2, 0), lines=(31, 9))),
+    ("src/search/facets.ts", 2, dict(st="M", lines=(24, 3), selected=True)),
+    ("src/search/query.ts", 2, dict(st="M", lines=(7, 6))),
+    ("src/ui", 1, dict(folder=True, open_=True, counts=(1, 1, 0), lines=(17, 5))),
+    ("src/ui/FilterChip.tsx", 2, dict(st="?")),
+    ("src/ui/ResultsHeader.tsx", 2, dict(st="M", lines=(17, 5))),
+    ("test", 0, dict(folder=True, open_=True, counts=(1, 0, 0))),
+    ("test/facets.test.ts", 1, dict(st="?")),
+]
+# A search finds files in folders not opened yet (docs), and shows them as a tree.
+found = [
+    ("docs", 0, dict(folder=True, open_=True)),
+    ("docs/facets.md", 1, {}),
+    ("src", 0, dict(folder=True, open_=True, counts=(1, 3, 0), lines=(48, 14))),
+    ("src/search", 1, dict(folder=True, open_=True, counts=(0, 2, 0), lines=(31, 9))),
+    ("src/search/facets.ts", 2, dict(st="M", lines=(24, 3), selected=True)),
+    ("test", 0, dict(folder=True, open_=True, counts=(1, 0, 0))),
+    ("test/facets.test.ts", 1, dict(st="?")),
+]
 ly = sy + 28 + 4
-for i, (rel, depth, kw) in enumerate(tree):
+# AGENTS.md's row in the All view: the symlink scene hovers it, and its crop follows it.
+LINK_Y = ly + 26 * [rel for rel, _, _ in tree].index("AGENTS.md")
+tree_mark = len(out)
+rows = {"all": tree, "changed": changed, "search": found}[VIEW]
+for i, (rel, depth, kw) in enumerate(rows):
+    if SCENE == "symlink" and rel == "AGENTS.md":
+        kw = dict(kw, hover=True)
     frow(ly + 26 * i, rel, depth, **kw)
+if ly + 26 * len(rows) > PY + PH - 1:
+    clip_since(tree_mark, X0, PY + 1, X1 - X0, PH - 2, rx=9)
 
 # Status bar, 28px.
 SY = H - 28
@@ -590,135 +720,360 @@ add(f'<circle cx="{WX + 243}" cy="{SY + 14}" r="3" fill="{paint("dim")[0]}"/>')
 spans(WX + 252, SY + 18, [("9 agents", "muted", 400), ("  · 1 needs you", "blocked", 400)], 11.5, UI)
 text(W - 14, SY + 18, "⌘⇧P  commands", 11, "dim", anchor="end")
 
+# ---- roundup-preview's header controls, in the floating window and in a preview tab ----
+# `y` is the middle of the header's 42px.
+def viewer_button(x, y, glyph, color="muted", sw=2):
+    """A header button: 28px, rounded 7, a 14px icon."""
+    rect(x, y - 14, 28, 28, "chrome", rx=7)
+    icon(glyph, x + 7, y - 7, 14, color, sw=sw)
+
+def viewer_switch(right, y, items):
+    """The switch (Preview | Raw): 2px padding, buttons 10px aside and 2px apart, the one on
+    raised. `items` are (label, on); it ends at `right`. Returns its left edge."""
+    w = 2 + sum(10 + tw(l, 12) + 10 for l, _ in items) + 2 * (len(items) - 1) + 2
+    x = right - w
+    rect(x, y - 12.5, w, 25, "chrome", rx=7)
+    sx = x + 2
+    for label, on in items:
+        bw = 10 + tw(label, 12) + 10
+        if on:
+            rect(sx, y - 10.5, bw, 21, "raised", rx=5)
+        text(sx + 10, y + 4, label, 12, "foreground" if on else "muted")
+        sx += bw + 2
+    return x
+
 # ---- roundup-preview's floating window: README.md, rendered ----
+# Only in the window and the float scene: the others show what's under it.
 # floatSpec: 0.6 of the window's width, 0.75 of its height; dragged up a little, so the
 # panes' last lines show below it.
 FW, FH = round(W * 0.6), round(H * 0.75)
 FX, FT = (W - FW) // 2, (H - FH) // 2 - 22
-rect(FX - 6, FT + 14, FW + 12, FH + 10, "#000000", rx=16, op=0.6)
-out[-1] = out[-1].replace("/>", ' filter="url(#shadow)"/>')
-rect(FX, FT, FW, FH, "background", rx=10)
-frame(FX, FT, FW, FH, "border", rx=10)
+if SCENE in ("window", "float"):
+    rect(FX - 6, FT + 14, FW + 12, FH + 10, "#000000", rx=16, op=0.6)
+    out[-1] = out[-1].replace("/>", ' filter="url(#shadow)"/>')
+    rect(FX, FT, FW, FH, "background", rx=10)
+    frame(FX, FT, FW, FH, "border", rx=10)
 
-# Header, 42px: name, folder and size; at the right the viewer's ToC and Preview | Raw, then
-# ⋯ (the menu), Open in tab and Close.
-hy = FT + 21
-text(FX + 14, hy + 4.5, "README.md", 13, "foreground", 600)
-px_ = FX + 14 + tw("README.md", 13, 600) + 8
-text(px_, hy + 4, "/Users/sam/code/atlas-search-filters", 12, "dim")
-px_ += tw("/Users/sam/code/atlas-search-filters", 12) + 8
-text(px_, hy + 4, "3.1 KB", 12, "dim")
-line(FX + 1, FT + 41.5, FX + FW - 1, FT + 41.5, "border")
+    # Header, 42px: name, folder and size; at the right the viewer's ToC and Preview | Raw, then
+    # ⋯ (the menu), Open in tab and Close.
+    hy = FT + 21
+    text(FX + 14, hy + 4.5, "README.md", 13, "foreground", 600)
+    px_ = FX + 14 + tw("README.md", 13, 600) + 8
+    text(px_, hy + 4, "/Users/sam/code/atlas-search-filters", 12, "dim")
+    px_ += tw("/Users/sam/code/atlas-search-filters", 12) + 8
+    text(px_, hy + 4, "3.1 KB", 12, "dim")
+    line(FX + 1, FT + 41.5, FX + FW - 1, FT + 41.5, "border")
 
-def button(x, glyph, color="muted"):
-    rect(x, hy - 14, 28, 28, "chrome", rx=7)
-    icon(glyph, x + 7, hy - 7, 14, color, sw=2)
+    bx = FX + FW - 10 - 28
+    viewer_button(bx, hy, "close")
+    bx -= 8 + 28
+    viewer_button(bx, hy, "to-tab")
+    bx -= 8 + 28
+    viewer_button(bx, hy, "more")
+    bx = viewer_switch(bx - 8, hy, [("Preview", True), ("Raw", False)])
+    bx -= 6 + 28
+    viewer_button(bx, hy, "toc")
 
-bx = FX + FW - 10 - 28
-button(bx, "close")
-bx -= 8 + 28
-button(bx, "to-tab")
-bx -= 8 + 28
-button(bx, "more")
-# Preview | Raw: 2px padding, buttons 10px aside, Preview on.
-seg = [("Preview", True), ("Raw", False)]
-sw_ = 2 + sum(10 + tw(l, 12) + 10 for l, _ in seg) + 2 * (len(seg) - 1) + 2
-bx -= 8 + sw_
-rect(bx, hy - 12.5, sw_, 25, "chrome", rx=7)
-sx_ = bx + 2
-for label, on in seg:
-    bw = 10 + tw(label, 12) + 10
-    if on:
-        rect(sx_, hy - 10.5, bw, 21, "raised", rx=5)
-    text(sx_ + 10, hy + 4, label, 12, "foreground" if on else "muted")
-    sx_ += bw + 2
-bx -= 6 + 28
-button(bx, "toc")
+    # The document: a 920px column, 40px aside, 28px from the top, 14.5px text.
+    add(f'<defs><clipPath id="doc"><rect x="{FX + 1}" y="{FT + 42}" width="{FW - 2}" height="{FH - 43}" rx="9"/></clipPath></defs>')
+    add('<g clip-path="url(#doc)">')
+    DX = FX + (FW - min(920, FW)) / 2 + 40
+    DW = min(920, FW) - 80
+    BODY, LEAD = 14.5, 23
 
-# The document: a 920px column, 40px aside, 28px from the top, 14.5px text.
-add(f'<defs><clipPath id="doc"><rect x="{FX + 1}" y="{FT + 42}" width="{FW - 2}" height="{FH - 43}" rx="9"/></clipPath></defs>')
-add('<g clip-path="url(#doc)">')
-DX = FX + (FW - min(920, FW)) / 2 + 40
-DW = min(920, FW) - 80
-BODY, LEAD = 14.5, 23
+    def flow(x, y, width, runs, size=BODY, lead=LEAD, color="foreground"):
+        """Runs of text wrapped to `width` from baseline `y`: [(text, kind)], kind t (text), b (bold),
+        c (inline code) or a (link). Returns the baseline after the last line."""
+        pieces = []  # (text, kind), a space being (" ", None)
+        for s, kind in runs:
+            for part in ([s] if kind == "c" else re.findall(r"\s+|\S+", s)):
+                pieces.append((" ", None) if part.isspace() else (part, kind))
+        cx_ = x
+        for word, kind in pieces:
+            if kind is None:
+                cx_ += tw(" ", size) if cx_ > x else 0
+                continue
+            width_ = mw(word, 13) + 8 if kind == "c" else tw(word, size, 600 if kind == "b" else 400)
+            if cx_ > x and cx_ + width_ > x + width:
+                cx_, y = x, y + lead
+            if kind == "c":
+                rect(cx_, y - 13.5, width_, 19, "raised", rx=4)
+                text(cx_ + 4, y, word, 13, "foreground", family=MONO)
+            else:
+                text(cx_, y, word, size, "accent" if kind == "a" else color, 600 if kind == "b" else 400)
+            cx_ += width_
+        return y + lead
 
-def flow(x, y, width, runs, size=BODY, lead=LEAD, color="foreground"):
-    """Runs of text wrapped to `width` from baseline `y`: [(text, kind)], kind t (text), b (bold),
-    c (inline code) or a (link). Returns the baseline after the last line."""
-    pieces = []  # (text, kind), a space being (" ", None)
-    for s, kind in runs:
-        for part in ([s] if kind == "c" else re.findall(r"\s+|\S+", s)):
-            pieces.append((" ", None) if part.isspace() else (part, kind))
-    cx_ = x
-    for word, kind in pieces:
-        if kind is None:
-            cx_ += tw(" ", size) if cx_ > x else 0
-            continue
-        width_ = mw(word, 13) + 8 if kind == "c" else tw(word, size, 600 if kind == "b" else 400)
-        if cx_ > x and cx_ + width_ > x + width:
-            cx_, y = x, y + lead
-        if kind == "c":
-            rect(cx_, y - 13.5, width_, 19, "raised", rx=4)
-            text(cx_ + 4, y, word, 13, "foreground", family=MONO)
+    def code(y, rows):
+        """A fenced block: one line per row of [(text, color)], on the chrome color."""
+        h = 14 + 19 * len(rows) + 10
+        rect(DX, y, DW, h, "chrome", rx=6)
+        frame(DX, y, DW, h, "border", rx=6)
+        for i, parts in enumerate(rows):
+            spans(DX + 14, y + 14 + 13 + 19 * i, [(s, c, 400) for s, c in parts], 13)
+        return y + h
+
+    K, S, N, C, P = "ansi5", "ansi2", "ansi1", "dim", "terminal"
+    y = FT + 42 + 28
+    y += 26
+    text(DX, y, "Atlas Search", 26, "foreground", 600)
+    y += 14 + LEAD
+    y = flow(DX, y, DW, [("Atlas is the search service behind the Acme storefront: one endpoint that takes a query and a "
+                          "set of filters and returns ranked hits with their facet counts, fast enough to run on every keystroke.", "t")])
+    y += 16 + 20
+    text(DX, y, "Facet filters", 20, "foreground", 600)
+    y += 12 + LEAD
+    y = flow(DX, y, DW, [("Every search counts the hits for each field it names in ", "t"), ("facets", "c"),
+                         (", so the results header can show how many hits each filter chip would leave.", "t")])
+    y += 6
+    for item in [
+        [("brand", "c"), (", ", "t"), ("color", "c"), (" and ", "t"), ("size", "c"), (" are counted on every request", "t")],
+        [("Counts follow the other active filters, ", "t"), ("not", "b"), (" the whole index", "t")],
+        [("An empty hit list still returns its facets, all at zero", "t")],
+    ]:
+        text(DX + 6, y, "•", BODY, "muted")
+        y = flow(DX + 22, y, DW - 22, item)
+    y += 2
+    y = code(y - 14, [
+        [("const ", K), ("res ", P), ("= ", P), ("await ", K), ("search", "ansi4"), ("({", P)],
+        [("  query: ", P), ('"trail shoes"', S), (",", P)],
+        [("  filters: { color: [", P), ('"blue"', S), ("] },", P)],
+        [("  facets: [", P), ('"brand"', S), (", ", P), ('"size"', S), ("],", P)],
+        [("});", P)],
+        [("// res.facets.get(", C), ('"size"', C), (") → Map { 42 → 12, 43 → 9, … }", C)],
+    ])
+    y += 16 + 16 + 20
+    text(DX, y, "Getting started", 20, "foreground", 600)
+    y += 12 + LEAD
+    y = flow(DX, y, DW, [("Install the dependencies and start the dev server. It reloads on every change under ", "t"),
+                         ("src/", "c"), (" and serves the demo storefront on port 5173.", "t")])
+    y = code(y - 8, [
+        [("npm ", "ansi4"), ("install", P)],
+        [("npm ", "ansi4"), ("run dev", P)],
+    ])
+    y += 16 + 16 + 20
+    text(DX, y, "Tests", 20, "foreground", 600)
+    y += 12 + LEAD
+    y = flow(DX, y, DW, [("npm test", "c"), (" runs the unit tests in ", "t"), ("test/", "c"), ("; ", "t"),
+                         ("npm run e2e", "c"), (" drives a browser against the dev server. Read ", "t"),
+                         ("CONTRIBUTING.md", "a"), (" before you open a pull request.", "t")])
+    add('</g>')
+
+# ---- the site's scenes: what a click, a hover or a preview tab adds ----
+def wrap(s, size, width, weight=400):
+    """`s` broken into lines that fit `width`."""
+    lines, cur = [], ""
+    for word in s.split():
+        if cur and tw(f"{cur} {word}", size, weight) > width:
+            lines.append(cur)
+            cur = word
         else:
-            text(cx_, y, word, size, "accent" if kind == "a" else color, 600 if kind == "b" else 400)
-        cx_ += width_
-    return y + lead
+            cur = f"{cur} {word}".strip()
+    return lines + [cur] if cur else lines
 
-def code(y, rows):
-    """A fenced block: one line per row of [(text, color)], on the chrome color."""
-    h = 14 + 19 * len(rows) + 10
-    rect(DX, y, DW, h, "chrome", rx=6)
-    frame(DX, y, DW, h, "border", rx=6)
-    for i, parts in enumerate(rows):
-        spans(DX + 14, y + 14 + 13 + 19 * i, [(s, c, 400) for s, c in parts], 13)
-    return y + h
+def overlay(x, y, w, h, rx=10):
+    """Herdr's frame round a popup, dialog or tooltip: popover, a 1px border, rounded, a shadow."""
+    rect(x - 2, y + 6, w + 4, h + 4, "#000000", rx=rx + 2, op=0.5)
+    out[-1] = out[-1].replace("/>", ' filter="url(#soft)"/>')
+    rect(x, y, w, h, "popover", rx=rx)
+    frame(x, y, w, h, "border", rx=rx)
 
-K, S, N, C, P = "ansi5", "ansi2", "ansi1", "dim", "terminal"
-y = FT + 42 + 28
-y += 26
-text(DX, y, "Atlas Search", 26, "foreground", 600)
-y += 14 + LEAD
-y = flow(DX, y, DW, [("Atlas is the search service behind the Acme storefront: one endpoint that takes a query and a "
-                      "set of filters and returns ranked hits with their facet counts, fast enough to run on every keystroke.", "t")])
-y += 16 + 20
-text(DX, y, "Facet filters", 20, "foreground", 600)
-y += 12 + LEAD
-y = flow(DX, y, DW, [("Every search counts the hits for each field it names in ", "t"), ("facets", "c"),
-                     (", so the results header can show how many hits each filter chip would leave.", "t")])
-y += 6
-for item in [
-    [("brand", "c"), (", ", "t"), ("color", "c"), (" and ", "t"), ("size", "c"), (" are counted on every request", "t")],
-    [("Counts follow the other active filters, ", "t"), ("not", "b"), (" the whole index", "t")],
-    [("An empty hit list still returns its facets, all at zero", "t")],
-]:
-    text(DX + 6, y, "•", BODY, "muted")
-    y = flow(DX + 22, y, DW - 22, item)
-y += 2
-y = code(y - 14, [
-    [("const ", K), ("res ", P), ("= ", P), ("await ", K), ("search", "ansi4"), ("({", P)],
-    [("  query: ", P), ('"trail shoes"', S), (",", P)],
-    [("  filters: { color: [", P), ('"blue"', S), ("] },", P)],
-    [("  facets: [", P), ('"brand"', S), (", ", P), ('"size"', S), ("],", P)],
-    [("});", P)],
-    [("// res.facets.get(", C), ('"size"', C), (") → Map { 42 → 12, 43 → 9, … }", C)],
-])
-y += 16 + 16 + 20
-text(DX, y, "Getting started", 20, "foreground", 600)
-y += 12 + LEAD
-y = flow(DX, y, DW, [("Install the dependencies and start the dev server. It reloads on every change under ", "t"),
-                     ("src/", "c"), (" and serves the demo storefront on port 5173.", "t")])
-y = code(y - 8, [
-    [("npm ", "ansi4"), ("install", P)],
-    [("npm ", "ansi4"), ("run dev", P)],
-])
-y += 16 + 16 + 20
-text(DX, y, "Tests", 20, "foreground", 600)
-y += 12 + LEAD
-y = flow(DX, y, DW, [("npm test", "c"), (" runs the unit tests in ", "t"), ("test/", "c"), ("; ", "t"),
-                     ("npm run e2e", "c"), (" drives a browser against the dev server. Read ", "t"),
-                     ("CONTRIBUTING.md", "a"), (" before you open a pull request.", "t")])
-add('</g>')
+def menu(x, y, w, items):
+    """Rows as Herdr's menus draw them: 31px, rounded 7, a 14px icon (or the place of a check),
+    12.8px text; `sep` puts a divider above, `head` a dim heading. Returns the bottom."""
+    for it in items:
+        if it.get("sep"):
+            line(x + 7, y + 4.5, x + w - 7, y + 4.5, "border")
+            y += 9
+        if it.get("head"):
+            text(x + 8, y + 14, it["head"], 11, "dim")
+            y += 19
+        color = "accent" if it.get("accent") else "foreground"
+        if it.get("at"):
+            rect(x, y, w, 31, "selected", rx=7)
+        if it.get("glyph"):
+            icon(it["glyph"], x + 8, y + 8.5, 14, "accent" if it.get("accent") else "muted", sw=2)
+        elif it.get("check"):
+            icon("check", x + 8, y + 8.5, 14, "accent", sw=2)
+        text(x + 8 + 14 + 9, y + 20, it["label"], 12.8, color)
+        if it.get("keys"):
+            text(x + w - 8, y + 20, it["keys"], 11, "dim", anchor="end")
+        y += 31
+    return y
 
+def buttons(right, y, specs):
+    """Dialog buttons, right-aligned, 32px high and rounded 8: (label, primary, ring, size)."""
+    for label, primary, ring, size in reversed(specs):
+        bw = 14 + tw(label, size, 500) + 14
+        right -= bw
+        if ring:  # the keyboard's button: a 2px accent ring 3px out
+            c, _ = paint("accent")
+            add(f'<rect x="{r(right - 3)}" y="{r(y - 3)}" width="{r(bw + 6)}" height="38" rx="10" fill="none" stroke="{c}" stroke-width="2"/>')
+        rect(right, y, bw, 32, "solid" if primary else "raised", rx=8)
+        frame(right, y, bw, 32, "solid" if primary else "input", rx=8)
+        text(right + 14, y + 20.5, label, size, "solid-foreground" if primary else "foreground", 500)
+        right -= 8
+
+def dialog_head(x, y, w, title):
+    text(x + 18, y + 18 + 15, title, 15, "foreground", 600)
+    text(x + w - 18, y + 18 + 14, "Esc", 11, "dim", anchor="end")
+
+if SCENE != "window":
+    add('<defs><filter id="soft" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="10"/></filter></defs>')
+
+if SCENE == "update":
+    # A click on logo or name: the menu at the pointer, the details on top.
+    MX, MY, MW = 120, 40, 260
+    MH = 10 + 12 + 91 + 9 + 7 * 31 + 19 + 9 + 9
+    overlay(MX, MY, MW, MH)
+    ix, iy = MX + 5 + 8, MY + 5 + 6
+    text(ix, iy + 12, "Herdr Roundup", 13, "foreground", 600)
+    ky = iy + 16 + 3 + 3
+    for k, v, c in [("Installed", VERSION, "foreground"), ("Based on", f"Herdr {LAYOUT['cloned_from']['version']}", "foreground"),
+                    ("Latest", NEXT, "accent"), ("Checked", "today 09:12", "foreground")]:
+        text(ix, ky + 11.5, k, 12, "dim")
+        text(MX + MW - 5 - 8, ky + 11.5, v, 12, c, anchor="end")
+        ky += 18
+    ry = MY + 5 + 12 + 91
+    line(MX + 5 + 7, ry + 4.5, MX + MW - 5 - 7, ry + 4.5, "border")
+    menu(MX + 5, ry + 9, MW - 10, [
+        dict(label="Check for updates", glyph="refresh"),
+        dict(label=f"Update to {NEXT} with an agent…", glyph="agent", accent=True, at=True),
+        dict(label=f"Release notes {NEXT}", glyph="notes"),
+        dict(label=f"Skip {NEXT}", glyph="skip"),
+        dict(label="Daily", check=True, sep=True, head="Check for updates"),
+        dict(label="Only when I ask"),
+        dict(label="Show details on hover", check=True, sep=True),
+    ])
+
+if SCENE == "close-menu":
+    # A right-click on the first tab: roundup-tabs' menu, ending in when closing asks.
+    MX, MY = WX + 96, 30
+    overlay(MX, MY, 220, 237)
+    menu(MX + 5, MY + 5, 210, [
+        dict(label="Rename", glyph="square-pen"),
+        dict(label="New tab", glyph="plus"),
+        dict(label="Close", glyph="close", sep=True, keys="cmd-w"),
+        dict(label="Never", sep=True, head="Ask before closing a tab"),
+        dict(label="While an agent works", check=True, at=True),
+        dict(label="Always"),
+    ])
+
+# The two dialogs' sizes, which their crops follow.
+CONFIRM_W, CONFIRM_H = 400, 170
+RENAME_W, RENAME_H = 380, 196
+
+if SCENE == "close-confirm":
+    # cmd-w while both agents work: roundup-confirm asks, Cancel holding the keyboard.
+    DW_, DH_ = CONFIRM_W, CONFIRM_H
+    dx, dy = (W - DW_) / 2, (H - DH_) / 2
+    overlay(dx, dy, DW_, DH_, rx=12)
+    dialog_head(dx, dy, DW_, 'Close tab "search-filters"?')
+    ty = dy + 18 + 20 + 12 + 13
+    for l in wrap("2 agents are still running in it (Claude Code, Codex). Closing ends them.", 13, DW_ - 36):
+        text(dx + 18, ty, l, 13, "muted")
+        ty += 18
+    buttons(dx + DW_ - 18, dy + DH_ - 18 - 32, [("Cancel", False, True, 12), ("Confirm", True, False, 12)])
+
+if SCENE == "rename":
+    # A double-click on the left pane's name: roundup-pane's dialog, a name being typed.
+    DW_, DH_ = RENAME_W, RENAME_H
+    dx, dy = (W - DW_) / 2, (H - DH_) / 2
+    overlay(dx, dy, DW_, DH_, rx=12)
+    dialog_head(dx, dy, DW_, "Rename pane")
+    text(dx + 18, dy + 18 + 20 + 16 + 11, "Name (empty: the program's name)", 11.5, "dim")
+    iy = dy + 18 + 20 + 16 + 15 + 7
+    rect(dx + 18, iy, DW_ - 36, 36, "background", rx=9)
+    frame(dx + 18, iy, DW_ - 36, 36, "accent", rx=9)
+    text(dx + 28, iy + 22.5, "Facet filters", 12.8, "foreground")
+    rect(dx + 28 + tw("Facet filters", 12.8) + 1, iy + 10, 1.5, 16, "foreground")
+    buttons(dx + DW_ - 18, iy + 36 + 20, [("Cancel", False, False, 12.5), ("Save", True, False, 12.5)])
+
+if SCENE == "symlink":
+    # The pointer on AGENTS.md's arrow: where the link points.
+    ax = X0 + 52 + tw("AGENTS.md", 13) + 6
+    tip = "Link to docs/agents.md"
+    tw_ = 8 + tw(tip, 12) + 8
+    tx0 = min(ax + 7 - tw_ / 2, X1 - 8 - tw_)
+    overlay(tx0, LINK_Y + 26 + 4, tw_, 26, rx=6)
+    text(tx0 + 8, LINK_Y + 26 + 4 + 17, tip, 12, "foreground")
+
+if SCENE == "preview-tab":
+    # package.json's preview tab in front: one pane over the body, with roundup-pane's header
+    # (a mod pane: no program icon, its id shortened), roundup-preview's header and the JSON tree.
+    x, w = LX, PX - 8 - LX
+    rect(x, PY, w, PH, "background", rx=10)
+    frame(x, PY, w, PH, "accent", rx=10)
+    line(x + 1, PY + 30.5, x + w - 1, PY + 30.5, "border")
+    text(x + 10, PY + 19.5, "package.json", 12, "foreground", 500)
+    hx = x + 10 + tw("package.json", 12, 500) + 8
+    rect(hx, PY + 6, mw("p3f9a1c", 10.5) + 10, 18, "hover", rx=4)
+    text(hx + 5, PY + 18.5, "p3f9a1c", 10.5, "dim", family=MONO)
+    hy = PY + 31 + 21
+    text(x + 14, hy + 4.5, "package.json", 13, "foreground", 600)
+    px_ = x + 14 + tw("package.json", 13, 600) + 8
+    text(px_, hy + 4, "/Users/sam/code/atlas-search-filters", 12, "dim")
+    text(px_ + tw("/Users/sam/code/atlas-search-filters", 12) + 8, hy + 4, "1.1 KB", 12, "dim")
+    line(x + 1, PY + 31 + 41.5, x + w - 1, PY + 31 + 41.5, "border")
+    bx = x + w - 10 - 28
+    viewer_button(bx, hy, "more")
+    bx = viewer_switch(bx - 8, hy, [("Tree", True), ("Raw", False)])
+    bx -= 6 + 28
+    viewer_button(bx, hy, "collapse", sw=1.5)
+    # The tree: 24px rows, 18px a level; keys ansi4, strings ansi2, numbers ansi1, true/false/null ansi6.
+    pkg = [
+        (0, None, "▾", "{ 9 keys }", "dim"),
+        (1, '"name":', "", '"atlas-search"', "ansi2"),
+        (1, '"version":', "", '"2.4.0"', "ansi2"),
+        (1, '"private":', "", "true", "ansi6"),
+        (1, '"type":', "", '"module"', "ansi2"),
+        (1, '"keywords":', "▾", "[ 2 items ]", "dim"),
+        (2, "0:", "", '"search"', "ansi2"),
+        (2, "1:", "", '"facets"', "ansi2"),
+        (1, '"scripts":', "▾", "{ 4 keys }", "dim"),
+        (2, '"dev":', "", '"vite"', "ansi2"),
+        (2, '"build":', "", '"tsc && vite build"', "ansi2"),
+        (2, '"test":', "", '"vitest run"', "ansi2"),
+        (2, '"e2e":', "", '"playwright test"', "ansi2"),
+        (1, '"dependencies":', "▾", "{ 3 keys }", "dim"),
+        (2, '"react":', "", '"^18.3.1"', "ansi2"),
+        (2, '"react-dom":', "", '"^18.3.1"', "ansi2"),
+        (2, '"zod":', "", '"^3.23.8"', "ansi2"),
+        (1, '"devDependencies":', "▸", "{ 4 keys }", "dim"),
+        (1, '"engines":', "▾", "{ 1 key }", "dim"),
+        (2, '"node":', "", '">=20"', "ansi2"),
+    ]
+    ty = PY + 31 + 42 + 6
+    for depth, key, chev, val, col in pkg:
+        cx_ = x + 1 + 14 + depth * 18
+        if chev:
+            text(cx_, ty + 16.5, chev, 12.5, "dim", family=MONO)
+        cx_ += 10 + 6
+        if key:
+            text(cx_, ty + 16.5, key, 12.5, "dim" if key[0].isdigit() else "ansi4", family=MONO)
+            cx_ += mw(key, 12.5) + 6
+        text(cx_, ty + 16.5, val, 12.5, col, family=MONO)
+        ty += 24
+
+# What each scene is cropped to: x, y, width, height. A fourth argument "full" keeps the window.
+CROPS = {
+    "spaces": (0, 0, SB + 1, 480),
+    "files": (PX - 8, 0, W - PX + 8, 600),
+    "files-changed": (PX - 8, 0, W - PX + 8, 600),
+    "search": (PX - 8, 42, W - PX + 8, 352),
+    "symlink": (PX - 8, LINK_Y - 107, W - PX + 8, 200),
+    "pane-header": (RX - 8, 42, RW + 16, 120),
+    "rename": ((W - RENAME_W) / 2 - 60, (H - RENAME_H) / 2 - 50, RENAME_W + 120, RENAME_H + 100),
+    "close-menu": (WX, 0, 520, 290),
+    "close-confirm": ((W - CONFIRM_W) / 2 - 60, (H - CONFIRM_H) / 2 - 50, CONFIRM_W + 120, CONFIRM_H + 100),
+    "update": (0, 0, 420, 440),
+    "preview-tab": (WX, 0, PX - WX, 640),
+    "float": (FX - 40, FT - 40, FW + 80, FH + 90),
+}
+assert set(CROPS) == set(SCENES), "CROPS and SCENES name different scenes"
+CROP = CROPS.get(SCENE)
+if CROP and not (len(sys.argv) > 4 and sys.argv[4] == "full"):
+    cx_, cy_, cw_, ch_ = (r(v) for v in CROP)
+    out[0] = f'<svg xmlns="http://www.w3.org/2000/svg" width="{cw_}" height="{ch_}" viewBox="{cx_} {cy_} {cw_} {ch_}">'
 add('</g></svg>')
 open(OUT, "w").write("\n".join(out) + "\n")
