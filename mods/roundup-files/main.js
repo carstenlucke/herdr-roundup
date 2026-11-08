@@ -13,10 +13,11 @@ import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, InputState, Input, Scrollbar, Popup, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { spaces, panes, focused, readTextFile, watchFolder, theme, settings, window, props, notify, openOverlay, closeOverlay, shared, setShared, nextCommand, run } from "herdr";
 import { iconFor, rootIcon } from "./icon.js";
-import { listDir, buildIndex, diskSearch, kinds, indexDepth, compare, prunedName, prunedAbove, realPath, PER_FOLDER, INDEX_DIRS, INDEX_PATHS } from "./disk.js";
+import { listDir, buildIndex, diskSearch, kinds, indexDepth, prunedName, prunedAbove, realPath, PER_FOLDER, INDEX_DIRS, INDEX_PATHS } from "./disk.js";
 import { readGit, listFiles, emptyGit, NEW, MODIFIED, DELETED } from "./git.js";
 import { openExternal, revealExternal, copy, sendToAgent } from "./actions.js";
-import { dirOf, baseOf, ancestors, within, relTo, join } from "./tree.js";
+import { dirOf, baseOf, ancestors, relTo, join } from "./tree.js";
+import { diskRows, hitRows, changedRows, isIgnored, rowStatus, CHANGED_LIMIT } from "./rows.js";
 // A copy of roundup-preview's: how it opens and which pane already shows a file. sync.sh
 // checks that the two copies match.
 import { FLOAT, openTab, timerOf, floatSpec, newToken, isOpen, unanswered, placed } from "./open-file.js";
@@ -29,9 +30,6 @@ const ICON = (name) => `mods/${NAME}/${name}.svg`;
 const linkTip = (r) => `${r.broken ? "Broken link" : "Link"}${r.link ? ` to ${r.link}` : ""}${r.blocked ? " (no access to check it)" : ""}`;
 const ROW = 26;
 const FIND_LIMIT = 200;
-// Changed shows at most this many of git's paths (in git's order): its rows are built on every
-// render, about 10 µs a row here, so 2,000 keep a key press near 20 ms (5,000: 70 ms).
-const CHANGED_LIMIT = 2000;
 // A search index older than this is read again on the next search, whatever the watch said.
 const INDEX_AGE = 300000;
 // After a file the index knows changed (it may be gone), the index is read again once it is
@@ -593,111 +591,18 @@ export default class Files extends View {
   }
 
   // ── rows ─────────────────────────────────────────────────────────────────────────────
-  // Every row: { rel, name, dir, depth, open, gone, disk, link, broken, blocked }. gone: not on
-  // disk (deleted). link, broken, blocked: as listDir has them, on rows read from disk; other
-  // rows (search, a folder only git lists) leave them out, so test them with != null and as
-  // booleans.
-  // disk: a folder that opens from disk (this.folders); in Changed, the others fold (this.shut).
+  // The rows shown (rows.js); changedCut: Changed left paths out.
   rows() {
-    const out = [], q = this.query.trim().toLowerCase();
+    const q = this.query.trim().toLowerCase();
     this.changedCut = false;
-    if (this.error) return out; // the folder failed to load: only the error shows
-    if (this.view === "changed") return this.changedRows(q);
-    if (this.hits) return this.hitRows();
-    this.diskRows("", 0, out);
-    return out;
+    if (this.error) return []; // the folder failed to load: only the error shows
+    const tree = { entries: this.entries, folders: this.folders, shut: this.shut };
+    if (this.view === "changed") { const { rows, cut } = changedRows(this.git, q, tree); this.changedCut = cut; return rows; }
+    if (this.hits) return hitRows(this.hits, this.index?.dirs ?? new Set(), this.git.gone);
+    return diskRows(tree);
   }
 
-  diskRows(prefix, depth, out) {
-    for (const e of this.entries.get(prefix) ?? []) {
-      const rel = prefix ? `${prefix}/${e.name}` : e.name, open = e.dir && this.folders.has(rel);
-      out.push({ rel, name: e.name, dir: e.dir, depth, open, gone: false, disk: e.dir, link: e.link, broken: e.broken, blocked: e.blocked });
-      if (open && depth < 40) this.diskRows(rel, depth + 1, out);
-    }
-  }
-
-  // Search matches as a tree: each match under its folders, all open. Git still lists a file
-  // deleted but not yet committed; it shows struck through, as in Changed. A path with
-  // matches below it is a folder even when the index's folders (capped at INDEX_DIRS) lack it.
-  hitRows() {
-    const out = [], keep = new Set(), kids = new Map(), dirs = this.index?.dirs ?? new Set();
-    for (const h of this.hits) { keep.add(h); for (const a of ancestors(h)) keep.add(a); }
-    for (const rel of keep) { const p = dirOf(rel); if (!kids.has(p)) kids.set(p, []); kids.get(p).push(rel); }
-    const isDir = (rel) => dirs.has(rel) || kids.has(rel);
-    const walk = (p, depth) => {
-      const list = (kids.get(p) ?? []).sort((a, b) => Number(isDir(b)) - Number(isDir(a)) || compare(baseOf(a), baseOf(b)));
-      for (const rel of list) {
-        out.push({ rel, name: baseOf(rel), dir: isDir(rel), depth, open: kids.has(rel), gone: this.git.gone.has(rel), disk: false });
-        if (kids.has(rel)) walk(rel, depth + 1);
-      }
-    };
-    walk("", 0);
-    return out;
-  }
-
-  // Exactly the paths git status lists, as a tree: deleted files too, untracked folders and
-  // submodules as one row that opens from disk. A search filters them. The first
-  // CHANGED_LIMIT of them (changedCut: more were left out).
-  changedRows(q) {
-    const g = this.git, out = [], kids = new Map(), dirs = new Set([...g.untracked, ...g.links]);
-    const add = (rel) => { const p = dirOf(rel); if (!kids.has(p)) kids.set(p, new Set()); kids.get(p).add(rel); };
-    let taken = 0;
-    for (const rel of g.files.keys()) {
-      if (q && !rel.toLowerCase().includes(q)) continue;
-      if (taken++ >= CHANGED_LIMIT) { this.changedCut = true; break; }
-      add(rel);
-      for (const a of ancestors(rel)) { dirs.add(a); add(a); }
-    }
-    const order = (list) => list.sort((a, b) => Number(b[1]) - Number(a[1]) || compare(baseOf(a[0]), baseOf(b[0])));
-    // A folder git lists file by file: what it lists.
-    const walk = (p, depth) => {
-      for (const [rel, dir] of order([...(kids.get(p) ?? [])].map((rel) => [rel, dirs.has(rel)]))) {
-        const gone = g.gone.has(rel);
-        if (dir && !gone && (g.untracked.has(rel) || g.links.has(rel))) {
-          const open = this.folders.has(rel) || (Boolean(q) && kids.has(rel));
-          out.push({ rel, name: baseOf(rel), dir: true, depth, open, gone: false, disk: true });
-          if (open) mixed(rel, depth + 1);
-        } else if (dir && !gone) {
-          const open = Boolean(q) || !this.shut.has(rel);
-          out.push({ rel, name: baseOf(rel), dir: true, depth, open, gone: false, disk: false });
-          if (open) walk(rel, depth + 1);
-        } else out.push({ rel, name: baseOf(rel), dir, depth, open: false, gone, disk: false });
-      }
-    };
-    // A folder that opens from disk: what it holds there and, with it, what git lists below it
-    // that isn't there (a file deleted next to new ones). During a search it opens for what
-    // the search found in it, and shows what is on disk once opened.
-    const mixed = (p, depth) => {
-      const disk = this.folders.has(p) ? this.entries.get(p) ?? [] : [], here = new Map();
-      for (const e of disk) here.set(`${p}/${e.name}`, e);
-      const list = new Map([...here].map(([rel, e]) => [rel, e.dir]));
-      for (const rel of kids.get(p) ?? []) if (!list.has(rel)) list.set(rel, dirs.has(rel));
-      for (const [rel, dir] of order([...list])) {
-        const e = here.get(rel), name = baseOf(rel), onDisk = Boolean(e), gone = !onDisk && g.gone.has(rel);
-        const link = e?.link ?? null, broken = e?.broken ?? false, blocked = e?.blocked ?? false;
-        if (dir && onDisk) {
-          const open = this.folders.has(rel) || (Boolean(q) && kids.has(rel));
-          out.push({ rel, name, dir, depth, open, gone, disk: true, link, broken, blocked });
-          if (open && depth < 40) mixed(rel, depth + 1);
-        } else if (dir && !gone) {
-          // Only in git's list (its files deleted): it folds, as in walk.
-          const open = Boolean(q) || !this.shut.has(rel);
-          out.push({ rel, name, dir, depth, open, gone, disk: false });
-          if (open && depth < 40) mixed(rel, depth + 1);
-        } else out.push({ rel, name, dir, depth, open: false, gone, disk: false, link, broken, blocked });
-      }
-    };
-    walk("", 0);
-    return out;
-  }
-
-  // A tracked file is never ignored, though a rule matches it (added with -f), nor its folders.
-  isIgnored(rel) {
-    const g = this.git;
-    return (g.rootIgnored || within(g.ignored, rel)) && !g.forced.has(rel);
-  }
-
-  underUntracked(rel) { return this.git.rootUntracked || within(this.git.untracked, rel); }
+  isIgnored(rel) { return isIgnored(this.git, rel); }
 
   // ── preview ──────────────────────────────────────────────────────────────────────────
   closePreview() {
@@ -983,9 +888,7 @@ export default class Files extends View {
   // ── drawing ──────────────────────────────────────────────────────────────────────────
   row(r, t) {
     const g = this.git, rel = r.rel;
-    // An ignored path below an untracked folder (newdir/node_modules) is dimmed, not new.
-    const own = g.status.get(rel), ignored = !own && this.isIgnored(rel);
-    const status = own ?? (!ignored && this.underUntracked(rel) ? "?" : null);
+    const { status, ignored } = rowStatus(g, rel);
     const color = statusColor(t, status);
     const lines = g.diff.get(rel), counts = r.dir ? g.counts.get(rel) : null, selected = rel === this.cursor;
     const showLines = Boolean(lines?.[0] || lines?.[1]) && (!r.dir || this.width >= 360);
