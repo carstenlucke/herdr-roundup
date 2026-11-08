@@ -9,12 +9,11 @@ running in it. A repo and its worktrees sit together on one card. On the
 right, the terminals of the active tab in rounded panes, with tabs above and
 a status bar below. A side panel shows the focused folder's files with
 Symbols icons and their git state, all of them or only the changed ones,
-searchable across folders not yet opened. Built for light and dark themes
-alike.
+searchable across folders not yet opened. A file opens in a preview, in a
+floating window or a tab of its own: Markdown rendered, code, CSV and JSON,
+pictures and PDFs. Built for light and dark themes alike.
 
-![Herdr-Roundup, the files panel showing All](preview.png)
-
-![Herdr-Roundup, the files panel showing Changed](preview-changed.png)
+![Herdr-Roundup: two agents side by side, a README in the floating preview, the files panel](preview.png)
 
 ## What you see
 
