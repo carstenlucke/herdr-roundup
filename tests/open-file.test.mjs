@@ -3,7 +3,7 @@ import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  OPEN, OPEN_V2, MOVED, OPENING, FLOAT, previewId, upgraded, shownIn, remember, marked, madePane, openTab, openCommand, isOpen, fresh, answered, unanswered, placed,
+  OPEN, OPEN_V2, MOVED, OPENING, FLOAT, previewId, upgraded, shownIn, remember, marked, madePane, openTab, openCommand, floatSpec, isOpen, fresh, answered, unanswered, placed,
 } from "../mods/roundup-preview/open-file.js";
 
 test("roundup-files' open-file.js is a copy of roundup-preview's", () => {
@@ -139,6 +139,20 @@ test("openTab: overlapping opens with a late second pane give no pane a wrong fi
   assert.deepEqual(Object.values(h.state[OPEN]).map((e) => e.pane), ["pD"]);
 });
 
+// OPN-27
+test("openTab: a recorded open ends its OPENING entry, so the next open a second later records too", () => {
+  const h = herdr();
+  openTab(h.api, "/r/a.md", null, wait);
+  const first = h.calls.at(-1)[1].props.token;
+  until(300); h.add("pA"); until(400);
+  assert.deepEqual(h.state[OPENING][first], { since: 0, until: 400 }, "until: when it was recorded");
+  until(1400); openTab(h.api, "/r/b.md", null, wait);
+  const second = h.calls.at(-1)[1].props.token;
+  until(1500); h.add("pB"); until(2500);
+  assert.deepEqual(h.state[OPEN], { [first]: entry("pA", "/r/a.md"), [second]: entry("pB", "/r/b.md") });
+  assert.equal(h.state[OPENING][second].until, 1600);
+});
+
 test("upgraded: tabs recorded under open.v2 count beside open.v3's", () => {
   const v2 = { [previewId("/r/a.md")]: { pane: "p1", token: "t1" }, [previewId("C:\\R\\B.md", "vps")]: { pane: "p2", token: "t2" }, bad: { pane: "p3", token: "t3" } };
   assert.deepEqual(upgraded(undefined, v2), { t1: entry("p1", "/r/a.md"), t2: entry("p2", "c:/r/b.md", "vps") });
@@ -169,6 +183,13 @@ test("openCommand: split modes and the props a tab gets", () => {
     ["pane.split", { direction: "down", mod: "roundup-preview", props: { file: "/r/a.md", on: null, token: "t" } }]);
   assert.deepEqual(openCommand({ file: "C:\\r\\a.md" }),
     ["tab.new", { name: "a.md", mod: "roundup-preview", props: { file: "C:\\r\\a.md", on: null, token: null } }]);
+});
+
+// OPN-02
+test("floatSpec: one floating window, keyed and sized, carrying the file and the token", () => {
+  assert.deepEqual(floatSpec({ file: "/r/a.md", on: "vps", token: "T" }),
+    { kind: "window", key: "roundup-preview", mod: "roundup-preview", width: 0.6, height: 0.75, props: { file: "/r/a.md", on: "vps", float: "T" } });
+  assert.deepEqual(floatSpec({ file: "/r/a.md", token: "T" }).props, { file: "/r/a.md", on: null, float: "T" });
 });
 
 test("shared keys keep their names", () => {
