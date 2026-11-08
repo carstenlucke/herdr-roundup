@@ -19,7 +19,7 @@ draw() {
 }
 
 draw window window "-w 1920"
-# The picture a shared link shows: the whole window as PNG, which every link preview reads.
+# The picture a shared link shows: the whole window as PNG, which link previews widely support.
 rsvg-convert -w 1200 "$tmp/window.svg" -o "$tmp/img/og.png"
 # Its own line: a failing preview.py inside `for … in $(…)` would not stop the script.
 scenes=$(python3 scripts/preview.py --scenes)
