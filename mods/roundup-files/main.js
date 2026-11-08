@@ -14,8 +14,9 @@ import { v_flex, h_flex, Editor, EditorState, InputState, Input, Scrollbar, Popu
 import { spaces, panes, focused, readTextFile, watchFolder, theme, settings, window, props, notify, openOverlay, closeOverlay, shared, setShared, nextCommand, run } from "herdr";
 import { iconFor, rootIcon } from "./icon.js";
 import { listDir, buildIndex, diskSearch, kinds, indexDepth, compare, prunedName, prunedAbove, realPath, PER_FOLDER, INDEX_DIRS, INDEX_PATHS } from "./disk.js";
-import { readGit, listFiles, emptyGit, ancestors, dirOf, within, NEW, MODIFIED, DELETED } from "./git.js";
-import { openExternal, revealExternal, copy, sendToAgent, relTo } from "./actions.js";
+import { readGit, listFiles, emptyGit, NEW, MODIFIED, DELETED } from "./git.js";
+import { openExternal, revealExternal, copy, sendToAgent } from "./actions.js";
+import { dirOf, baseOf, ancestors, within, relTo, join } from "./tree.js";
 // A copy of roundup-preview's: how it opens and which pane already shows a file. sync.sh
 // checks that the two copies match.
 import { FLOAT, openTab, timerOf, floatSpec, newToken, isOpen, unanswered, placed } from "./open-file.js";
@@ -56,18 +57,11 @@ const SOURCES = ["git", "disk"];
 // the panel copy that opened it: every shown copy reads the request, only that one runs it.
 const REQUEST = `${NAME}.request`;
 
-const baseOf = (rel) => rel.slice(rel.lastIndexOf("/") + 1);
 // What a change in the shown folder's .git does to an index from git: excludes and config
 // (core.excludesFile) change its list, so it is read again; the index (`git add -f`,
 // `git rm --cached` of an ignored file) changes on every add and commit, so it only comes
 // out dirty, read again once DIRTY_AGE old. Anything else in .git: nothing (null).
 const gitMeta = (rel) => (rel === ".git/info/exclude" || rel === ".git/config" ? "stale" : rel === ".git/index" ? "dirty" : null);
-// rel is "/"-separated; a Windows root (C:\ or \\server) gets "\" throughout.
-const join = (root, rel) => {
-  if (!rel) return root;
-  const sep = /^([A-Za-z]:\\|\\\\)/.test(root) ? "\\" : "/";
-  return (/[\\/]$/.test(root) ? root : root + sep) + (sep === "/" ? rel : rel.replace(/\//g, "\\"));
-};
 const message = (e) => String(e?.message ?? e);
 const thousands = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 // What cut an index short, for the footer: "the first 20,000 folders and the first 40,000 files".
