@@ -48,6 +48,7 @@ Click the logo or the name for the menu: check now, update, read the release not
 ## Working on it
 
 - Herdr reloads a mod or layout on every save. After editing, run `scripts/sync.sh`.
+- Tests: `node --test tests/` (Node 26.8 or later; older Node can't take a folder there). CI runs the same on macOS for every pull request and push to `main`.
 - To change one of Herdr's mods, clone it into this repo and point the layout at the clone:
   `herdr-app do mod.clone '{"name":"tabs","as":"roundup-tabs"}'`, move `~/.config/herdr-app/mods/roundup-tabs` into `mods/`, then set `"mod": "roundup-tabs"` in `layouts/Herdr-Roundup.json`.
 - Mod folders carry the `roundup-` prefix: a folder's name is the mod's identity (layout blocks, `roundup-x.command` keys, `openOverlay`), and an install renames a mod whose name is taken.

@@ -1,0 +1,53 @@
+# The regression suite's L1 and L2 tests (tests/CATALOG.md), on macOS only.
+# L3 (scripts/smoke.sh) needs a running Herdr App and stays local: there is no
+# herdr-app on the runner, and tests that call it use a stub.
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node-test:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    env:
+      # Tests that commit set their own identity; this covers any that forget.
+      GIT_AUTHOR_NAME: github-actions[bot]
+      GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+      GIT_COMMITTER_NAME: github-actions[bot]
+      GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # `node --test tests/` needs Node 26.8 or later: 22 and 24 take a folder
+      # for a file ("Cannot find module …/tests"). The image ships Node 24.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+
+      - name: Set a git identity
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      # git, jq, rsync (openrsync) and sh come with the macOS image: fail early if one is gone.
+      - name: Tools
+        run: |
+          node --version
+          git --version
+          jq --version
+          rsync --version | head -n 1
+          command -v sh
+
+      - run: node --test tests/
