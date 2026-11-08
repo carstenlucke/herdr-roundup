@@ -50,7 +50,7 @@ mkdir -p "$OUT"
 OUT=$(cd "$OUT" && pwd -P)
 # WORK and the test home come only after the trap below (cleanup removes them); OWN_TH says the
 # symlink at $TH is ours, so cleanup never touches one that was there before.
-WORK="" PID="" STARTED=0 OWN_TH=0
+WORK="" PID="" PID_START="" STARTED=0 OWN_TH=0 FAILS=0
 
 # Everything below that could reach Herdr reaches the test instance, even a call that forgot app().
 export HERDR_APP_HOME=$TH HC_SESSION=$SESSION
@@ -155,27 +155,49 @@ print(out.hexdigest())
 PY
 }
 
+# PID is the process start_app spawned (from $!, not from the socket: a window that never answers
+# still has to go), PID_START its start time: a PID that ended and came back for another process
+# isn't ours any more.
 start_app() {
   guard
   ! alive || die "a test window runs already"
-  (cd "$WORK" && HERDR_APP_HOME=$TH HERDR_APP_ID=$APP_ID HC_SESSION=$SESSION HERDR_APP_NO_SOUND=1 \
-    HERDR_TELEMETRY=0 HERDR_RELEASES_URL=http://127.0.0.1:9/ nohup "$APP_BIN" >>"$OUT/app.log" 2>&1 &)
+  [ -z "$PID" ] || die "the test app (pid $PID) wasn't reaped"
   STARTED=1
-  wait_for 60 alive || die "the test window didn't answer within 60 s (see $OUT/app.log)"
-  PID=$(find_pid || true)
-  [ -n "$PID" ] || die "can't find the test window's process"
+  # `&` on the app alone: on `cd && app &`, $! would be a subshell that holds this $( ) open.
+  PID=$(cd "$WORK" || exit 1
+    HERDR_APP_HOME=$TH HERDR_APP_ID=$APP_ID HC_SESSION=$SESSION HERDR_APP_NO_SOUND=1 HERDR_TELEMETRY=0 \
+      HERDR_RELEASES_URL=http://127.0.0.1:9/ nohup "$APP_BIN" </dev/null >>"$OUT/app.log" 2>&1 &
+    echo $!)
+  PID_START=$(ps -p "$PID" -o lstart= 2>/dev/null || true)
+  [ -n "$PID_START" ] || die "the test app (pid $PID) ended right after its start (see $OUT/app.log)"
   echo "test window: pid $PID" >> "$OUT/app.log"
+  wait_for 60 alive || die "the test window didn't answer within 60 s (see $OUT/app.log)"
+  local holder
+  holder=$(find_pid || true)
+  [ "$holder" = "$PID" ] || die "the test home's socket is held by pid ${holder:-none}, not by the started pid $PID"
   # The first frame: shot fails before it.
   wait_for 30 'front && app shot "$WORK/first.png" >/dev/null 2>&1' || die "the test window drew no frame (or didn't come to the front)"
 }
-gone() { [ -z "$PID" ] || ! ps -p "$PID" >/dev/null 2>&1; }
+owned() { [ -n "$PID" ] && [ -n "$PID_START" ] && [ "$(ps -p "$PID" -o lstart= 2>/dev/null)" = "$PID_START" ]; }
+# Quits the test app and returns once its process has ended: app.quit first, then TERM, then KILL.
+# A quit that needed a signal is a FAIL. Returns 1 (PID kept) only if the process outlives KILL.
 quit_app() {
-  alive || return 0
-  app do app.quit >/dev/null 2>&1 || true
-  wait_for 30 '! alive' || echo "smoke.sh: the test window didn't quit" >&2
+  # In subshells: a guard that fails (home gone) must not end the script before the process does.
+  if (alive); then
+    (app do app.quit) >/dev/null 2>&1 || true
+    wait_for 30 '! (alive)' || echo "smoke.sh: the test window didn't quit" >&2
+  fi
   # The socket goes before the process: shared.json may still be written until it ends.
-  wait_for 30 gone || echo "smoke.sh: the test app (pid $PID) is still running" >&2
-  PID=""
+  if ! wait_for 30 '! owned'; then
+    res quit FAIL "the test app (pid $PID) didn't end within 30 s of app.quit: TERM"
+    kill -TERM "$PID" 2>/dev/null
+    if ! wait_for 10 '! owned'; then
+      echo "smoke.sh: the test app (pid $PID) outlived TERM: KILL" >&2
+      kill -KILL "$PID" 2>/dev/null
+      wait_for 5 '! owned' || { echo "smoke.sh: the test app (pid $PID) is still running" >&2; return 1; }
+    fi
+  fi
+  PID="" PID_START=""
   sleep 1
 }
 restart_app() { quit_app; start_app; }
@@ -184,8 +206,16 @@ cleanup() {
   local rc=$?
   trap - EXIT INT TERM
   set +e
+  local f0=$FAILS
+  if [ "$STARTED" = 1 ] && ! quit_app; then
+    # The app still runs on the home and the core: both stay, for a look and a manual kill.
+    echo "smoke.sh: test home $TH ($WORK/home) and core session $SESSION kept: kill pid $PID, then remove them" >&2
+    echo "shots and logs: $OUT"
+    exit 1
+  fi
+  # A quit that needed a signal fails the run, also after the last case.
+  [ "$FAILS" = "$f0" ] || [ "$rc" != 0 ] || rc=1
   if [ "$OWN_TH" = 1 ] && [ -L "$TH" ]; then
-    [ "$STARTED" = 1 ] && quit_app
     # Its core: only when this session's core isn't yours (another id) and the session is ours.
     if [ "$STARTED" = 1 ] && [ "$HC_SESSION" = "$SESSION" ]; then
       local core
