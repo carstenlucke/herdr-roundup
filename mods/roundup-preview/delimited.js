@@ -1,11 +1,19 @@
 // CSV and TSV: the delimiter, the rows (quotes per RFC 4180), and column widths.
-// Pure (no Herdr imports); this repo has no tests for it yet.
+// Pure (no Herdr imports), so tests/delimited.test.mjs runs it in node.
 
-/** Tab for .tsv; for .csv, a semicolon when the first line has more of them than commas. */
+/** Tab for .tsv; for .csv, a semicolon when the first record has more of them than commas,
+ *  counting only those outside quoted cells (a quoted cell may also span lines). */
 export function delimiterOf(ext, text) {
   if (ext === "tsv") return "\t";
-  const first = text.slice(0, text.indexOf("\n") + 1 || text.length);
-  return (first.match(/;/g)?.length ?? 0) > (first.match(/,/g)?.length ?? 0) ? ";" : ",";
+  let semicolons = 0, commas = 0, quoted = false;
+  for (const c of text) {
+    if (c === '"') quoted = !quoted;
+    else if (quoted) continue;
+    else if (c === "\n" || c === "\r") break;
+    else if (c === ";") semicolons++;
+    else if (c === ",") commas++;
+  }
+  return semicolons > commas ? ";" : ",";
 }
 
 /** Rows of cells, at most `limit` rows; `truncated` when there were more. */

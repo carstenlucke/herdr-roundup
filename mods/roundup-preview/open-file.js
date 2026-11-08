@@ -4,32 +4,33 @@
 import { pathKey } from "./paths.js";
 
 // Shared keys. Each preview tab opened here carries a token in its props (props.token).
-// OPEN: previewId(file, on) -> { pane, token }, the pane the opener made for the file.
+// OPEN: token -> { pane, file, on }, the pane the opener made and the file it opened with.
 // MOVED: token -> the file that preview shows now, once it followed a link or went Back.
-// ".v2": the keys before were "<on>:<file>" -> pane and "<on>:<file>" -> file.
-export const OPEN = "roundup-preview.open.v2", MOVED = "roundup-preview.moved.v2";
+// ".v3": before, OPEN was previewId(file, on) -> { pane, token }, which found a tab only by the
+// file it opened with; ".v2" before that: "<on>:<file>" -> pane and "<on>:<file>" -> file.
+export const OPEN = "roundup-preview.open.v3", MOVED = "roundup-preview.moved.v2";
 /** One key per file and machine, whichever way the path is written (C:\x and c:/X are one). */
 export const previewId = (file, on) => JSON.stringify([on ?? null, pathKey(file)]);
 /** A token unique enough to tell one open, window or panel copy from another. */
 export const newToken = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 
-/** The pane already showing `file`, or null. `open`, `moved`: the shared maps; `alive`: pane ids that exist. */
+/** The pane showing `file` now, or null: a recorded tab whose current file (MOVED, else the one
+ *  it opened with) is `file` on machine `on`. `open`, `moved`: the shared maps; `alive`: pane ids that exist. */
 export function shownIn(open, moved, file, on, alive) {
-  const entry = open?.[previewId(file, on)];
-  if (!entry || !alive.has(entry.pane)) return null;
-  const now = moved?.[entry.token];
-  return now == null || pathKey(now) === pathKey(file) ? entry.pane : null;
+  const want = previewId(file, on);
+  for (const [token, e] of Object.entries(open ?? {})) {
+    if (e?.file && alive.has(e.pane) && previewId(moved?.[token] ?? e.file, e.on) === want) return e.pane;
+  }
+  return null;
 }
 
 /** OPEN and MOVED once `pane` (props.token `token`) was made for `file`. Entries for panes no
  *  longer in `alive` are dropped, and MOVED keeps only the tokens OPEN names: neither map only
  *  grows. The new token's MOVED stays: its tab may have followed a link before it was recorded. */
 export function remember(open, moved, file, on, pane, token, alive) {
-  const id = previewId(file, on);
-  const live = Object.entries(open ?? {}).filter(([k, e]) => k !== id && alive.has(e?.pane));
-  const nextOpen = Object.fromEntries([...live, [id, { pane, token }]]);
-  const tokens = new Set(Object.values(nextOpen).map((e) => e.token));
-  return { open: nextOpen, moved: Object.fromEntries(Object.entries(moved ?? {}).filter(([t]) => tokens.has(t))) };
+  const live = Object.entries(open ?? {}).filter(([t, e]) => t !== token && e?.pane !== pane && alive.has(e?.pane));
+  const nextOpen = Object.fromEntries([...live, [token, { pane, file, on: on ?? null }]]);
+  return { open: nextOpen, moved: Object.fromEntries(Object.entries(moved ?? {}).filter(([t]) => Object.hasOwn(nextOpen, t))) };
 }
 
 // Opens in flight. run() doesn't name the pane it made, so an open takes the one new

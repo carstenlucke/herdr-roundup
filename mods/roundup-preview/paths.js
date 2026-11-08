@@ -38,9 +38,10 @@ export function pathKey(path) {
 
 export const samePath = (a, b) => pathKey(a) === pathKey(b);
 
-/** Whether a watchFolder result touches `file`: the file, or its folder when the list overflowed. */
-export function changedFile(changed, file) {
-  const targets = [pathKey(file), pathKey(dirname(file))];
+/** Whether a watchFolder result touches `file`: the file, or its folder when the list overflowed.
+ *  More `files` are other names of it: the watch reports a folder reached through a link resolved. */
+export function changedFile(changed, ...files) {
+  const targets = files.filter(Boolean).flatMap((file) => [pathKey(file), pathKey(dirname(file))]);
   return changed.some((path) => targets.includes(pathKey(path)));
 }
 

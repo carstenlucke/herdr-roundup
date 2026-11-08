@@ -9,7 +9,7 @@ import { div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { props, theme, notify, watchFolder, shared, setShared, exec, window, run, panes, focused, closeOverlay } from "herdr";
 import { viewerFor, basename } from "./kinds.js";
-import { dirname, native, localPath, changedFile } from "./paths.js";
+import { dirname, native, localPath, changedFile, normalize } from "./paths.js";
 import { VIEWERS } from "./viewers/index.js";
 import { openMenu } from "./menu.js";
 import { iconButton } from "./viewers/controls.js";
@@ -17,6 +17,9 @@ import { MOVED, FLOAT, openTab, timerOf, newToken, fresh, answered } from "./ope
 import { formatSize } from "./size.js";
 import { programs } from "./programs.js";
 import { systemOf } from "./platform.js";
+
+// How often a file whose folder can't be watched is looked at (watch).
+const POLL = 3000;
 
 export class Preview {
   init(_props, cx) {
@@ -30,7 +33,11 @@ export class Preview {
     this.system = systemOf(window()?.platform, on);
     this.history = [];
     this.size = { width: 900, height: 700 };
-    this.show(file && localPath(file, this.system), cx);
+    // A copy that starts again (a restart, the mod reloaded) shows the file it showed, not the one
+    // it opened with: a tab's MOVED, the window's FLOAT. So OPEN and FLOAT stay right about it.
+    const was = this.float ? (shared(FLOAT)?.token === this.float ? shared(FLOAT).file : null) : token ? shared(MOVED)?.[token] : null;
+    const start = was ?? file;
+    this.show(start && localPath(start, this.system), cx);
     // A window that starts again (the mod reloaded) writes FLOAT back if it is gone, and marks it
     // with this copy, so the copy before, closing late, leaves it alone. Not over a newer window.
     // Starting proves it is there: the record drops a probe a panel copy may have left (fresh).
@@ -79,16 +86,49 @@ export class Preview {
     });
   }
 
+  // A local file reloads on a change in its folder. The watch reports a folder reached through
+  // a link (/tmp is /private/tmp on macOS) resolved, so the file's resolved name counts too. A
+  // watch that rejects (on Linux, a tree above 4096 folders) gives way to a look every POLL ms.
   watch(cx) {
+    this.poll?.cancel(); this.poll = null;
     if (this.on) return;
     const file = this.file, token = this.watching = {};
     cx.spawn(async (cx) => {
+      const real = await this.realFile(file);
       try {
         while (this.watching === token) {
           const changed = await watchFolder(dirname(file));
-          if (this.watching === token && changedFile(changed, file)) this.show(file, cx, true);
+          if (this.watching === token && changedFile(changed, file, real)) this.show(file, cx, true);
         }
-      } catch {}
+      } catch {
+        if (this.watching === token) await this.pollFile(file, token, cx);
+      }
+    });
+  }
+
+  // `file` with its folder's links resolved, or null where that is the same or can't be told.
+  async realFile(file) {
+    const command = programs(this.system).realDir?.(dirname(file));
+    const r = command && await exec(...command).catch(() => null);
+    const dir = r?.code === 0 ? r.stdout.replace(/\n$/, "") : "";
+    return dir && dir !== dirname(file) ? normalize(`${dir}/${basename(file)}`) : null;
+  }
+
+  // The watch's stand-in: the file's revision (modification time and size), looked at every POLL ms.
+  async pollFile(file, token, cx) {
+    const stamp = () => exec(...programs(this.system).stamp(file)).then((r) => r.code === 0 ? r.stdout.trim() : null, () => null);
+    let last = await stamp(), busy = false;
+    if (this.watching !== token) return;
+    this.poll = cx.timer.every(POLL, (cx) => {
+      if (busy || this.watching !== token) return;
+      busy = true;
+      cx.spawn(async (cx) => {
+        const now = await stamp();
+        busy = false;
+        if (this.watching !== token) return;
+        if (now !== last) this.show(file, cx, true);
+        last = now;
+      });
     });
   }
 
@@ -121,7 +161,7 @@ export class Preview {
   }
 
   close() {
-    this.watching = null; this.release();
+    this.watching = null; this.poll?.cancel(); this.release();
     // The window is gone: roundup-files learns there is none, unless another one (opened again
     // in its place) or a later copy of this one (the mod reloaded) already took FLOAT.
     const f = shared(FLOAT);

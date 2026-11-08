@@ -17,8 +17,10 @@ test("previewId: one key per file and machine, however the path is written", () 
   assert.notEqual(previewId("/a/B.md", null), previewId("/a/b.md", null));
 });
 
-test("shownIn: a live pane that still shows the file", () => {
-  const open = { [previewId("/r/a.md")]: { pane: "p1", token: "t1" } };
+const entry = (pane, file, on = null) => ({ pane, file, on });
+
+test("shownIn: a live pane that shows the file now", () => {
+  const open = { t1: entry("p1", "/r/a.md") };
   assert.equal(shownIn(open, {}, "/r/a.md", null, new Set(["p1"])), "p1");
   assert.equal(shownIn(open, {}, "/r/a.md", null, new Set()), null, "pane closed");
   assert.equal(shownIn(open, { t1: "/r/b.md" }, "/r/a.md", null, new Set(["p1"])), null, "followed a link");
@@ -26,8 +28,16 @@ test("shownIn: a live pane that still shows the file", () => {
   assert.equal(shownIn(open, {}, "/r/a.md", "vps", new Set(["p1"])), null, "another machine");
 });
 
+test("shownIn: a tab is found by the file it followed a link to", () => {
+  const open = { t1: entry("p1", "/r/a.md"), t2: entry("p2", "/r/a.md", "vps") };
+  const alive = new Set(["p1", "p2"]);
+  assert.equal(shownIn(open, { t1: "/r/b.md" }, "/r/b.md", null, alive), "p1");
+  assert.equal(shownIn(open, { t2: "/r/b.md" }, "/r/b.md", null, alive), null, "b.md on vps isn't b.md here");
+  assert.equal(shownIn(open, { t2: "/r/b.md" }, "/r/b.md", "vps", alive), "p2");
+});
+
 test("MOVED is per tab: a second tab of the same file doesn't change the recorded one", () => {
-  const open = { [previewId("/r/a.md")]: { pane: "p1", token: "t1" } };
+  const open = { t1: entry("p1", "/r/a.md") };
   const alive = new Set(["p1", "p2"]);
   // p2 (token t2, not recorded) follows a link: the recorded tab p1 still shows a.md.
   assert.equal(shownIn(open, { t2: "/r/b.md" }, "/r/a.md", null, alive), "p1");
@@ -36,11 +46,18 @@ test("MOVED is per tab: a second tab of the same file doesn't change the recorde
 });
 
 test("remember: drops dead panes and unknown tokens, keeps the new tab's early MOVED", () => {
-  const open = { [previewId("/r/x.md")]: { pane: "dead", token: "tx" }, [previewId("/r/y.md")]: { pane: "p9", token: "ty" } };
+  const open = { tx: entry("dead", "/r/x.md"), ty: entry("p9", "/r/y.md") };
   const moved = { tx: "/r/z.md", ty: "/r/w.md", stray: "/r/s.md", tnew: "/r/b.md" };
   const next = remember(open, moved, "/r/a.md", null, "p1", "tnew", new Set(["p1", "p9"]));
-  assert.deepEqual(next.open, { [previewId("/r/y.md")]: { pane: "p9", token: "ty" }, [previewId("/r/a.md")]: { pane: "p1", token: "tnew" } });
+  assert.deepEqual(next.open, { ty: entry("p9", "/r/y.md"), tnew: entry("p1", "/r/a.md") });
   assert.deepEqual(next.moved, { ty: "/r/w.md", tnew: "/r/b.md" });
+});
+
+test("remember: a tab that moved on stays when its first file opens again", () => {
+  const open = { t1: entry("p1", "/r/a.md") }, moved = { t1: "/r/b.md" }, alive = new Set(["p1", "p2"]);
+  const next = remember(open, moved, "/r/a.md", null, "p2", "t2", alive);
+  assert.equal(shownIn(next.open, next.moved, "/r/b.md", null, alive), "p1");
+  assert.equal(shownIn(next.open, next.moved, "/r/a.md", null, alive), "p2");
 });
 
 test("marked and madePane: an overlap records nothing", () => {
@@ -90,7 +107,7 @@ test("openTab: a new tab with a token, recorded once its pane comes", () => {
   assert.ok(args.props.token);
   until(300); h.add("pA"); until(1000);
   assert.equal(done, 1);
-  assert.deepEqual(h.state[OPEN], { [previewId("/r/a.md")]: { pane: "pA", token: args.props.token } });
+  assert.deepEqual(h.state[OPEN], { [args.props.token]: entry("pA", "/r/a.md") });
   // The next open of the same file focuses that pane.
   openTab(h.api, "/r/a.md", null, wait);
   assert.deepEqual(h.calls.at(-1), ["pane.focus", { pane: "pA" }]);
@@ -119,7 +136,7 @@ test("openTab: overlapping opens with a late second pane give no pane a wrong fi
   // Once the open-ended ones are older than SPAN, a new open records again.
   until(12000); openTab(h.api, "/r/d.md", null, wait);
   until(12100); h.add("pD"); until(13000);
-  assert.equal(h.state[OPEN][previewId("/r/d.md")].pane, "pD");
+  assert.deepEqual(Object.values(h.state[OPEN]).map((e) => e.pane), ["pD"]);
 });
 
 test("openCommand: split modes and the props a tab gets", () => {
@@ -131,6 +148,7 @@ test("openCommand: split modes and the props a tab gets", () => {
 
 test("shared keys keep their names", () => {
   assert.equal(FLOAT, "roundup-preview.float");
+  assert.equal(OPEN, "roundup-preview.open.v3");
   assert.equal(MOVED, "roundup-preview.moved.v2");
   assert.equal(OPENING, "roundup-preview.opening");
 });

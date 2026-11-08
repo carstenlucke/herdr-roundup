@@ -31,3 +31,12 @@ test("changedFile: the file, or its folder when the list overflowed", () => {
   assert.ok(!changedFile(["/a/c.md"], "/a/b.md"));
   assert.ok(changedFile(["\\\\?\\C:\\Repo\\b.md"], "C:/repo/B.md"));
 });
+
+test("changedFile: the file, its folder, or the same through a resolved link", () => {
+  assert.ok(changedFile(["/tmp/p/a.md"], "/tmp/p/a.md"));
+  assert.ok(changedFile(["/tmp/p"], "/tmp/p/a.md"), "the folder: too many changes to list");
+  assert.ok(!changedFile(["/private/tmp/p/a.md"], "/tmp/p/a.md"));
+  assert.ok(changedFile(["/private/tmp/p/a.md"], "/tmp/p/a.md", "/private/tmp/p/a.md"));
+  assert.ok(!changedFile(["/private/tmp/p/b.md"], "/tmp/p/a.md", "/private/tmp/p/a.md"));
+  assert.ok(!changedFile(["/tmp/p/b.md"], "/tmp/p/a.md", null));
+});

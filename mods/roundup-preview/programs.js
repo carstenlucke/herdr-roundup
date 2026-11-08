@@ -6,11 +6,12 @@
 import { powershell, win } from "./platform.js";
 import { GONE } from "./text-file.js";
 
-// A file's modification time in seconds. GNU stat goes first: BSD's -c fails
+// A file's revision, digits only: its modification time to the nanosecond and its size, so
+// a change within the same second still names a new copy. GNU stat goes first: BSD's -c fails
 // without printing, while GNU's -f prints file-system details and fails.
-const MTIME = String.raw`$(stat -c %Y "$src" 2>/dev/null || stat -f %m "$src")`;
+const MTIME = String.raw`$({ stat -c '%y %s' "$src" 2>/dev/null || stat -f '%Fm %z' "$src"; } | tr -cd 0-9)`;
 
-// sh: copies `src` into `dir` as <key>-<mtime>.<ext> unless there already; prints the name.
+// sh: copies `src` into `dir` as <key>-<revision>.<ext> unless there already; prints the name.
 const STAGE = String.raw`
 src=$1 dir=$2 key=$3 ext=$4
 [ -f "$src" ] || { echo "${GONE}" >&2; exit 1; }
@@ -26,8 +27,8 @@ tmp="$dir/$key.download"
 curl -sSfL --proto =https --proto-redir =https --max-time 10 --max-filesize 5242880 -o "$tmp" "$url" || { rm -f "$tmp"; exit 1; }
 file -b --mime-type "$tmp"`;
 
-// A file's modification time in seconds, PowerShell's MTIME.
-const STAMP = String.raw`([DateTimeOffset][IO.File]::GetLastWriteTimeUtc($src)).ToUnixTimeSeconds()`;
+// A file's revision, PowerShell's MTIME: its modification time in ticks (100 ns) and its size.
+const STAMP = String.raw`('{0}{1}' -f [IO.File]::GetLastWriteTimeUtc($src).Ticks, ([IO.FileInfo]$src).Length)`;
 
 // Moves $tmp, unique to this process, to $out. A move that can't overwrite tells when
 // another render got there first, whose result is as good; -Force would delete it first.
@@ -114,7 +115,7 @@ function run(argv) {
   var fm = $.NSFileManager.defaultManager;
   var attrs = fm.attributesOfItemAtPathError($(source), null);
   if (!attrs || attrs.isNil()) throw new Error('${GONE}');
-  var stamp = Math.round(ObjC.unwrap(attrs.objectForKey($.NSFileModificationDate).timeIntervalSince1970));
+  var stamp = String(Math.round(ObjC.unwrap(attrs.objectForKey($.NSFileModificationDate).timeIntervalSince1970) * 1e6)) + String(ObjC.unwrap(attrs.objectForKey($.NSFileSize)));
   var doc = $.PDFDocument.alloc.initWithURL($.NSURL.fileURLWithPath($(source)));
   if (!doc || doc.isNil()) throw new Error('This PDF cannot be read');
   if (doc.isLocked) throw new Error('This PDF is password protected');
@@ -135,7 +136,7 @@ function run(argv) {
   return JSON.stringify({ count: count, pages: pages });
 }`;
 
-// sh: renders pages from..to with pdftoppm into <dir>/<key>-<mtime>-p<n>.png; prints what popplerPages reads.
+// sh: renders pages from..to with pdftoppm into <dir>/<key>-<revision>-p<n>.png; prints what popplerPages reads.
 const POPPLER = String.raw`
 src=$1 dir=$2 key=$3 from=$4 to=$5 wide=$6
 [ -f "$src" ] || { echo "${GONE}" >&2; exit 1; }
@@ -219,6 +220,8 @@ const POSIX = {
   mime: (file) => ["file", ["-b", "--mime-type", file]],
   size: (file) => ["file", ["-b", file]],
   bytes: (file) => ["sh", ["-c", 'wc -c < "$1"', "size", file]],
+  stamp: (file) => ["sh", ["-c", `src=$1; [ -f "$src" ] && echo ${MTIME}`, "stamp", file]],
+  realDir: (dir) => ["sh", ["-c", 'cd "$1" && pwd -P', "real", dir]],
   head: (file, bytes) => ["sh", ["-c", 'head -c "$2" "$1"', "head", file, String(bytes)]],
   prune: (dir) => ["find", [dir, "-type", "f", "-mtime", "+14", "-delete"]],
   move: (from, to) => ["mv", ["-f", from, to]],
@@ -239,6 +242,8 @@ const WINDOWS = {
   mime: (file) => powershell(`$tmp = $args[0]\n${SNIFF}`, win(file)),
   size: (file) => powershell(SIZE_WINDOWS, win(file)),
   bytes: (file) => powershell("(Get-Item -LiteralPath $args[0]).Length", win(file)),
+  stamp: (file) => powershell(`$src = $args[0]\n${STAMP}`, win(file)),
+  realDir: null,
   head: (file, bytes) => powershell(HEAD_WINDOWS, win(file), String(bytes)),
   prune: (dir) => powershell(PRUNE_WINDOWS, win(dir)),
   move: (from, to) => powershell("Move-Item -LiteralPath $args[0] -Destination $args[1] -Force", win(from), win(to)),

@@ -366,9 +366,10 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   by extension, the first 400,000 characters; binary files say so. Esc, ←
   or the back arrow go back.
 - **Preview tab:** read-only; it reloads when the file changes on disk,
-  keeping Raw, zoom and open JSON rows. A click on the name copies the file
+  keeping Raw, zoom and open JSON rows, and after a restart shows the file
+  it showed (a link followed, not the one it opened with). A click on the name copies the file
   name, on the folder the full path. ⋯: Open in editor (`$VISUAL` or
-  `$EDITOR` without `--wait`/`-w`, else the default app), Open with default
+  `$EDITOR` read with the shell's quoting, without `--wait`/`-w`, else the default app), Open with default
   app, Reveal in Finder, Copy path, Copy relative path. Markdown: web and
   mail links open in the system, a local file opens in the same tab (←
   returns), `#heading` shows the document from that heading, web images
@@ -539,8 +540,13 @@ gsydler/herdr-cria's `file-preview` (the `cria-file-preview` mod) at
 (`{id, load, start?, toolbar?, render, release?}`), picked by extension
 in `kinds.js`. `image()` reads only from the Herdr home, so pictures are
 copied and PDF pages rendered into `data/roundup-preview/`, named by a
-hash of the path and its modification time, pruned after 14 days. Live
-reload through `watchFolder` on the file's folder. Programs on macOS:
+hash of the path and its revision (modification time to the nanosecond, or
+in ticks on Windows, and size, so a change within a second shows), pruned after 14 days. Live
+reload through `watchFolder` on the file's folder; a change counts under the
+file's path and under its folder resolved (`pwd -P`: on macOS the watch reports
+`/tmp` as `/private/tmp`). A watch that rejects (Linux, above 4096 folders)
+gives way to a look at that revision every 3s. A CSV is semicolon-separated
+when its first record has more `;` than `,` outside quoted cells. Programs on macOS:
 `sh` (`wc -c`, `head -c`, `stat`, `cp`), `sips` (sizes), `osascript -l
 JavaScript` with PDFKit (pages, 1600px wide), `curl` and `file` (web
 images, after the click), `find`/`mv`/`rm` in its cache only, `git
@@ -591,16 +597,20 @@ A Cmd-double-click, Enter or the menu's Open in tab on a file runs `tab.new {nam
 nothing it made and a mod pane doesn't learn its own id (issue #17), so the
 opener takes the one `roundup-preview` pane that wasn't in `panes()` before
 (looking again every 200ms, five times) and records it in shared
-`roundup-preview.open.v2` (`previewId(file, on)` → `{pane, token}`; the id is
-`[on, pathKey(file)]`, so `C:\repo\b.md` and `c:/REPO/b.md` are one file). Opens in flight sit in
+`roundup-preview.open.v3` (token → `{pane, file, on}`, the file it opened with). Opens in flight sit in
 shared `roundup-preview.opening` (token → `{since, until}`): when another
 open overlapped this one in time, or two new panes came, it records none, so
 the next click opens another tab rather than focusing a wrong one.
 A preview tab writes the file it shows, after a link or Back, under its own
 token into `roundup-preview.moved.v2` (token → file); a tab without a token
-(opened some other way) writes nothing. The next click on the file runs
-`pane.focus` on the recorded pane while it is alive and its token's entry
-doesn't name another file (`shownIn`). `open-file.js` and `paths.js` are
+(opened some other way) writes nothing. The next click on a file runs
+`pane.focus` on a recorded pane that is alive and shows that file now: its
+token's `moved` entry, else the file it opened with (`shownIn`, compared by
+`previewId` = `[on, pathKey(file)]`, so `C:\repo\b.md` and `c:/REPO/b.md`
+are one file). So a tab that followed a link to `b.md` comes to the front for
+`b.md`. A tab copy that starts again (a restart, the mod reloaded) shows
+its `moved` file, and the window's copy the key's `file`, so neither record
+names a file the pane no longer shows. `open-file.js` and `paths.js` are
 copies of `roundup-preview`'s; `sync.sh` refuses to install when they differ. The click count comes from
 `on_mouse_down("left")` on the list's box (`click_count`), since
 `on_item_click` gives none; the row's click then reads it, and Cmd from
@@ -636,7 +646,7 @@ the newer probe's own timer decides. A setShared re-renders every mod and is
 saved, so the window answers when asked instead of writing a heartbeat.
 The window's Open in tab opens the tab itself, in the space in front
 (`openTab`): `tab.new` goes out at once, and the window closes only once the
-record in `roundup-preview.open.v2` is settled (at most five looks, 200ms
+record in `roundup-preview.open.v3` is settled (at most five looks, 200ms
 apart), since its timers end when it closes.
 In the window a press drags it unless stopped, so `preview.js` stops
 `mouse_down` on its controls and its body and focuses its handle there, for
