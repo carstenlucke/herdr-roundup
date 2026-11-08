@@ -13,12 +13,13 @@ import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, InputState, Input, Scrollbar, Popup, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { spaces, panes, focused, readTextFile, watchFolder, theme, settings, window, props, notify, openOverlay, closeOverlay, shared, setShared, nextCommand, run } from "herdr";
 import { iconFor, rootIcon } from "./icon.js";
-import { listDir, buildIndex, diskSearch, kinds, prunedName, realPath, homeOf, PER_FOLDER, INDEX_DIRS, INDEX_PATHS } from "./disk.js";
+import { listDir, buildIndex, diskSearch, kinds, prunedName, realPath, homeOf, INDEX_PATHS } from "./disk.js";
 import { readGit, listFiles, emptyGit, NEW, MODIFIED, DELETED } from "./git.js";
 import { openExternal, revealExternal, copy, sendToAgent } from "./actions.js";
 import { dirOf, baseOf, ancestors, relTo, join } from "./tree.js";
-import { diskRows, hitRows, changedRows, rowStatus, CHANGED_LIMIT } from "./rows.js";
-import { match, cursorAfter, outdated, classify, applyRecheck, STALE_AGE, FIND_LIMIT } from "./search.js";
+import { diskRows, hitRows, changedRows, rowStatus } from "./rows.js";
+import { match, cursorAfter, outdated, classify, applyRecheck, STALE_AGE } from "./search.js";
+import { listNote, footerLines, linkTip, statusColor, changeColors, gitReason, noRepo, GIT_FAILED } from "./panel-text.js";
 // A copy of roundup-preview's: how it opens and which pane already shows a file. sync.sh
 // checks that the two copies match.
 import { FLOAT, openTab, timerOf, floatSpec, newToken, isOpen, unanswered, placed } from "./open-file.js";
@@ -27,8 +28,6 @@ import { samePath } from "./paths.js";
 
 const NAME = "roundup-files";
 const ICON = (name) => `mods/${NAME}/${name}.svg`;
-// A link row's tooltip: where it points, as written.
-const linkTip = (r) => `${r.broken ? "Broken link" : "Link"}${r.link ? ` to ${r.link}` : ""}${r.blocked ? " (no access to check it)" : ""}`;
 const ROW = 26;
 // How many folders keep their open folders, cursor and preview while another one shows.
 const SAVED = 50;
@@ -46,16 +45,6 @@ const SOURCES = ["git", "disk"];
 const REQUEST = `${NAME}.request`;
 
 const message = (e) => String(e?.message ?? e);
-const thousands = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-// What cut an index short, for the footer: "the first 20,000 folders and the first 40,000 files".
-const limits = (cut = []) => cut.map((c) => (c === "dirs" ? `the first ${thousands(INDEX_DIRS)} folders` : `the first ${thousands(INDEX_PATHS)} files`)).join(" and ") || "part of this folder";
-// Why a folder has no repo: git found none, or no git started there.
-const noRepo = (g) => (g.missing ? "Git not found" : "Not a git repository");
-const GIT_FAILED = "Git can't read this folder";
-// Git's colors: new green and deleted red, as in Herdr's `files` and `changes`; modified
-// yellow (ansi3) rather than their `blocked`, which many themes draw close to red.
-const statusColor = (t, s) => (!s ? null : s === "D" || s === "U" ? t.ansi1 : s === "?" || s === "A" || s === "C" ? t.ansi2 : s === "R" ? t.ansi4 : t.ansi3);
-const changeColors = (t) => [t.ansi2, t.ansi3, t.ansi1]; // NEW, MODIFIED, DELETED
 
 // The last terminal folder shown per space, with its machine: for a tab of mod panes only
 // (a preview tab), which has no folder. space.folder is only where the space's first shell
@@ -445,7 +434,7 @@ export default class Files extends View {
             if (!e?.noIndex) throw e;
             ctx.noDisk = true;
             if (source === "disk") built = fromGit = await files();
-            if (!built) throw new Error(this.current(ctx) && this.gitReason() ? `${this.gitReason()} · ${e.message}` : e.message);
+            if (!built) throw new Error(this.current(ctx) && gitReason(this.git) ? `${gitReason(this.git)} · ${e.message}` : e.message);
           }
         }
         const index = { dirs: built.dirs, all: built.all, lower: built.all.map((rel) => rel.toLowerCase()), full: built.full, cut: built.cut, files: built.all.length - built.dirs.size, source: ctx.noDisk ? "git" : source, from: fromGit ? "git" : "disk", known: new Set(built.all), added: new Set(), pending: new Set(), checking: false, at: Date.now(), stale: false, held: false, dirty: Boolean(fromGit ? job.changedGit : job.changedDisk) };
@@ -459,12 +448,6 @@ export default class Files extends View {
       this.indexing = job;
     }
     return this.indexing.promise;
-  }
-
-  // Why git's files can't serve a search here, once git has answered.
-  gitReason() {
-    const g = this.git;
-    return !g.known ? "" : g.rootIgnored ? "Git ignores this folder" : g.repo ? "Git can't list this folder" : noRepo(g);
   }
 
   clearSearch(cx) {
@@ -862,23 +845,6 @@ export default class Files extends View {
       .child(svg(ICON("branch")).size(13));
   }
 
-  note(rows) {
-    const g = this.git;
-    if (this.error) return this.error;
-    if (!this.root) return "No folder";
-    if (this.view === "changed") {
-      if (!g.known) return "Reading git…";
-      if (!g.repo) return noRepo(g);
-      if (g.failed) return GIT_FAILED;
-      return rows.length ? null : this.query.trim() ? "No matching changes" : g.rootUntracked ? "This whole folder is new to git" : g.rootIgnored ? "Git ignores this whole folder" : "No changes";
-    }
-    if (this.searching && !rows.length) return "Searching…";
-    if (this.hits && this.searchError) return this.searchError;
-    if (this.hits) return rows.length ? null : this.index?.from === "git" ? "No matches · ignored files left out" : "No matches";
-    if (this.loading && !rows.length) return "Loading files…";
-    return rows.length ? null : "Empty folder";
-  }
-
   render(cx) {
     if (this.menu) return this.renderMenu();
     this.sync(cx);
@@ -907,11 +873,8 @@ export default class Files extends View {
       if (at >= 0) { this.scroll.scroll_to_item(at, "center"); this.scrollTo = null; }
       else if (!this.pending.size && !this.loading) this.scrollTo = null;
     }
-    const note = this.note(rows), more = [];
-    if (this.limited && !this.hits) more.push(`Folders show their first ${PER_FOLDER} entries`);
-    if (this.hits?.length >= FIND_LIMIT) more.push(`First ${FIND_LIMIT} matches`);
-    if (this.view === "changed" && this.changedCut) more.push(`Changed shows the first ${thousands(CHANGED_LIMIT)} paths`);
-    if (this.hits && this.index && !this.index.full) more.push(`Search covers ${limits(this.index.cut)}`);
+    const note = listNote({ error: this.error, root: this.root, view: this.view, git: this.git, query: this.query, searching: this.searching, hits: this.hits, searchError: this.searchError, index: this.index, loading: this.loading }, rows);
+    const more = footerLines({ limited: this.limited, hits: this.hits, view: this.view, changedCut: this.changedCut, index: this.index });
     return root
       .child(this.summary(t))
       .child(h_flex().id("rf-search").flex_none().mx(8).mt(8).mb(4).h(28).px(8).gap(6).items_center().rounded(7).bg(t.canvas ?? t.surface)
