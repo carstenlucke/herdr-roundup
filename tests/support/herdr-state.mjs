@@ -40,6 +40,8 @@ function defaults() {
       checked: null, checks: true, checking: false,
     },
     props: {},
+    // exec()'s environment; null: this process's.
+    env: null,
     // An array, a function (options) → array, or an Error (knownAgents rejects).
     knownAgents: [],
     pickFolder: null,
