@@ -50,9 +50,9 @@ Nothing may need a person: there is no pointer or key injection, so L2 calls han
 | LAY-15 | sync.sh replaces only `layout:Herdr-Roundup` in keys.json and keeps `global` and other sections; a missing keys.json is created; a section missing from the repo installs as `{}`, never `null`. | commits 0c25217, c8d800a | L2 | — | fixture keys.json | H |
 | LAY-16 | sync.sh exits non-zero with "… differ: copy one over the other", before copying anything, when roundup-tabs/roundup-pane `close.js`/`menu.js` or roundup-files/roundup-preview `open-file.js`/`paths.js` differ. | commit f0ad009; PR #5 body | L2 | — | copy of the repo in a temp dir | H |
 | LAY-17 | sync.sh runs `herdr-app check` on every installed `roundup-*` mod and stops when one fails. | sync.sh; commit c8d800a | L2 | — | failing `herdr-app` stub | M |
-| LAY-18 | After sync.sh into the isolated home, `herdr-app check` passes for each roundup mod and `herdr-app status` shows no errors. | CLAUDE.md; PR #2–#5, #13 test plans | L3 | — | isolated Herdr | H |
-| LAY-19 | `layout.switch --name Herdr-Roundup` switches: status shows `"layout": "Herdr-Roundup"`. | PR #1 body | L3 | — | isolated Herdr | H |
-| LAY-20 | The shipped-mod assets the roundup mods draw exist in a started home: `mods/workspace-chrome/{spinner,check,branch,folder,plus,monitor,server,chevron-down,chevron-right,square-pen,x,panel-right,square,terminal}.svg`, `mods/pane/close.svg`, `mods/files/file.svg`, `mods/changes/changes.svg`. | RECIPE now (Built from) | L3 | — | isolated Herdr | M |
+| LAY-18 | After sync.sh into the isolated home, `herdr-app check` passes for each roundup mod and `herdr-app status` shows no errors. | CLAUDE.md; PR #2–#5, #13 test plans | L3 | smoke.sh LAY-18 | isolated Herdr | H |
+| LAY-19 | `layout.switch --name Herdr-Roundup` switches: status shows `"layout": "Herdr-Roundup"`. | PR #1 body | L3 | smoke.sh LAY-19 | isolated Herdr | H |
+| LAY-20 | The shipped-mod assets the roundup mods draw exist in a started home: `mods/workspace-chrome/{spinner,check,branch,folder,plus,monitor,server,chevron-down,chevron-right,square-pen,x,panel-right,square,terminal}.svg`, `mods/pane/close.svg`, `mods/files/file.svg`, `mods/changes/changes.svg`. | RECIPE now (Built from) | L3 | smoke.sh LAY-20 | isolated Herdr | M |
 
 ## roundup-workspace-chrome (CHR)
 
@@ -90,8 +90,8 @@ Nothing may need a person: there is no pointer or key injection, so L2 calls han
 | CHR-30 | `when()` gives "today HH:MM", "yesterday HH:MM", else "Mon D HH:MM", zero-padded. | RECIPE now | L1 | — | extract `when` | L |
 | CHR-31 | Only update.js calls `fetch`, and only `RELEASES`; no other network URL in these mods. | RECIPE Watch out (network) | L1 | — | static scan | M |
 | CHR-32 | Settings in the footer has an accent dot iff `updates().app.ready`; Add machine runs `mod.open {name:"machine-add"}`. | RECIPE now | L2 | — | gpui stub | L |
-| CHR-33 | `roundup-workspace-chrome.check` writes `…update.checked`, `…update.latest.version` and `…update.error` null into shared.json. | PR #13 body | L3 | — | isolated Herdr, network | M |
-| CHR-34 | `lastCheck` stays the same across two restarts within a day; with `…update.auto` false seeded, no `lastCheck` is written. | RECIPE Done when | L3 | — | seeded shared.json | M |
+| CHR-33 | `roundup-workspace-chrome.check` writes `…update.checked`, `…update.latest.version` and `…update.error` null into shared.json. | PR #13 body | L3 | smoke.sh CHR-33 (not with --offline) | isolated Herdr, network | M |
+| CHR-34 | `lastCheck` stays the same across two restarts within a day; with `…update.auto` false seeded, no `lastCheck` is written. | RECIPE Done when | L3 | smoke.sh CHR-34 (with --offline only the auto-off half) | seeded shared.json | M |
 
 ## roundup-spaces (SPC)
 
@@ -137,7 +137,7 @@ Nothing may need a person: there is no pointer or key injection, so L2 calls han
 | PAN-13 | Popup heights fit their rows: pane overlay 332 ≥ 9 rows (326); tab popup 237 ≥ 6 rows (233). | commit f0ad009 ("ninth row") | L1 | — | export row heights from menu.js | M |
 | PAN-14 | `shortcut()` returns the first bound action's keys from `layout:<layout>`, then `global`, else ""; Close pane shows `cmd-shift-w`. | RECIPE now | L2 | — | keys() fixture | L |
 | PAN-15 | Hover buttons: rename, split right/down, zoom/unzoom by `p.zoomed`, close → `closePane`; status spinner for working, "Needs you" for blocked, a dot for done. | RECIPE now | L2 | — | gpui stub | L |
-| PAN-16 | `roundup-tabs.close-pane` on a focused shell beside another shell (default mode) closes only that pane (`herdr-app ls`). | PR #5 test plan | L3 | — | isolated Herdr | M |
+| PAN-16 | `roundup-tabs.close-pane` on a focused shell beside another shell (default mode) closes only that pane (`herdr-app ls`). | PR #5 test plan | L3 | smoke.sh PAN-16 | isolated Herdr | M |
 
 ## roundup-tabs (TAB)
 
@@ -156,7 +156,7 @@ Nothing may need a person: there is no pointer or key injection, so L2 calls han
 | TAB-11 | Window buttons only with `window().buttons`: Windows SVGs (min, max/restore, close), elsewhere −/□/×; they run `window.minimize`/`maximize`/`close`. | RECIPE now | L2 | — | window fixture | L |
 | TAB-12 | `syncPanel` remembers the side panel per space: switching restores it (`layout.select` + `layout.show`, or `layout.hide`); an unknown first space isn't forced; old state ignored for 1 s while a restore lands; only enabled panels. | clone behaviour (tabs 0.1.13) | L2 | — | localStorage stub | L |
 | TAB-13 | Tab drag i→j → `tab.move {id, index: j+1}`; same tab → `tab.select`; double-click → `tab.rename`; wheel → `tab.prev`/`tab.next`. | clone behaviour | L2 | — | gpui stub | L |
-| TAB-14 | Default mode: `roundup-tabs.close:<id>` on a shell-only tab closes it at once; with `roundup-tabs.confirm-close` seeded to `always`, the tab stays and `roundup-confirm.open` holds an overlay id. | PR #5 test plan | L3 | — | isolated Herdr, seeded shared.json | H |
+| TAB-14 | Default mode: `roundup-tabs.close:<id>` on a shell-only tab closes it at once; with `roundup-tabs.confirm-close` seeded to `always`, the tab stays and `roundup-confirm.open` holds an overlay id. | PR #5 test plan | L3 | smoke.sh TAB-14 (both halves) | isolated Herdr, seeded shared.json | H |
 
 ## roundup-confirm (CNF)
 
@@ -168,7 +168,7 @@ Nothing may need a person: there is no pointer or key injection, so L2 calls han
 | CNF-04 | A click on Confirm runs the command; on Cancel it doesn't. | RECIPE now | L2 | — | gpui stub | M |
 | CNF-05 | `close()` clears `roundup-confirm.open` only while it holds this dialog's id. | commit f0ad009 | L2 | — | shared recorder | H |
 | CNF-06 | Without props the title is "Are you sure?" and the detail "". | code | L2 | — | gpui stub | L |
-| CNF-07 | After a dialog from TAB-14, `overlay.close {id}` clears `roundup-confirm.open`, and the tab still exists. | commit f0ad009 | L3 | — | isolated Herdr | M |
+| CNF-07 | After a dialog from TAB-14, `overlay.close {id}` clears `roundup-confirm.open`, and the tab still exists. | commit f0ad009 | L3 | smoke.sh CNF-07 | isolated Herdr | M |
 
 ## roundup-files (FIL)
 
@@ -243,7 +243,7 @@ Source keys: `PR #6 c <sha>` is a fix commit inside PR #6 whose message names th
 | FIL-53 | The arrow sits right after the name (name `flex_shrink_1().min_w(0)` inside an `h_flex().flex_1().min_w(0)`). | PR #18 rc 4506237207 | L2 | — | gpui stub recording styles | M |
 | FIL-54 | Search hits and git-only rows carry no `link`; rows in All and in folders Changed opens from disk do. | PR #18 rc 4506237552 | L1 | — | extract `diskRows`/`hitRows`/`changedRows` | M |
 | FIL-55 | A link to a folder opens as a folder in the tree. | PR #18 body | L2 | — | main.js harness | M |
-| FIL-56 | Italic and arrow look right in the running app. | PR #18 body (not tested then) | L3 | — | isolated Herdr; folder with links; shot | L |
+| FIL-56 | Italic and arrow look right in the running app. | PR #18 body (not tested then) | L3 | partly: smoke.sh FIL-56 (shots 20/21, taken after a restart: fonts/ load only at start) | isolated Herdr; folder with links; shot | L |
 
 ### Search and index
 
@@ -283,7 +283,7 @@ Source keys: `PR #6 c <sha>` is a fix commit inside PR #6 whose message names th
 | FIL-83 | `unseen`: a batch touching only ignored paths outside open folders doesn't refresh; outside a repo closed folders don't, except `.git/` (`git init`); forced files do; an empty batch or unplaceable path does. | PR #6 c 404dd34, c99c4c0; RECIPE now | L1 | — | extract `unseen` | H |
 | FIL-84 | `realPath` resolves a link (`/tmp` → `/private/tmp`), gives null for the same path or a missing folder; watch paths under the resolved root are placed. | PR #6 c 62c14bc | L2 | — | herdr stub | H |
 | FIL-85 | A refresh while one runs only marks another due: never two at once. | RECIPE now | L2 | — | main.js harness | M |
-| FIL-86 | Editing and deleting a file in the shown folder shows in the panel without a restart. | PR #6 body; RECIPE now | L3 | — | isolated Herdr; panel shown; shot or debug dump | M |
+| FIL-86 | Editing and deleting a file in the shown folder shows in the panel without a restart. | PR #6 body; RECIPE now | L3 | partly: smoke.sh FIL-86 (the panel redraws after an edit and a delete; that it shows M/no row is in shots 10–12) | isolated Herdr; panel shown; shot or debug dump | M |
 | FIL-87 | Switching folders saves open folders, cursor and preview; returning restores them; at most 50 kept. | PR #6 c fca7352; RECIPE now | L2 | — | focused/panes/spaces fixtures | M |
 | FIL-88 | `location()`: the focused terminal's cwd; for a mod pane the first terminal of its tab; in a tab without terminals the last folder shown in the space; else the space's first terminal with a cwd, else `space.folder`; `on` from `space.machine`. | PR #16 body; RECIPE now | L1 | — | extract `location()` | H |
 | FIL-89 | Enter on a folder hit clears the search, opens it and its ancestors, puts the cursor on it and scrolls there. | PR #6 c 65d7bcb; RECIPE now | L2 | — | main.js harness | M |
@@ -305,7 +305,7 @@ Source keys: `PR #6 c <sha>` is a fix commit inside PR #6 whose message names th
 | FIL-100 | Keyboard menu: below the row, above where it doesn't fit; ↑↓/Tab wrap; Home/End/PgUp/PgDn; Enter/Space run; Esc/←/Menu/Shift-F10 close; closes when its row moves, on wheel, on a press outside. | PR #6 body; PR #6 c 0229d56; RECIPE now | L1 + L2 | — | extract `keyMenuAt` | M |
 | FIL-101 | `relTo`: under root → rel; equal → `""`; outside → null; `\` normalized; a trailing slash ignored. | actions.js | L1 | — | move `relTo` herdr-free | M |
 | FIL-102 | `psQuote` doubles `'` and curly single quotes. | disk.js | L1 | — | move herdr-free | L |
-| FIL-103 | `roundup-files.focus`, `search`, `view:all`, `view:changed`, `source:git`, `source:disk`, `menu` run with status clean; view and source persist across a restart. | RECIPE now; PR #6 body | L3 | — | isolated Herdr; panel shown first | M |
+| FIL-103 | `roundup-files.focus`, `search`, `view:all`, `view:changed`, `source:git`, `source:disk`, `menu` run with status clean; view and source persist across a restart. | RECIPE now; PR #6 body | L3 | partly: smoke.sh FIL-103 (commands run with status clean; persistence read from data/roundup-files/store.json, the view after the restart only in a shot) | isolated Herdr; panel shown first | M |
 | FIL-104 | `mod.json` has `focusable: true`, `place: "none"`, `cloned_from files 0.1.13`; layout block `files` uses `roundup-files`. | PR #6 body; CLAUDE.md | L1 | — | static | M |
 | FIL-105 | View and source persist in prefs; invalid saved values fall back to `all`/`git`. | PR #6 body; RECIPE now | L2 | — | localStorage stub | M |
 
@@ -433,8 +433,8 @@ Source keys: `PR #6 c <sha>` is a fix commit inside PR #6 whose message names th
 | VW-24 | Code view: over 400,000 chars, or any cut text however short, ends with "… (file truncated)". | PR #16 rc 4505948247, 4505991102 | L2 | — | extract value builder | H |
 | VW-25 | `formatSize`: 0 → "0 B", 1023 → "1023 B", 1536 → "1.5 KB", 10240 → "10 KB", stops at GB, a non-number → "". | RECIPE now | L1 | — | — | L |
 | VW-26 | Header copiers: the name copies the basename, the folder the native path, each with a toast. | RECIPE now | L2 | — | gpui stub | L |
-| VW-27 | `tab.new --mod roundup-preview` for .md (with a local SVG), .pdf (2 pages), .png, .csv, .json and .ts renders in a shot with status clean. | PR #16 body; RECIPE Done when | L3 | — | fixtures; isolated Herdr | H |
-| VW-28 | `herdr-app check` passes for roundup-preview. | CLAUDE.md | L3 | — | isolated install | M |
+| VW-27 | `tab.new --mod roundup-preview` for .md (with a local SVG), .pdf (2 pages), .png, .csv, .json and .ts renders in a shot with status clean. | PR #16 body; RECIPE Done when | L3 | partly: smoke.sh VW-27 (status clean and a new picture per file; content in shots 30–35) | fixtures; isolated Herdr | H |
+| VW-28 | `herdr-app check` passes for roundup-preview. | CLAUDE.md | L3 | smoke.sh VW-28 | isolated install | M |
 
 ### File changes and cache
 
