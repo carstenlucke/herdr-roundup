@@ -8,6 +8,7 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { spaces, machines, panes, terminals, agents, run, openOverlay, exec, hc, theme, settings, shared, setShared, watchFolder, window, layout } from "herdr";
+import { parseStatus, parseRevParse } from "./git-parse.js";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -31,7 +32,6 @@ function place(s, ps) {
 const ROW = 32;
 const ROW_TWO = 44;
 const where = (s, ps) => JSON.stringify([s.machine ?? null, place(s, ps)]);
-const base = (path) => path.replace(/\/+$/, "").split("/").pop();
 // Changes made outside Herdr (an editor's save, a commit in another app): looked
 // for this often, in repos the list shows, while the window is in front.
 const FALLBACK = 60000;
@@ -247,25 +247,10 @@ export default class Spaces extends View {
         this.git[key] = null;
         return;
       }
-      // The repo's own .git folder names it; a worktree's top differs from it. One
-      // process for both. A git before 2.31 knows no --path-format: it echoes the flag
-      // and gives a relative ".git", the same for every repo. Then each checkout is
-      // its own repo, so unrelated repos don't share one card.
+      // The repo and whether this is a worktree of it, in one process (git-parse.js).
       const rp = await exec("git", ["rev-parse", "--show-toplevel", "--path-format=absolute", "--git-common-dir"], { cwd, on });
-      const [top = "", common, extra] = rp.stdout.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-      const repo = rp.code === 0 && common && !extra ? common : `${top}/.git`;
-      const name = repo.endsWith("/.git") ? base(repo.slice(0, -5)) : base(repo).replace(/\.git$/, "");
-      const info = { name, branch: null, ahead: 0, behind: 0, dirty: 0, repo: JSON.stringify([on, repo]), linked: repo !== `${top}/.git` };
-      for (const line of r.stdout.split("\n")) {
-        // Changed, renamed, conflicted and untracked files: one line each.
-        if (/^[12u?] /.test(line)) info.dirty++;
-        else if (line.startsWith("# branch.head ")) info.branch = line.slice(14);
-        else if (line.startsWith("# branch.ab ")) {
-          const [a, b] = line.slice(12).split(" ");
-          info.ahead = Math.abs(parseInt(a, 10)) || 0;
-          info.behind = Math.abs(parseInt(b, 10)) || 0;
-        }
-      }
+      const { repo, name, linked } = parseRevParse(rp.stdout, rp.code);
+      const info = { name, ...parseStatus(r.stdout), repo: JSON.stringify([on, repo]), linked };
       this.git[key] = info;
       if (!on) this.watch(repo, cx);
     } catch {
