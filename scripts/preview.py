@@ -5,7 +5,10 @@
 # project's README. Run from the repo:
 #   python3 scripts/preview.py . layouts/Herdr-Roundup.svg
 #   rsvg-convert -z 2 layouts/Herdr-Roundup.svg -o preview.png
-# Settings shows the SVG; README.md and RECIPE.md show the PNG.
+# Settings shows the SVG; README.md and RECIPE.md show the PNG. Without a scene the window stands in a
+# poster: name, claim and the main features on the left (FEATURES), the sheep sunk into the
+# background above the window. assets/logo-mark.png is assets/logo.png in grey, 480px, 8 colors;
+# a filter turns its dark wool into the light mark. The scene "window" is the bare window.
 # A third argument draws one of the scenes the project's site shows instead, cropped to what it
 # is about (scripts/site.sh renders them all): SCENES below names them, CROPS at the end crops
 # them. `python3 scripts/preview.py --scenes` prints their names.
@@ -18,6 +21,8 @@ if sys.argv[1:] == ["--scenes"]:
     print("\n".join(SCENES))
     sys.exit()
 REPO, OUT = sys.argv[1], sys.argv[2]
+# No scene: the layout's preview, the window in its poster.
+POSTER = len(sys.argv) <= 3
 SCENE = sys.argv[3] if len(sys.argv) > 3 else "window"
 if SCENE != "window" and SCENE not in SCENES:
     sys.exit(f"preview.py: unknown scene {SCENE!r}; the scenes are: window, {', '.join(SCENES)}")
@@ -1076,4 +1081,61 @@ if CROP and not (len(sys.argv) > 4 and sys.argv[4] == "full"):
     cx_, cy_, cw_, ch_ = (r(v) for v in CROP)
     out[0] = f'<svg xmlns="http://www.w3.org/2000/svg" width="{cw_}" height="{ch_}" viewBox="{cx_} {cy_} {cw_} {ch_}">'
 add('</g></svg>')
+
+# The layout's preview: the window, 3/4 size and bleeding off the right, in a poster.
+FEATURES = [
+    ("Spaces at a glance", "git state for every space"),
+    ("Files with git built in", "all files, or only what changed"),
+    ("A preview for every file", "Markdown, PDF, images, CSV, JSON, code"),
+    ("Panes with names", "you give them"),
+    ("Updates through your agent", "asks before it changes anything"),
+]
+
+def poster(window):
+    inner = window[window.index(">") + 1: window.rindex("</svg>")]
+    amber, mute, fg = "#e8912a", "#8a8e96", "#f3f3f4"
+    mark = base64.b64encode(open(f"{REPO}/assets/logo-mark.png", "rb").read()).decode()
+    ww, wx, wy = 1440, 700, 372
+    wh = ww * H / W
+    def big(x, y, s, size, fill=fg, weight=700, ls=0):
+        return f'<text x="{x}" y="{y}" font-family="{UI}" font-size="{size}" font-weight="{weight}" fill="{fill}" letter-spacing="{ls}">{escape(s)}</text>'
+    p = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}">',
+         '<defs>'
+         f'<symbol id="window" viewBox="0 0 {W} {H}">{inner}</symbol>'
+         '<filter id="poster-soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="28"/></filter>'
+         # Dark wool becomes white, the cream ground and the faces clear; only inside the picture.
+         '<filter id="poster-mark" x="0" y="0" width="1" height="1" color-interpolation-filters="sRGB">'
+         '<feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  -.85 -.85 -.85 0 1.25"/></filter>'
+         '<linearGradient id="poster-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#121317"/><stop offset="1" stop-color="#0b0c0e"/></linearGradient>'
+         '<radialGradient id="poster-warm" cx="0%" cy="100%" r="60%"><stop offset="0" stop-color="#e8912a" stop-opacity=".20"/><stop offset="1" stop-color="#e8912a" stop-opacity="0"/></radialGradient>'
+         '<radialGradient id="poster-cool" cx="64%" cy="62%" r="55%"><stop offset="0" stop-color="#96b2d7" stop-opacity=".30"/>'
+         '<stop offset=".5" stop-color="#7f8fc8" stop-opacity=".07"/><stop offset="1" stop-color="#7f8fc8" stop-opacity="0"/></radialGradient>'
+         f'<clipPath id="poster-window"><rect x="{wx}" y="{wy}" width="{ww}" height="{wh}" rx="16"/></clipPath>'
+         '<clipPath id="poster-logo"><rect x="110" y="84" width="96" height="96" rx="23"/></clipPath>'
+         '</defs>',
+         f'<rect width="{W}" height="{H}" fill="url(#poster-bg)"/>',
+         f'<rect width="{W}" height="{H}" fill="url(#poster-warm)"/>',
+         f'<rect width="{W}" height="{H}" fill="url(#poster-cool)"/>',
+         f'<g opacity=".08"><image x="1140" y="-78" width="560" height="560" filter="url(#poster-mark)" href="data:image/png;base64,{mark}"/></g>']
+    # Rings around the herd, one arc of them in amber.
+    for i, rr in enumerate((560, 760, 980)):
+        p.append(f'<circle cx="1420" cy="760" r="{rr}" fill="none" stroke="#96b2d7" stroke-opacity="{.12 - i * .03:.2f}" stroke-width="2"/>')
+    p.append('<circle cx="1420" cy="760" r="560" fill="none" stroke="#e8912a" stroke-opacity=".55" stroke-width="3" stroke-dasharray="180 3340" transform="rotate(-150 1420 760)"/>')
+    p += [f'<rect x="{wx}" y="{wy + 30}" width="{ww}" height="{wh}" rx="16" fill="#000" opacity=".75" filter="url(#poster-soft)"/>',
+          f'<use href="#window" x="{wx}" y="{wy}" width="{ww}" height="{wh}" clip-path="url(#poster-window)"/>',
+          f'<rect x="{wx + .5}" y="{wy + .5}" width="{ww - 1}" height="{wh - 1}" rx="16" fill="none" stroke="#ffffff" stroke-opacity=".13"/>',
+          f'<image x="110" y="84" width="96" height="96" clip-path="url(#poster-logo)" href="data:image/png;base64,{logo}"/>',
+          big(104, 316, "Herdr", 124, ls=-5), big(104, 440, "Roundup", 124, ls=-5),
+          big(110, 520, "Round up the herd.", 46, amber, 600, -1.5),
+          '<path d="M110 586H600" stroke="#ffffff" stroke-opacity=".10" stroke-width="2"/>']
+    y = 652
+    for title, sub in FEATURES:
+        p += [f'<circle cx="122" cy="{y - 9}" r="6" fill="{amber}"/>',
+              big(148, y, title, 30, weight=600, ls=-.5), big(148, y + 36, sub, 23, mute, 400)]
+        y += 104
+    p.append('</svg>')
+    return p
+
+if POSTER:
+    out = poster("\n".join(out))
 open(OUT, "w").write("\n".join(out) + "\n")

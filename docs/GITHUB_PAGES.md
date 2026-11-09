@@ -6,7 +6,7 @@ The project page: https://carstenlucke.github.io/herdr-roundup/
 
 - `site/` is the whole page: `index.html`, `style.css` and its pictures in `site/img/`. Static, no build step.
 - The pictures come from `scripts/preview.py`: each is a scene of the same drawn window, cropped to one feature. `scripts/site.sh` renders them all into `site/img/` (needs `python3`, `rsvg-convert`, `cwebp`, and Herdr App installed for its program icons). So they are made locally and committed, never in CI. It draws everything into a temporary folder first and replaces `site/img/` only when all pictures are done; `og.png` is the picture a shared link shows (PNG, which link previews widely support).
-- Without a scene, `preview.py` draws `layouts/Herdr-Roundup.svg` as before; keep it that way.
+- Without a scene, `preview.py` draws `layouts/Herdr-Roundup.svg`: the window in a poster with the name, the claim and the main features. The scene `window` is the bare window that `site.sh` uses for `window.webp` and `og.png`; keep both that way.
 
 ## Publishing
 

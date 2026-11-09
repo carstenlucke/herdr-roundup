@@ -8,7 +8,7 @@ A layout for [Herdr App](https://herdr.dev), started from Herdr's default layout
 
 The layout is called `Herdr-Roundup`: Herdr's Settings show a layout by its file name, and a name with a space can't be switched to. Its mods keep the short `roundup-` prefix.
 
-[![Herdr-Roundup: two agents side by side, a README in the floating preview, the files panel](preview.png)](https://carstenlucke.github.io/herdr-roundup/)
+[![Herdr-Roundup: name, claim and main features beside the window, with two agents side by side, a README in the floating preview and the files panel](preview.png)](https://carstenlucke.github.io/herdr-roundup/)
 
 ## Contents
 
