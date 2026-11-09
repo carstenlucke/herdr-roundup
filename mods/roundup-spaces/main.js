@@ -2,14 +2,16 @@
 // under it where its first terminal is now (repo · branch, ahead/behind, uncommitted
 // changes). A repo with worktrees sits on a card with them; spaces are grouped by
 // machine when more than one is known. On the right, how many agents run in it,
-// colored only when one needs you (blocked, done) or works. Click to switch,
+// colored only when one needs you (blocked, done) or works; with two or more, hovering it
+// shows them by tab with a map of each tab's panes, and a click goes to one. Click to switch,
 // right-click for its menu, drag to reorder.
 
-import { View, div, svg } from "gpui-kit";
-import { v_flex, h_flex } from "gpui-base";
+import { View, div, svg, image } from "gpui-kit";
+import { v_flex, h_flex, HoverCard } from "gpui-base";
 import { place, alpha, badge, gitWhere, changesTip, rebuilt as isRebuilt } from "./space-text.js";
 import { spaces, machines, panes, terminals, agents, run, openOverlay, exec, hc, theme, settings, shared, setShared, watchFolder, window, layout } from "herdr";
 import { parseStatus, parseRevParse } from "./git-parse.js";
+import { docValue, quicklook, fingerprint } from "./pane-map.js";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -35,6 +37,22 @@ const FALLBACK = 60000;
 const ACTIVE = 10000;
 // Spaces there at start wait this long, at most, for their git, then show together.
 const WAIT = 1500;
+// roundup-menu's overlay id while it is open: the quicklook's layer would draw above it.
+const MENU_OPEN = "roundup-menu.open";
+// The quicklook: as wide with pane maps, as wide without, at most this high before it scrolls.
+const QUICK = 330;
+const QUICK_BARE = 286;
+const QUICK_HIGH = 360;
+const WORD = { blocked: "needs you", done: "done", working: "working", idle: "idle" };
+
+// A terminal's title without the spinner or mark a program puts in front.
+const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
+
+// The agent's icon from the app's program table: a one-color glyph or a picture.
+function icon(p, size, color) {
+  if (!p?.icon) return null;
+  return p.tint ? svg(p.icon).size(size).flex_none().text_color(color) : image(p.icon).w(size).h(size).flex_none();
+}
 
 // A space speaks up only when something in it needs you.
 export function glyph(status) {
@@ -68,6 +86,23 @@ export default class Spaces extends View {
     this.pressed = null;
     this.over = null;
     this.machines = [];
+    // The quicklook: each machine's core document ("" here) as last read, the machines being
+    // read, the agents (fingerprint) each space's tree was last read for, the space whose badge
+    // was entered last, the badge under the pointer, the agent whose row is hovered.
+    this.docs = {};
+    this.reading = new Set();
+    this.tried = {};
+    this.peek = null;
+    this.hot = null;
+    this.lit = null;
+    // A press that began on a badge (its release jumps); the card kept empty after a jump until
+    // the badge is next entered or left, and while the menu is open until the badge was left.
+    this.badgePress = null;
+    this.jumped = false;
+    this.quiet = false;
+    this.left = true;
+    // A menu still open when Herdr quit doesn't keep the card empty for good.
+    if (shared(MENU_OPEN)) setShared(MENU_OPEN, null);
     this.reconnecting = JSON.parse(localStorage.getItem("machines.reconnecting") ?? "{}");
     for (const state of Object.values(this.reconnecting)) state.busy = false;
     this.folded = new Set(JSON.parse(localStorage.getItem("machines.folded") ?? "[]"));
@@ -84,6 +119,7 @@ export default class Spaces extends View {
     for (const s of sp) if (!this.shown.has(s.id)) this.born[s.id] ??= now;
     const due = this.due(now, sp, panes());
     if (due.size) this.refreshGit(due, cx);
+    this.rereadDue(sp, cx);
     if (sp.some((s) => !this.shown.has(s.id)) || this.orderingDue(now)) cx.notify();
   }
 
@@ -252,9 +288,55 @@ export default class Spaces extends View {
     });
   }
 
-  menu(w) {
-    // A popup is as tall as its items; height is only the most.
-    openOverlay({ mod: "menu", kind: "popup", width: 200, height: 260, props: { tab: "space", target: { id: w.id } } });
+  menu(w, cx) {
+    // A popup is as tall as its items; height is only the most. roundup-menu, a clone of Herdr's
+    // menu, says while it is open: the quicklook's layer is above popups.
+    openOverlay({ mod: "roundup-menu", kind: "popup", width: 200, height: 260, props: { tab: "space", target: { id: w.id } } });
+    // Empty from now until the badge was left and the menu is closed, in either order.
+    this.quiet = true;
+    this.left = this.hot === null;
+    cx?.notify();
+  }
+
+  // A machine's core document `herdr-app`, where its tabs' splits are (pane-map.js); one read
+  // per machine at a time. Not on Windows (no sh); unreadable, the quicklook goes without maps.
+  docOf(machine, cx) {
+    const key = machine ?? "";
+    if (window()?.platform === "windows" || this.reading.has(key)) return;
+    this.reading.add(key);
+    const rpc = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "doc.get", params: { name: "herdr-app", on: machine ?? null } });
+    cx.spawn(async (cx) => {
+      try {
+        const r = await exec("sh", ["-c", 'printf "%s\\n" "$1" | hc connect', "sh", rpc], { timeout: 3000 });
+        this.docs[key] = r.code === 0 ? docValue(r.stdout) : null;
+      } catch {
+        this.docs[key] = null;
+      } finally {
+        this.reading.delete(key);
+      }
+      cx.notify();
+    });
+  }
+
+  // While a badge's card may be open: its agents moved where the tree read doesn't have them
+  // (a new split, a new tab), read once more, once per new set of agents, failed or not.
+  rereadDue(sp, cx) {
+    const s = this.peek && !narrow() ? sp.find((x) => x.id === this.peek) : null;
+    const crew = s ? agents().filter((a) => a.space === s.id) : [];
+    if (crew.length < 2) { this.peek = null; return; }
+    const fp = fingerprint(crew);
+    if (this.tried[s.id] === fp) return;
+    this.tried[s.id] = fp;
+    const doc = this.docs[s.machine ?? ""]?.value ?? null;
+    if (quicklook(crew, s.tabs, doc, s.machine ?? null).some((g) => !g.map)) this.docOf(s.machine ?? null, cx);
+  }
+
+  // To an agent's pane: its space and tab come with it.
+  jump(a, cx) {
+    run("pane.focus", { pane: a.pane });
+    this.jumped = true;
+    this.lit = null;
+    cx.notify();
   }
 
   orderingDue(now) {
@@ -353,6 +435,7 @@ export default class Spaces extends View {
       .on_mouse_down("left", () => {
         this.pressed = id;
         this.over = id;
+        this.badgePress = null;
       })
       .on_mouse_move((_e, cx) => {
         const source = spaces().find(s => s.id === this.pressed);
@@ -376,8 +459,8 @@ export default class Spaces extends View {
   // The rows, under a header per machine once one isn't this computer.
   grouped(t, collapsed) {
     const rows = this.ordered();
-    const crew = {}; // space -> its agents' statuses
-    for (const a of agents()) (crew[a.space] ??= []).push(a.status);
+    const crew = {}; // space -> its agents
+    for (const a of agents()) (crew[a.space] ??= []).push(a);
     const tint = settings().dark ? "2e" : "24"; // the avatar's tint, read once per draw
     const one = (r) => (collapsed ? this.compact(r, t) : this.row(r, t, crew[r.w.id] ?? [], tint));
     // A repo and its worktrees: one card, a little apart from the rest. Without a
@@ -468,11 +551,14 @@ export default class Spaces extends View {
   }
 
   // How many agents run in the space. Gray while they all rest; else the color
-  // of the most urgent one (blocked > done > working).
-  crewBadge(id, statuses, t) {
-    const { top, calm, n, tip } = badge(statuses);
+  // of the most urgent one (blocked > done > working). One agent: its tooltip, and a click goes
+  // to it. Two or more: the quicklook on hover.
+  crewBadge(w, crew, t) {
+    const id = w.id;
+    const { top, calm, n, tip } = badge(crew.map((a) => a.status));
     const color = calm ? t.dim : tone(t, top);
-    return h_flex()
+    const many = crew.length > 1;
+    const pill = h_flex()
       .id(`crew-${id}`)
       .flex_none()
       .h(18)
@@ -484,9 +570,101 @@ export default class Spaces extends View {
       .font_semibold()
       .bg(calm ? t.selected : alpha(color, "26") ?? t.selected)
       .text_color(color)
-      .tooltip(tip)
+      .when(!many, (el) => el.tooltip(tip))
+      .on_hover((on, cx) => {
+        if (on) {
+          this.hot = id;
+          this.jumped = false;
+          if (many && this.peek !== id) this.lit = null;
+          if (many) this.peek = id;
+          if (many && this.pressed === null) {
+            this.tried[id] = fingerprint(crew);
+            this.docOf(w.machine ?? null, cx);
+          }
+        } else {
+          if (this.hot === id) this.hot = null;
+          this.badgePress = null;
+          this.jumped = false;
+          this.left = true;
+          if (this.quiet && !shared(MENU_OPEN)) this.quiet = false;
+        }
+        cx.notify();
+      })
+      // A press here starts no space drag; its release still ends one (a drop on this row).
+      .on_mouse_down("left", (_e, cx) => {
+        this.badgePress = id;
+        cx.stop_propagation();
+      })
+      .on_mouse_up("left", (_e, cx) => {
+        const mine = this.badgePress === id;
+        this.badgePress = null;
+        if (mine && !many) this.jump(crew[0], cx);
+      })
       .child(svg("mods/roundup-spaces/bot.svg").size(11))
       .child(String(n));
+    if (!many) return pill;
+    // Only the badge entered last can have its card open. The card's layer is above popups: empty
+    // while the menu is open, after a jump and during a drag.
+    const shown = this.peek === id && !this.quiet && !this.jumped && this.pressed === null && !shared(MENU_OPEN);
+    return HoverCard.new(`quick-${id}`).anchor("top_left").open_delay(400).close_delay(150).trigger(pill)
+      .content(shown ? this.quickCard(w, crew, t) : div());
+  }
+
+  // The quicklook: the space's agents by tab, each tab with a map of its panes when the core
+  // document has them all (pane-map.js); without, the same rows on a narrower card.
+  quickCard(w, crew, t) {
+    const machine = w.machine ?? null;
+    const groups = quicklook(crew, w.tabs, this.docs[machine ?? ""]?.value ?? null, machine);
+    const maps = groups.some((g) => g.map);
+    const word = (s) => (s === "idle" ? t.dim : tone(t, s));
+    const dot = (s) => (s === "idle"
+      ? div().size(7).flex_none().rounded(4).border(1.5).border_color(t.idle ?? t.dim)
+      : div().size(7).flex_none().rounded(4).bg(tone(t, s)));
+    const row = (a) => h_flex().id(`quick-row-${a.address}`).h(26).px(6).gap(8).items_center().rounded(6).cursor_pointer()
+      .text_size(12).text_color(t.foreground)
+      .when(this.lit === a.address, (el) => el.bg(t.hover))
+      .hover((s) => s.bg(t.hover))
+      .on_hover((on, cx) => {
+        if (on) this.lit = a.address;
+        else if (this.lit === a.address) this.lit = null;
+        cx.notify();
+      })
+      .on_click((_e, cx) => this.jump(a, cx))
+      .child(dot(a.status))
+      .when(Boolean(a.program?.icon), (el) => el.child(icon(a.program, 14, t.foreground)))
+      .child(div().flex_1().min_w(0).truncate().child(clean(a.title) || a.program?.name || a.address))
+      .child(div().flex_none().text_size(11).text_color(word(a.status)).child(WORD[a.status] ?? a.status));
+    // Each child as wide (in a row) or high (in a column) as its weight, the frame fixed. Across
+    // the axis every child fills its parent: h_flex centers its children, which would leave a
+    // row's panes 0px high.
+    const tile = (n) => {
+      const el = (n.children ? (n.dir === "row" ? h_flex() : v_flex()).items_stretch().gap(2) : div().rounded(2))
+        .flex_basis(0).flex_grow(n.weight).flex_shrink(1).min_w(0).min_h(0).self_stretch();
+      if (n.children) return el.children(n.children.map(tile));
+      if (n.agent) {
+        const a = n.agent, lit = this.lit === a.address;
+        return el.id(`quick-pane-${a.address}`).cursor_pointer().bg(tone(t, a.status)).opacity(lit ? 1 : 0.45)
+          .when(lit, (el) => el.border(1).border_color(t.foreground))
+          .on_click((_e, cx) => this.jump(a, cx));
+      }
+      return n.mod ? el.border(1).border_color(t.selected) : el.bg(t.selected);
+    };
+    const map = (g) => h_flex().w(60).h(40).flex_none().self_center().items_stretch().p(2).rounded(5).border(1).border_color(t.border)
+      .child(tile(g.map));
+    const section = (g, i) => v_flex().flex_none()
+      .when(i > 0, (el) => el.child(div().h(1).mx(6).my(3).bg(t.border)))
+      .child(h_flex().px(8).pt(7).pb(4).gap(8).text_size(11).text_color(t.dim)
+        .child(div().flex_none().font_semibold().text_color(t.muted).child(String(g.index)))
+        .when(g.name !== String(g.index), (el) => el.child(div().min_w(0).truncate().child(g.name))))
+      .child(h_flex().px(4).pb(4).gap(8)
+        .child(v_flex().flex_1().min_w(0).gap(1).children(g.rows.map(row)))
+        .when(Boolean(g.map), (el) => el.child(map(g))));
+    return v_flex().id(`quick-card-${w.id}`).mt(4).w(maps ? QUICK : QUICK_BARE).p(6).rounded(10).border(1).border_color(t.border)
+      .bg(t.popover).shadow_lg()
+      // Its presses stay here: none starts a drag of the row under it or opens that row's menu.
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_mouse_down("right", (_e, cx) => cx.stop_propagation())
+      .child(v_flex().id(`quick-list-${w.id}`).max_h(QUICK_HIGH).overflow_y_scrollbar().children(groups.map(section)));
   }
 
   row({ w, i, g, tree }, t, crew, tint) {
@@ -513,7 +691,7 @@ export default class Spaces extends View {
           .when(fromIndex < i, bar => bar.bottom(0))
           .when(fromIndex > i, bar => bar.top(0)),
       ))
-      .on_mouse_down("right", () => this.menu(w))
+      .on_mouse_down("right", (_e, cx) => this.menu(w, cx))
       .child(
         h_flex()
           .gap(9)
@@ -525,7 +703,7 @@ export default class Spaces extends View {
           .child(v_flex().flex_1().min_w(0).gap(2)
             .child(div().min_w(0).truncate().font_medium().text_color(t.foreground).child(w.name))
             .when(Boolean(line), el => el.child(line)))
-          .when(crew.length > 0, el => el.child(this.crewBadge(w.id, crew, t))),
+          .when(crew.length > 0, el => el.child(this.crewBadge(w, crew, t))),
       ), w.id, w.machine ?? null, () => run("space.select", { id: w.id }));
   }
 
@@ -546,6 +724,8 @@ export default class Spaces extends View {
   render() {
     const t = theme();
     const collapsed = narrow();
+    // The menu closed after the badge was left (or before): the card may show again.
+    if (this.quiet && this.left && !shared(MENU_OPEN)) this.quiet = false;
     const palette = ["ansi6", "ansi3", "ansi4", "ansi5", "ansi2", "ansi1"];
     const sp = spaces();
     const ids = new Set(sp.map(p => p.id));
@@ -564,7 +744,7 @@ export default class Spaces extends View {
         .child(div().id("space-new").size(26).flex_none().flex().items_center().justify_center().rounded(6).hover(s => s.bg(t.hover).text_color(t.foreground))
           .on_click(() => run("space.new")).child(svg("mods/workspace-chrome/plus.svg").size(14))))
       .child(v_flex().flex_1().min_h(0).px(8).pb(14).gap(2).overflow_y_scrollbar().mode("always")
-        .on_mouse_up("left", (_e, cx) => { this.pressed = null; cx.notify(); })
+        .on_mouse_up("left", (_e, cx) => { this.pressed = null; this.badgePress = null; cx.notify(); })
         .children(this.grouped(t, collapsed)));
   }
 }
