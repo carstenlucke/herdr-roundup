@@ -17,7 +17,7 @@
 import base64, json, os, re, sys
 from html import escape
 
-SCENES = ["spaces", "files", "files-changed", "search", "symlink", "pane-header", "rename",
+SCENES = ["spaces", "quicklook", "files", "files-changed", "search", "symlink", "pane-header", "rename",
           "close-menu", "close-confirm", "update", "preview-tab", "float"]
 if sys.argv[1:] == ["--scenes"]:
     print("\n".join(SCENES))
@@ -314,6 +314,8 @@ icon("folder", cx + 3 + 9, y + 3 + 6, 12, "dim", sw=2)
 text(cx + 3 + 9 + 12 + 7, y + 3 + 16, "atlas", 11.5, "muted", 500)
 ry = y + 3 + 24 + 2
 for it in inner:
+    if it["name"] == "search-filters":
+        QB = (cx + 3 + cw - 6 - 8, ry + 22)  # its badge: right edge, middle (the quicklook scene)
     ry += row(cx + 3, ry, cw - 6, **it) + 2
 card_h = ry - 2 + 3 - card_top
 frame(cx, card_top, cw, card_h, "border", rx=10)
@@ -1062,9 +1064,43 @@ if SCENE == "preview-tab":
         text(cx_, ty + 16.5, val, 12.5, col, family=MONO)
         ty += 24
 
+if SCENE == "quicklook":
+    # The pointer rests on search-filters' badge: roundup-spaces' card with its two agents in the
+    # tab's two panes, Codex's row hovered and its pane lit. Sizes as main.js draws them.
+    bx_ = QB[0] - (6 + 11 + 4 + 7 + 6)
+    QX, QY, QW = bx_, QB[1] + 9 + 4, 330
+    rows_ = [("claude", "Facet filters", "working", False), ("codex", "Review facets", "working", True)]
+    QH = 6 + 7 + 13 + 4 + len(rows_) * 26 + (len(rows_) - 1) + 4 + 6
+    overlay(QX, QY, QW, QH)
+    hy = QY + 6 + 7 + 10
+    text(QX + 6 + 8, hy, "1", 11, "muted", 600)
+    text(QX + 6 + 8 + tw("1", 11, 600) + 8, hy, "search-filters", 11, "dim")
+    MW_, MH_ = 60, 40
+    ly = QY + 6 + 7 + 13 + 4
+    lx, lw = QX + 6 + 4, QW - 12 - 8 - 8 - MW_
+    for i, (prog, title, status, lit) in enumerate(rows_):
+        y_ = ly + i * 27
+        if lit:
+            rect(lx, y_, lw, 26, "hover", rx=6)
+        add(f'<circle cx="{r(lx + 6 + 3.5)}" cy="{r(y_ + 13)}" r="3.5" fill="{paint(status)[0]}"/>')
+        program(prog, lx + 6 + 7 + 8, y_ + 6, 14, "foreground")
+        text(lx + 6 + 7 + 8 + 14 + 8, y_ + 17, title, 12, "foreground")
+        text(lx + lw - 6, y_ + 17, "working", 11, status, anchor="end")
+    # The map: the tab's row of two panes, split as on screen, 2px apart in a 2px frame.
+    mx, my = QX + QW - 6 - 4 - MW_, ly + (len(rows_) * 27 - 1 - MH_) / 2
+    frame(mx, my, MW_, MH_, "border", rx=5)
+    iw = MW_ - 6 - 2
+    lw_ = iw * LW / (LW + RW)
+    for i, (px_, pw_) in enumerate([(mx + 3, lw_), (mx + 3 + lw_ + 2, iw - lw_)]):
+        lit = rows_[i][3]
+        rect(px_, my + 3, pw_, MH_ - 6, "working", rx=2, op=1 if lit else 0.45)
+        if lit:
+            frame(px_, my + 3, pw_, MH_ - 6, "foreground", rx=2)
+
 # What each scene is cropped to: x, y, width, height. A fourth argument "full" keeps the window.
 CROPS = {
     "spaces": (0, 0, SB + 1, 480),
+    "quicklook": (0, 0, QX + QW + 40, QY + QH + 40) if SCENE == "quicklook" else None,
     "files": (PX - 8, 0, W - PX + 8, 600),
     "files-changed": (PX - 8, 0, W - PX + 8, 600),
     "search": (PX - 8, 42, W - PX + 8, 352),
