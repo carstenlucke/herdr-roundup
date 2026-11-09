@@ -9,7 +9,7 @@ changes and how many agents run in it; a repo's worktrees share a card.
 Closing a tab or pane asks first while an agent works, and a new release
 installs through an agent. Light and dark themes alike.
 
-![Herdr-Roundup: name, claim and main features beside the window, with two agents side by side, a README in the floating preview and the files panel](preview.png)
+![Herdr-Roundup: name, claim and main features beside the window, with two agents side by side, and a README in the floating preview](preview.png)
 
 ## What you see
 

@@ -53,6 +53,7 @@ Nothing may need a person: there is no pointer or key injection, so L2 calls han
 | LAY-18 | After sync.sh into the isolated home, `herdr-app check` passes for each roundup mod and `herdr-app status` shows no errors. | CLAUDE.md; PR #2–#5, #13 test plans | L3 | smoke.sh LAY-18 | isolated Herdr | H |
 | LAY-19 | `layout.switch --name Herdr-Roundup` switches: status shows `"layout": "Herdr-Roundup"`. | PR #1 body | L3 | smoke.sh LAY-19 | isolated Herdr | H |
 | LAY-20 | The shipped-mod assets the roundup mods draw exist in a started home: `mods/workspace-chrome/{spinner,check,branch,folder,plus,monitor,server,chevron-down,chevron-right,square-pen,x,panel-right,square,terminal}.svg`, `mods/pane/close.svg`, `mods/files/file.svg`, `mods/changes/changes.svg`. | RECIPE now (Built from) | L3 | smoke.sh LAY-20 | isolated Herdr | M |
+| LAY-21 | `scripts/preview.py` without a scene (and with `window`) draws the bare window, `layouts/Herdr-Roundup.svg` that Settings shows; only `poster` draws the poster for `preview.png`; `--scenes`, which site.sh draws, doesn't list `poster`. | PR #25 review | L1 | preview: `preview.py: Settings gets the bare window, only poster draws the poster, and --scenes leaves it out` | python3; stub program icons | M |
 
 ## roundup-workspace-chrome (CHR)
 

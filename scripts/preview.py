@@ -5,10 +5,12 @@
 # project's README. Run from the repo:
 #   python3 scripts/preview.py . layouts/Herdr-Roundup.svg
 #   rsvg-convert -z 2 layouts/Herdr-Roundup.svg -o preview.png
-# Settings shows the SVG; README.md and RECIPE.md show the PNG. Without a scene the window stands in a
-# poster: name, claim and the main features on the left (FEATURES), the sheep sunk into the
-# background above the window. assets/logo-mark.png is assets/logo.png in grey, 480px, 8 colors;
-# a filter turns its dark wool into the light mark. The scene "window" is the bare window.
+# Settings shows the SVG: the bare window, as it is without a scene (or with the scene "window").
+# README.md and RECIPE.md show the PNG, drawn from the poster instead:
+#   python3 scripts/preview.py . /tmp/poster.svg poster && rsvg-convert -z 2 /tmp/poster.svg -o preview.png
+# The poster puts the window beside name, claim and the main features (FEATURES), the sheep sunk
+# into the background above it. assets/logo-mark.png is assets/logo.png in grey, 480px, 8 colors;
+# a filter turns its dark wool into the light mark. "poster" is no scene: --scenes leaves it out.
 # A third argument draws one of the scenes the project's site shows instead, cropped to what it
 # is about (scripts/site.sh renders them all): SCENES below names them, CROPS at the end crops
 # them. `python3 scripts/preview.py --scenes` prints their names.
@@ -21,9 +23,9 @@ if sys.argv[1:] == ["--scenes"]:
     print("\n".join(SCENES))
     sys.exit()
 REPO, OUT = sys.argv[1], sys.argv[2]
-# No scene: the layout's preview, the window in its poster.
-POSTER = len(sys.argv) <= 3
-SCENE = sys.argv[3] if len(sys.argv) > 3 else "window"
+# "poster": the bare window in its poster, for preview.png. No scene: the bare window, Settings' preview.
+POSTER = sys.argv[3:4] == ["poster"]
+SCENE = sys.argv[3] if len(sys.argv) > 3 and not POSTER else "window"
 if SCENE != "window" and SCENE not in SCENES:
     sys.exit(f"preview.py: unknown scene {SCENE!r}; the scenes are: window, {', '.join(SCENES)}")
 LAYOUT = json.load(open(f"{REPO}/layouts/Herdr-Roundup.json"))
@@ -1082,7 +1084,7 @@ if CROP and not (len(sys.argv) > 4 and sys.argv[4] == "full"):
     out[0] = f'<svg xmlns="http://www.w3.org/2000/svg" width="{cw_}" height="{ch_}" viewBox="{cx_} {cy_} {cw_} {ch_}">'
 add('</g></svg>')
 
-# The layout's preview: the window, 3/4 size and bleeding off the right, in a poster.
+# preview.png's poster: the window, 3/4 size and bleeding off the right, beside name, claim and features.
 FEATURES = [
     ("Spaces at a glance", "git state for every space"),
     ("Files with git built in", "all files, or only what changed"),
@@ -1093,7 +1095,8 @@ FEATURES = [
 
 def poster(window):
     inner = window[window.index(">") + 1: window.rindex("</svg>")]
-    amber, mute, fg = "#e8912a", "#8a8e96", "#f3f3f4"
+    # The poster's own tones: amber for the claim, and text a touch softer than the window's.
+    amber, mute, fg, accent = "#e8912a", "#8a8e96", "#f3f3f4", T["accent"]
     mark = base64.b64encode(open(f"{REPO}/assets/logo-mark.png", "rb").read()).decode()
     ww, wx, wy = 1440, 700, 372
     wh = ww * H / W
@@ -1107,8 +1110,8 @@ def poster(window):
          '<filter id="poster-mark" x="0" y="0" width="1" height="1" color-interpolation-filters="sRGB">'
          '<feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  -.85 -.85 -.85 0 1.25"/></filter>'
          '<linearGradient id="poster-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#121317"/><stop offset="1" stop-color="#0b0c0e"/></linearGradient>'
-         '<radialGradient id="poster-warm" cx="0%" cy="100%" r="60%"><stop offset="0" stop-color="#e8912a" stop-opacity=".20"/><stop offset="1" stop-color="#e8912a" stop-opacity="0"/></radialGradient>'
-         '<radialGradient id="poster-cool" cx="64%" cy="62%" r="55%"><stop offset="0" stop-color="#96b2d7" stop-opacity=".30"/>'
+         f'<radialGradient id="poster-warm" cx="0%" cy="100%" r="60%"><stop offset="0" stop-color="{amber}" stop-opacity=".20"/><stop offset="1" stop-color="{amber}" stop-opacity="0"/></radialGradient>'
+         f'<radialGradient id="poster-cool" cx="64%" cy="62%" r="55%"><stop offset="0" stop-color="{accent}" stop-opacity=".30"/>'
          '<stop offset=".5" stop-color="#7f8fc8" stop-opacity=".07"/><stop offset="1" stop-color="#7f8fc8" stop-opacity="0"/></radialGradient>'
          f'<clipPath id="poster-window"><rect x="{wx}" y="{wy}" width="{ww}" height="{wh}" rx="16"/></clipPath>'
          '<clipPath id="poster-logo"><rect x="110" y="84" width="96" height="96" rx="23"/></clipPath>'
@@ -1117,10 +1120,12 @@ def poster(window):
          f'<rect width="{W}" height="{H}" fill="url(#poster-warm)"/>',
          f'<rect width="{W}" height="{H}" fill="url(#poster-cool)"/>',
          f'<g opacity=".08"><image x="1140" y="-78" width="560" height="560" filter="url(#poster-mark)" href="data:image/png;base64,{mark}"/></g>']
-    # Rings around the herd, one arc of them in amber.
+    # Rings around the herd, one arc of them in amber. The window covers the inner ring below
+    # y = wy (from about -136deg on): the arc starts at -120deg, so all its 180px stay above it.
+    arc = -120
     for i, rr in enumerate((560, 760, 980)):
-        p.append(f'<circle cx="1420" cy="760" r="{rr}" fill="none" stroke="#96b2d7" stroke-opacity="{.12 - i * .03:.2f}" stroke-width="2"/>')
-    p.append('<circle cx="1420" cy="760" r="560" fill="none" stroke="#e8912a" stroke-opacity=".55" stroke-width="3" stroke-dasharray="180 3340" transform="rotate(-150 1420 760)"/>')
+        p.append(f'<circle cx="1420" cy="760" r="{rr}" fill="none" stroke="{accent}" stroke-opacity="{.12 - i * .03:.2f}" stroke-width="2"/>')
+    p.append(f'<circle cx="1420" cy="760" r="560" fill="none" stroke="{amber}" stroke-opacity=".55" stroke-width="3" stroke-dasharray="180 3340" transform="rotate({arc} 1420 760)"/>')
     p += [f'<rect x="{wx}" y="{wy + 30}" width="{ww}" height="{wh}" rx="16" fill="#000" opacity=".75" filter="url(#poster-soft)"/>',
           f'<use href="#window" x="{wx}" y="{wy}" width="{ww}" height="{wh}" clip-path="url(#poster-window)"/>',
           f'<rect x="{wx + .5}" y="{wy + .5}" width="{ww - 1}" height="{wh - 1}" rx="16" fill="none" stroke="#ffffff" stroke-opacity=".13"/>',

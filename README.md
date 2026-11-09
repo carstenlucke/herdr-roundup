@@ -8,7 +8,7 @@ A layout for [Herdr App](https://herdr.dev), started from Herdr's default layout
 
 The layout is called `Herdr-Roundup`: Herdr's Settings show a layout by its file name, and a name with a space can't be switched to. Its mods keep the short `roundup-` prefix.
 
-[![Herdr-Roundup: name, claim and main features beside the window, with two agents side by side, a README in the floating preview and the files panel](preview.png)](https://carstenlucke.github.io/herdr-roundup/)
+[![Herdr-Roundup: name, claim and main features beside the window, with two agents side by side, and a README in the floating preview](preview.png)](https://carstenlucke.github.io/herdr-roundup/)
 
 ## Contents
 
@@ -23,7 +23,7 @@ The layout is called `Herdr-Roundup`: Herdr's Settings show a layout by its file
 | `docs/GITHUB_PAGES.md` | How the project page is made and published |
 | `scripts/sync.sh` | Installs all of the above into `~/.config/herdr-app` |
 | `site/` | The project's web page (GitHub Pages): `index.html`, `style.css` and its pictures in `site/img/` |
-| `scripts/preview.py` | Draws the layout's preview picture, and with a scene name the site's pictures |
+| `scripts/preview.py` | Draws the layout's preview picture for Settings, with `poster` README's `preview.png`, and with a scene name the site's pictures |
 | `scripts/site.sh` | Redraws `site/img/` (needs `python3`, `rsvg-convert`, `cwebp` and Herdr App installed) |
 | `.github/workflows/pages.yml` | Publishes `site/` to GitHub Pages, only when run by hand |
 | `scripts/build-icons.mjs` | Regenerates `roundup-files`' icons from a pinned release of Symbols (needs `curl`, `unzip`, Node) |
