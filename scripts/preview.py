@@ -1,7 +1,7 @@
 # Draws the Herdr-Roundup window as an SVG, with made-up spaces, agents, terminals and files:
 # no one's real spaces, paths or sessions. Sizes come from layouts/Herdr-Roundup.json and
-# the roundup- mods, colors from the graphite theme. The active tab has two panes side by
-# side, the side panel shows roundup-files (with a symlink, AGENTS.md), and roundup-preview's floating window shows the
+# the roundup- mods, colors from the graphite theme. The active tab has Claude Code (working) on
+# the left, Codex (done) above a shell on the right, the side panel shows roundup-files (with a symlink, AGENTS.md), and roundup-preview's floating window shows the
 # project's README. Run from the repo:
 #   python3 scripts/preview.py . layouts/Herdr-Roundup.svg
 #   rsvg-convert -z 2 layouts/Herdr-Roundup.svg -o preview.png
@@ -9,7 +9,7 @@
 # README.md and RECIPE.md show the PNG, drawn from the poster instead:
 #   python3 scripts/preview.py . /tmp/poster.svg poster && rsvg-convert -z 2 /tmp/poster.svg -o preview.png
 # The poster puts the window beside name, claim and the main features (FEATURES), the sheep sunk
-# into the background above it. assets/logo-mark.png is assets/logo.png in grey, 480px, 8 colors;
+# into the background above it; its window shows the quicklook card of search-filters' agents. assets/logo-mark.png is assets/logo.png in grey, 480px, 8 colors;
 # a filter turns its dark wool into the light mark. "poster" is no scene: --scenes leaves it out.
 # A third argument draws one of the scenes the project's site shows instead, cropped to what it
 # is about (scripts/site.sh renders them all): SCENES below names them, CROPS at the end crops
@@ -305,7 +305,7 @@ y = 77 + 6
 cx, cw = 8, 252
 card_top = y
 inner = [
-    dict(name="search-filters", tree=True, git=("", 3, 0, 5), crew=(2, "working"), active=True),
+    dict(name="search-filters", tree=True, git=("", 3, 0, 5), crew=(2, "done"), active=True),
     dict(name="fix-login", tree=True, git=("fix/login-redirect", 0, 0, 1), crew=(1, "blocked")),
     dict(name="release-2.4", tree=True, git=("release/2.4", 0, 2, 0)),
 ]
@@ -365,9 +365,9 @@ def group(label, n, color, items):
         ay += 28
 
 group("Needs you", 1, "blocked", [("codex", "fix-login", "Run the migration?", "4m", "blocked")])
-group("Done", 1, "done", [("claude", "website", "Pricing page", "12m", "done")])
-group("Working", 3, "working", [("claude", "search-filters", "Facet filters", "1m", "working", True),
-                                ("codex", "search-filters", "Review facets", "2m", "working"),
+group("Done", 2, "done", [("codex", "search-filters", "Review facets", "2m", "done"),
+                          ("claude", "website", "Pricing page", "12m", "done")])
+group("Working", 2, "working", [("claude", "search-filters", "Facet filters", "1m", "working", True),
                                 ("pi", "research", "Benchmarks", "3m", "working")])
 group("Idle", 4, "dim", [("claude", "mobile-app", "Onboarding flow", "40m", "idle"),
                          ("pi", "dotfiles", "brew bundle", "1h", "idle"),
@@ -423,7 +423,8 @@ for name, label, glyph, on in reversed([("files", "Files", "files", True), ("cha
     bx -= 3
 icon("plus", bx - 22, 15, 12, "dim", sw=2)
 
-# The active tab's two panes, left and right, and the side panel: 8px padding and gap, rounded 10px.
+# The active tab's panes, Claude Code on the left, Codex above a shell on the right, and the side
+# panel: 8px padding and gap, rounded 10px.
 PY, PH = 50, H - 28 - 8 - 50
 PW = 368
 PX = W - 8 - PW
@@ -431,14 +432,19 @@ LX = WX + 8
 LW = (PX - 8 - LX - 8) // 2
 RX = LX + LW + 8
 RW = PX - 8 - RX
+# The right side's split: Codex on top, the shell below, 8px apart.
+CH = round((PH - 8) * 0.58)
+SY, SH = PY + CH + 8, PH - CH - 8
 LH = 21  # terminal line height
 TOP = PY + 30 + 12 + 14  # first baseline: header, padding, ascent
 ROWS = (PY + PH - 12 - TOP) // LH + 1
 
-def pane(x, w, prog, name, address, status, focus, lines, bottom, hover=False):
+def pane(x, w, prog, name, address, status, focus, lines, bottom, hover=False, y=PY, h=PH):
     """A pane: roundup-pane's header (icon, name, id chip, folder, status), then the terminal.
     `lines` run from the top, `bottom` sits on the last rows. `hover`: the pointer is on the
-    header, on its pencil, so the header shows rename, split right, split down, zoom and close."""
+    header, on its pencil, so the header shows rename, split right, split down, zoom and close.
+    `y`, `h`: its top and height, the tab's whole height unless it is split."""
+    PY, PH = y, h
     rect(x, PY, w, PH, "background", rx=10)
     frame(x, PY, w, PH, "accent" if focus else "border", rx=10)
     line(x + 1, PY + 30.5, x + w - 1, PY + 30.5, "border")
@@ -464,19 +470,24 @@ def pane(x, w, prog, name, address, status, focus, lines, bottom, hover=False):
         right -= 8
     if status == "working":
         spinner(right - 6, PY + 15, "working", 5)
+    elif status == "done":
+        # roundup-pane's done mark: a 7px dot in the done color.
+        add(f'<circle cx="{r(right - 6)}" cy="{r(PY + 15)}" r="3.5" fill="{paint("done")[0]}"/>')
     clip = f"term-{address}"
     add(f'<defs><clipPath id="{clip}"><rect x="{x + 1}" y="{PY + 31}" width="{w - 2}" height="{PH - 32}"/></clipPath></defs>')
     add(f'<g clip-path="url(#{clip})">')
     # Like a terminal, it scrolls: the lines that don't fit above the bottom rows leave at the top.
-    room = max(0, ROWS - len(bottom))
+    top = PY + 30 + 12 + 14
+    rows = (PY + PH - 12 - top) // LH + 1
+    room = max(0, rows - len(bottom))
     if len(lines) > room:
         lines = lines[-room:] if room else []
     for i, parts in enumerate(lines):
         if parts:
-            spans(x + 14, TOP + LH * i, parts, 13)
+            spans(x + 14, top + LH * i, parts, 13)
     for i, parts in enumerate(bottom):
         if parts:
-            spans(x + 14, TOP + LH * (ROWS - len(bottom) + i), parts, 13)
+            spans(x + 14, top + LH * (rows - len(bottom) + i), parts, 13)
     add('</g>')
 
 F, D, M, G = "terminal", "dim", "muted", "ansi2"
@@ -532,7 +543,7 @@ rect(LX + 30, pb - 13, 8, 17, "terminal", op=0.85)
 
 # In the panes scene the reviewer has a name of its own, and the pointer is on its header.
 PANES = SCENE in ("pane-header", "rename")
-pane(RX, RW, "codex", "Reviewer" if PANES else "Codex", "t7", "working", False, [
+pane(RX, RW, "codex", "Reviewer" if PANES else "Codex", "t7", "done", False, [
     [("› ", M, 400), ("Review src/search/facets.ts: does an empty hit list", F, 400)],
     [("  still return every facet, at zero?", F, 400)],
     [],
@@ -544,13 +555,26 @@ pane(RX, RW, "codex", "Reviewer" if PANES else "Codex", "t7", "working", False, 
     [],
     [("• ", F, 400), ("facetCounts keeps a field with no hits, but the", F, 400)],
     [("  route drops empty maps before it answers.", F, 400)],
-], [
-    [("• ", "working", 400), ("Working ", "working", 400), ("(38s • esc to interrupt)", D, 400)],
     [],
+    [("• ", F, 400), ("Fix: return the empty maps in src/search/query.ts;", F, 400)],
+    [("  the rest of the change looks good.", F, 400)],
+], [
     [("› ", M, 400), ("Ask for a follow-up", D, 400)],
     [],
     [("  ⏎ send   ⌃J newline", D, 400)],
-], hover=SCENE == "pane-header")
+], hover=SCENE == "pane-header", h=CH)
+
+# Below it a shell in the same folder: the files the agents changed, as the side panel shows them.
+pane(RX, RW, "shell", "zsh", "t8", None, False, [
+    [("atlas-search-filters ", "ansi4", 400), ("search-filters ", "ansi5", 400), ("❯ ", G, 400), ("git status --short", F, 400)],
+    [(" M ", "ansi3", 400), ("src/search/facets.ts", F, 400)],
+    [(" M ", "ansi3", 400), ("src/search/query.ts", F, 400)],
+    [(" M ", "ansi3", 400), ("src/ui/ResultsHeader.tsx", F, 400)],
+    [("?? ", "ansi2", 400), ("src/ui/FilterChip.tsx", F, 400)],
+    [("?? ", "ansi2", 400), ("test/facets.test.ts", F, 400)],
+], [
+    [("atlas-search-filters ", "ansi4", 400), ("search-filters ", "ansi5", 400), ("❯ ", G, 400)],
+], y=SY, h=SH)
 
 # ---- side panel: roundup-files, 368px ----
 # The same folder as the panes: three files modified, two new, three commits ahead.
@@ -927,7 +951,7 @@ def dialog_head(x, y, w, title):
     text(x + 18, y + 18 + 15, title, 15, "foreground", 600)
     text(x + w - 18, y + 18 + 14, "Esc", 11, "dim", anchor="end")
 
-if SCENE != "window":
+if SCENE != "window" or POSTER:
     add('<defs><filter id="soft" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="10"/></filter></defs>')
 
 if SCENE == "update":
@@ -1064,13 +1088,16 @@ if SCENE == "preview-tab":
         text(cx_, ty + 16.5, val, 12.5, col, family=MONO)
         ty += 24
 
-if SCENE == "quicklook":
-    # The pointer rests on search-filters' badge: roundup-spaces' card with its two agents in the
-    # tab's two panes, Codex's row hovered and its pane lit. Sizes as main.js draws them.
+if SCENE == "quicklook" or POSTER:
+    # The pointer rests on search-filters' badge: roundup-spaces' card with its two agents, Claude
+    # Code working on the left, Codex done above the shell on the right; Codex's row hovered and
+    # its pane lit. Sizes as main.js draws them. The
+    # poster shows it too, above the floating preview; Settings' bare window doesn't.
     bx_ = QB[0] - (6 + 11 + 4 + 7 + 6)
     QX, QY, QW = bx_, QB[1] + 9 + 4, 330
-    rows_ = [("claude", "Facet filters", "working", False), ("codex", "Review facets", "working", True)]
+    rows_ = [("claude", "Facet filters", "working", False), ("codex", "Review facets", "done", True)]
     QH = 6 + 7 + 13 + 4 + len(rows_) * 26 + (len(rows_) - 1) + 4 + 6
+    add('<g id="quicklook">')
     overlay(QX, QY, QW, QH)
     hy = QY + 6 + 7 + 10
     text(QX + 6 + 8, hy, "1", 11, "muted", 600)
@@ -1085,17 +1112,25 @@ if SCENE == "quicklook":
         add(f'<circle cx="{r(lx + 6 + 3.5)}" cy="{r(y_ + 13)}" r="3.5" fill="{paint(status)[0]}"/>')
         program(prog, lx + 6 + 7 + 8, y_ + 6, 14, "foreground")
         text(lx + 6 + 7 + 8 + 14 + 8, y_ + 17, title, 12, "foreground")
-        text(lx + lw - 6, y_ + 17, "working", 11, status, anchor="end")
-    # The map: the tab's row of two panes, split as on screen, 2px apart in a 2px frame.
+        text(lx + lw - 6, y_ + 17, {"blocked": "needs you"}.get(status, status), 11, status, anchor="end")
+    # The map: the tab's panes split as on screen, 2px apart in a 2px frame: a row of Claude Code
+    # and a column of Codex over the shell. An agent's pane in its status color, the shell gray.
     mx, my = QX + QW - 6 - 4 - MW_, ly + (len(rows_) * 27 - 1 - MH_) / 2
     frame(mx, my, MW_, MH_, "border", rx=5)
-    iw = MW_ - 6 - 2
+    iw, ih = MW_ - 6 - 2, MH_ - 6
     lw_ = iw * LW / (LW + RW)
-    for i, (px_, pw_) in enumerate([(mx + 3, lw_), (mx + 3 + lw_ + 2, iw - lw_)]):
-        lit = rows_[i][3]
-        rect(px_, my + 3, pw_, MH_ - 6, "working", rx=2, op=1 if lit else 0.45)
+    ch_ = (ih - 2) * CH / (CH + SH)
+    rx_ = mx + 3 + lw_ + 2
+    for (px_, py_, pw_, ph_), row_ in [((mx + 3, my + 3, lw_, ih), rows_[0]), ((rx_, my + 3, iw - lw_, ch_), rows_[1]),
+                                       ((rx_, my + 3 + ch_ + 2, iw - lw_, ih - 2 - ch_), None)]:
+        if row_ is None:
+            rect(px_, py_, pw_, ph_, "selected", rx=2)
+            continue
+        lit = row_[3]
+        rect(px_, py_, pw_, ph_, row_[2], rx=2, op=1 if lit else 0.45)
         if lit:
-            frame(px_, my + 3, pw_, MH_ - 6, "foreground", rx=2)
+            frame(px_, py_, pw_, ph_, "foreground", rx=2)
+    add('</g>')
 
 # What each scene is cropped to: x, y, width, height. A fourth argument "full" keeps the window.
 CROPS = {
@@ -1122,7 +1157,7 @@ add('</g></svg>')
 
 # preview.png's poster: the window, 3/4 size and bleeding off the right, beside name, claim and features.
 FEATURES = [
-    ("Spaces at a glance", "git state for every space"),
+    ("Spaces at a glance", "git state and agents, pane by pane"),
     ("Files with git built in", "all files, or only what changed"),
     ("A preview for every file", "Markdown, PDF, images, CSV, JSON, code"),
     ("Panes with names", "you give them"),

@@ -27,7 +27,7 @@ for scene in $scenes; do
   draw "$scene" "$scene" "-z 2"
 done
 # The hero's slides: whole windows, 1920px wide.
-for scene in files-changed preview-tab update; do
+for scene in quicklook files-changed preview-tab update; do
   draw "$scene" "hero-$scene" "-w 1920" full
 done
 cp mods/roundup-workspace-chrome/logo.png "$tmp/img/logo.png"
