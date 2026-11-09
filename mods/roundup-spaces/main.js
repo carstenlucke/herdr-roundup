@@ -43,10 +43,16 @@ const MENU_OPEN = "roundup-menu.open";
 const QUICK = 330;
 const QUICK_BARE = 286;
 const QUICK_HIGH = 360;
+// The quicklook reads its document once the pointer has rested this long on the badge (its card
+// opens at 400ms; a local read takes a few ms), and forgets its card this long after the pointer
+// left badge and card (the card closes 150ms after).
+const ARM = 300;
+const GRACE = 200;
 const WORD = { blocked: "needs you", done: "done", working: "working", idle: "idle" };
 
-// A terminal's title without the spinner or mark a program puts in front.
-const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
+// A terminal's title without the spinner or mark a program puts in front: Braille spinners
+// (codex), Claude Code's stars, each followed by a space. Anything else in front stays.
+export const clean = (s) => (s ?? "").trim().replace(/^(?:[\u2800-\u28ff\u2733\u273b\u273d\u2736\u2722\u00b7][\uFE0E\uFE0F]?\s+)+/u, "");
 
 // The agent's icon from the app's program table: a one-color glyph or a picture.
 function icon(p, size, color) {
@@ -86,23 +92,31 @@ export default class Spaces extends View {
     this.pressed = null;
     this.over = null;
     this.machines = [];
-    // The quicklook: each machine's core document ("" here) as last read, the machines being
-    // read, the agents (fingerprint) each space's tree was last read for, the space whose badge
-    // was entered last, the badge under the pointer, the agent whose row is hovered.
+    // The quicklook: each machine's core document ("" here) as last read well, the machines being
+    // read, those whose last read failed (logged once), the agents (fingerprint) each space's tree
+    // was last read for. The hover: the space whose card has content, the one whose hover lasted
+    // ARM (it may read), the badge and the card under the pointer, the agent whose row is hovered,
+    // the timers that arm and drop it, and its generation (a timer of an older one does nothing).
     this.docs = {};
     this.reading = new Set();
+    this.failed = new Set();
     this.tried = {};
     this.peek = null;
+    this.armed = null;
     this.hot = null;
+    this.cardHot = null;
     this.lit = null;
+    this.arming = null;
+    this.dropping = null;
+    this.gen = 0;
     // A press that began on a badge (its release jumps); the card kept empty after a jump until
     // the badge is next entered or left, and while the menu is open until the badge was left.
     this.badgePress = null;
     this.jumped = false;
     this.quiet = false;
     this.left = true;
-    // A menu still open when Herdr quit doesn't keep the card empty for good.
-    if (shared(MENU_OPEN)) setShared(MENU_OPEN, null);
+    // roundup-menu.open is the menu's own: a menu open while this mod reloads keeps it. One left by
+    // a crash goes with the next menu, which writes its id and clears it on closing.
     this.reconnecting = JSON.parse(localStorage.getItem("machines.reconnecting") ?? "{}");
     for (const state of Object.values(this.reconnecting)) state.busy = false;
     this.folded = new Set(JSON.parse(localStorage.getItem("machines.folded") ?? "[]"));
@@ -295,47 +309,122 @@ export default class Spaces extends View {
     // Empty from now until the badge was left and the menu is closed, in either order.
     this.quiet = true;
     this.left = this.hot === null;
+    this.hush();
     cx?.notify();
   }
 
   // A machine's core document `herdr-app`, where its tabs' splits are (pane-map.js); one read
-  // per machine at a time. Not on Windows (no sh); unreadable, the quicklook goes without maps.
+  // per machine at a time. Not on Windows (no sh). False only when that machine's read is still
+  // running (the caller tries again later); true when one started, or on Windows, where none
+  // ever can. Only a readable answer replaces the last one; without any, no maps.
   docOf(machine, cx) {
     const key = machine ?? "";
-    if (window()?.platform === "windows" || this.reading.has(key)) return;
+    if (window()?.platform === "windows") return true;
+    if (this.reading.has(key)) return false;
     this.reading.add(key);
     const rpc = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "doc.get", params: { name: "herdr-app", on: machine ?? null } });
     cx.spawn(async (cx) => {
+      let doc = null, why;
       try {
         const r = await exec("sh", ["-c", 'printf "%s\\n" "$1" | hc connect', "sh", rpc], { timeout: 3000 });
-        this.docs[key] = r.code === 0 ? docValue(r.stdout) : null;
-      } catch {
-        this.docs[key] = null;
+        if (r.code === 0) doc = docValue(r.stdout);
+        why = r.code === 0 ? "no document in the answer" : `exit ${r.code}: ${(r.stderr ?? "").split("\n")[0]}`;
+      } catch (e) {
+        why = String(e?.message ?? e);
       } finally {
         this.reading.delete(key);
       }
+      if (doc) {
+        this.docs[key] = doc;
+        this.failed.delete(key);
+      } else if (!this.failed.has(key)) {
+        // Once per machine until a read works again: without hc on PATH the maps only stay away.
+        this.failed.add(key);
+        console.log(`roundup-spaces: no pane maps (${key || "this computer"}): ${why}`);
+      }
+      cx.notify();
+    });
+    return true;
+  }
+
+  // The space whose quicklook may read: shown in the sidebar with two or more agents, nothing
+  // keeping its card empty. { s, crew } or null.
+  live(id, sp = spaces()) {
+    const s = id && !narrow() ? sp.find((x) => x.id === id) : null;
+    const crew = s ? agents().filter((a) => a.space === s.id) : [];
+    if (crew.length < 2) return null;
+    if (this.pressed !== null || this.quiet || this.jumped || shared(MENU_OPEN)) return null;
+    return { s, crew };
+  }
+
+  // The pointer entered a badge with two or more agents. A card still open for it (the pointer
+  // back from the card, or away for less than the grace) goes on; otherwise a new hover begins,
+  // and only once it has lasted ARM does it read (a pointer crossing the badge reads nothing).
+  enterBadge(id, cx) {
+    this.dropping?.cancel();
+    if (this.armed === id && this.peek === id) return;
+    this.endHover();
+    this.peek = id;
+    delete this.tried[id];
+    const gen = this.gen;
+    this.arming = cx.timer.after(ARM, (cx) => {
+      if (gen !== this.gen || (this.hot !== id && this.cardHot !== id)) return;
+      const on = this.live(id);
+      if (!on) return;
+      this.armed = id;
+      if (this.docOf(on.s.machine ?? null, cx)) this.tried[id] = fingerprint(on.crew);
+    });
+  }
+
+  // The pointer left the badge or its card: once it is on neither for GRACE, the card is gone.
+  leaveHover(id, cx) {
+    this.dropping?.cancel();
+    const gen = this.gen;
+    this.dropping = cx.timer.after(GRACE, (cx) => {
+      if (gen !== this.gen || this.peek !== id || this.hot === id || this.cardHot === id) return;
+      this.endHover();
       cx.notify();
     });
   }
 
-  // While a badge's card may be open: its agents moved where the tree read doesn't have them
-  // (a new split, a new tab), read once more, once per new set of agents, failed or not.
+  // No hover any more: no card content, no reads, no timer of it left to fire.
+  endHover() {
+    this.arming?.cancel();
+    this.dropping?.cancel();
+    this.arming = this.dropping = null;
+    this.gen++;
+    this.peek = this.armed = this.lit = this.cardHot = null;
+  }
+
+  // Menu, jump or drag: the card empties, its pending read is off; the next entry starts anew.
+  hush() {
+    this.arming?.cancel();
+    this.arming = null;
+    this.armed = this.cardHot = this.lit = null;
+    this.gen++;
+  }
+
+  // While a card is open (its hover lasted ARM): its agents moved where the tree read doesn't
+  // have them (a new split, a new tab), read once more, once per new set of agents, failed or
+  // not. A hover whose space is gone or down to one agent ends here.
   rereadDue(sp, cx) {
-    const s = this.peek && !narrow() ? sp.find((x) => x.id === this.peek) : null;
-    const crew = s ? agents().filter((a) => a.space === s.id) : [];
-    if (crew.length < 2) { this.peek = null; return; }
-    const fp = fingerprint(crew);
+    if (!this.peek) return;
+    const s = sp.find((x) => x.id === this.peek);
+    if (!s || narrow() || agents().filter((a) => a.space === s.id).length < 2) { this.endHover(); return; }
+    if (this.armed !== this.peek) return;
+    const on = this.live(this.peek, sp);
+    if (!on) return;
+    const fp = fingerprint(on.crew);
     if (this.tried[s.id] === fp) return;
-    this.tried[s.id] = fp;
     const doc = this.docs[s.machine ?? ""]?.value ?? null;
-    if (quicklook(crew, s.tabs, doc, s.machine ?? null).some((g) => !g.map)) this.docOf(s.machine ?? null, cx);
+    if (!quicklook(on.crew, s.tabs, doc, s.machine ?? null).some((g) => !g.map) || this.docOf(s.machine ?? null, cx)) this.tried[s.id] = fp;
   }
 
   // To an agent's pane: its space and tab come with it.
   jump(a, cx) {
     run("pane.focus", { pane: a.pane });
     this.jumped = true;
-    this.lit = null;
+    this.hush();
     cx.notify();
   }
 
@@ -436,6 +525,7 @@ export default class Spaces extends View {
         this.pressed = id;
         this.over = id;
         this.badgePress = null;
+        this.hush();
       })
       .on_mouse_move((_e, cx) => {
         const source = spaces().find(s => s.id === this.pressed);
@@ -575,18 +665,14 @@ export default class Spaces extends View {
         if (on) {
           this.hot = id;
           this.jumped = false;
-          if (many && this.peek !== id) this.lit = null;
-          if (many) this.peek = id;
-          if (many && this.pressed === null) {
-            this.tried[id] = fingerprint(crew);
-            this.docOf(w.machine ?? null, cx);
-          }
+          if (many) this.enterBadge(id, cx);
         } else {
           if (this.hot === id) this.hot = null;
           this.badgePress = null;
           this.jumped = false;
           this.left = true;
           if (this.quiet && !shared(MENU_OPEN)) this.quiet = false;
+          if (many) this.leaveHover(id, cx);
         }
         cx.notify();
       })
@@ -595,10 +681,17 @@ export default class Spaces extends View {
         this.badgePress = id;
         cx.stop_propagation();
       })
+      // Its own press let go here: to the one agent, or with more to the space (the row's click,
+      // which the stopped press never reached), the card then empty as after a jump.
       .on_mouse_up("left", (_e, cx) => {
         const mine = this.badgePress === id;
         this.badgePress = null;
-        if (mine && !many) this.jump(crew[0], cx);
+        if (!mine) return;
+        if (!many) return this.jump(crew[0], cx);
+        run("space.select", { id });
+        this.jumped = true;
+        this.hush();
+        cx.notify();
       })
       .child(svg("mods/roundup-spaces/bot.svg").size(11))
       .child(String(n));
@@ -661,6 +754,16 @@ export default class Spaces extends View {
         .when(Boolean(g.map), (el) => el.child(map(g))));
     return v_flex().id(`quick-card-${w.id}`).mt(4).w(maps ? QUICK : QUICK_BARE).p(6).rounded(10).border(1).border_color(t.border)
       .bg(t.popover).shadow_lg()
+      // The pointer on the card keeps it (and its reads) as on the badge.
+      .on_hover((on, cx) => {
+        if (on) {
+          this.cardHot = w.id;
+          this.dropping?.cancel();
+        } else {
+          if (this.cardHot === w.id) this.cardHot = null;
+          this.leaveHover(w.id, cx);
+        }
+      })
       // Its presses stay here: none starts a drag of the row under it or opens that row's menu.
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .on_mouse_down("right", (_e, cx) => cx.stop_propagation())

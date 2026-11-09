@@ -188,9 +188,17 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   working): text in `blocked`, `done` or `working`, background the same at
   about 15% opacity. Tooltip, most urgent first: "3 agents: 1 blocked, 2
   idle"; with two or more agents the quicklook takes its place. With one
-  agent a click on the badge goes to that agent's pane.
+  agent a click on the badge goes to that agent's pane; with more it
+  switches to the space, as a click on the row does.
+- **Terminal titles** in the quicklook lose only a program's mark in front:
+  a Braille spinner (codex) or one of Claude Code's stars (`✳ ✻ ✽ ✶ ✢ ·`),
+  each followed by a space. `~/src`, `[WIP]`, `(venv)` or an emoji stay.
 - **Agent quicklook:** opens after the pointer rests on the badge for 400ms
   and stays while it is on the badge or the card (150ms to cross between).
+  It reads the pane maps only once the pointer has rested on the badge for
+  300ms: a pointer crossing badges on its way reads nothing. 200ms after
+  the pointer left both badge and card, the card is forgotten and reads no
+  more.
   Rows always come from the space's agents now; the read tree orders them
   within a tab and gives the tab its map, only when every agent of that tab
   is in that tab's tree. Otherwise, or when the tree can't be read, that
@@ -558,17 +566,31 @@ goes in the request, not to `exec`. `pane-map.js` takes the answer to id 1
 by its id without the app's `<machine>/` prefix, and reduces its `root` to
 the map: `row`/`column` nodes with `children`, `block` leaves with
 `content.terminal` (an agent's `address`, unprefixed) or `content.mod`,
-each with `size.weight` (none: 1). It reads one machine at a time, keeps
-the last answer per machine, and reads again only when the badge is
-entered or, while its card may be open, once per new set of the space's
-agents (address and tab) that the tree doesn't hold. Programs' icons as in
+each with `size.weight` (none: 1). It reads one machine at a time and
+keeps the last readable answer per machine: a failed read (exit ≠ 0, an
+exception or timeout, an answer without a document) keeps the one before,
+which may show a tab's old arrangement of splits until a read works again
+(a tab whose current agents aren't all in it still goes without a map).
+The first failure per machine goes to the log once (`console.log`, the
+exit code and first stderr line or the exception), again only after a read
+worked; `hc` must be on the PATH that `exec` sees. It reads when a hover on
+the badge has lasted 300ms and, while that card may be open (pointer on
+badge or card, or less than 200ms away), once per new set of the space's
+agents (address and tab) that the tree doesn't hold; a set that turns up
+while that machine's read is still running is read for once it is done,
+unless its answer already holds it. A new hover, a menu, a click on the
+badge or a jump, a press on a row, or the space down to one agent or gone
+ends the old one and its timers. Programs' icons as in
 the shipped `agents` mod: `svg(icon)` when `tint`, else `image(icon)`.
 
 **`roundup-menu`** (clone of `menu` 0.1.14, `place: "none"`): Herdr's
 context menu, which `roundup-spaces` opens for a space. Its one change:
 `init` writes its overlay id (`props().overlay`) to shared
 `roundup-menu.open`, and `close()` clears the key only while it still holds
-that id. `roundup-spaces` clears a key left over at its start.
+that id. `roundup-spaces` never writes the key: a menu open while it
+reloads stays marked. A key left by a crash with the menu open keeps the
+quicklook empty until the next space menu opens and closes (it writes its
+own id, then clears it): a known gap, healed by that, not by waiting.
 
 **`roundup-tabs`** (clone of `tabs` 0.1.13, `place: "none"`, title "Tabs"):
 Herdr's tab bar, except how a tab closes (`close.js`). The choice is shared

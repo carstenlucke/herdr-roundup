@@ -1,10 +1,10 @@
 // roundup-spaces' agent quicklook (L2): the badge's card, reading the core document, the menu
 // over it (roundup-menu's open flag) and presses on the badge.
-import { test, beforeEach } from "node:test";
+import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { herdr, reset, mount, find, findAll, byId, hasId, fire, click, clock, space, tab, agent, program } from "./support/harness.mjs";
 
-const Spaces = (await import("../mods/roundup-spaces/main.js")).default;
+const { default: Spaces, clean } = await import("../mods/roundup-spaces/main.js");
 const Menu = (await import("../mods/roundup-menu/main.js")).default;
 
 const MENU_OPEN = "roundup-menu.open";
@@ -22,11 +22,21 @@ const DOC = {
 };
 const answer = (value = DOC) => ({ code: 0, stdout: JSON.stringify({ id: 1, jsonrpc: "2.0", result: { value, version: 7 } }) + "\n" });
 
+// The hover's timings in main.js: the read after ARM on the badge, the card forgotten GRACE after
+// the pointer left badge and card.
+const ARM = 300;
+const GRACE = 200;
+
+let logs, log;
 beforeEach(() => {
   reset();
   // exec is real in the harness: anything but the document's read fails here.
   herdr.onExec((c) => new Error(`unexpected exec: ${c.command} ${c.args.join(" ")}`));
+  logs = [];
+  log = console.log;
+  console.log = (...a) => logs.push(a.join(" "));
 });
+afterEach(() => { console.log = log; });
 
 const ag = (address, tabId, extra = {}) => agent(address, { pane: `p${address.slice(1)}`, space: "s1", tab: tabId, status: "idle", title: `✳ task ${address}`, ...extra });
 
@@ -50,6 +60,10 @@ const list = (root) => find(root, (e) => e.elementId === null && e.handlers["mou
 // A spawned task starts on the next tick: a few turns let it reach its exec.
 const turns = async (n = 5) => { for (let i = 0; i < n; i++) await new Promise((r) => setImmediate(r)); };
 const hover = (root, id, on, cx) => fire(byId(root, `crew-${id}`), "hover", on, cx);
+const onCard = (root, id, on, cx) => fire(byId(content(root, id), `quick-card-${id}`), "hover", on, cx);
+// Rests on the badge until its hover arms (and reads), then lets the read finish.
+const rest = async (root, id, cx) => { hover(root, id, true, cx); await clock.advance(ARM); await cx.settle(); };
+const maps = (root, id = "s1") => findAll(content(root, id), (e) => e.elementId?.startsWith("quick-pane-")).length;
 
 test("one agent: its tooltip stays, a click on the badge goes to its pane, no card, no read", () => {
   world([ag("t1", "tb1", { status: "working" })]);
@@ -76,6 +90,9 @@ test("two agents: hovering reads the document once, the card shows them by tab w
   let root = render();
   assert.equal(byId(root, "crew-s1").style("tooltip"), undefined, "no tooltip under the card");
   hover(root, "s1", true, cx);
+  await clock.advance(ARM - 1);
+  assert.equal(reads().length, 0, "not before the hover has lasted ARM");
+  await clock.advance(1);
   await cx.settle();
   assert.equal(reads().length, 1);
   const [{ rpc, opts, script }] = reads();
@@ -108,11 +125,13 @@ test("hovering a row lights its pane; a click on a row or on a pane goes there, 
   herdr.onExec((c) => (c.command === "sh" ? answer() : undefined));
   const { cx, render } = mount(Spaces, { props: {} });
   let root = render();
-  hover(root, "s1", true, cx);
-  hover(root, "s1", false, cx); // on to the card
-  await cx.settle();
+  await rest(root, "s1", cx);
   root = render();
-  assert.deepEqual(byId(content(root), "quick-pane-t2").style("opacity"), [0.45]);
+  hover(root, "s1", false, cx); // on to the card
+  onCard(root, "s1", true, cx);
+  await clock.advance(GRACE * 3);
+  root = render();
+  assert.deepEqual(byId(content(root), "quick-pane-t2").style("opacity"), [0.45], "the card stays while the pointer is on it");
   fire(byId(content(root), "quick-row-t2"), "hover", true, cx);
   root = render();
   assert.deepEqual(byId(content(root), "quick-pane-t2").style("opacity"), [1]);
@@ -137,17 +156,17 @@ for (const [what, reply] of [["exec throws", new Error("cannot start sh")], ["ex
     herdr.onExec((c) => (c.command === "sh" ? reply : undefined), { times: 1 });
     const { cx, render } = mount(Spaces, { props: {} });
     let root = render();
-    hover(root, "s1", true, cx);
-    await cx.settle();
+    await rest(root, "s1", cx);
     root = render();
     let c = content(root);
     assert.deepEqual(byId(c, "quick-card-s1").style("w"), [286]);
     assert.ok(hasId(c, "quick-row-t1") && hasId(c, "quick-row-t4"));
     assert.equal(findAll(c, (e) => e.elementId?.startsWith("quick-pane-")).length, 0);
+    assert.equal(logs.filter((l) => l.startsWith("roundup-spaces: no pane maps (this computer)")).length, 1, "logged once");
     herdr.onExec((c) => (c.command === "sh" ? answer() : undefined));
     hover(root, "s1", false, cx);
-    hover(root, "s1", true, cx);
-    await cx.settle();
+    await clock.advance(GRACE);
+    await rest(render(), "s1", cx);
     c = content(render());
     assert.deepEqual(byId(c, "quick-card-s1").style("w"), [330]);
     assert.ok(hasId(c, "quick-pane-t1"));
@@ -162,11 +181,10 @@ test("one read per machine at a time; renders never read; a new agent outside th
   const { cx, render } = mount(Spaces, { props: {} });
   let root = render();
   hover(root, "s1", true, cx);
+  await clock.advance(ARM);
   await turns();
-  hover(root, "s1", false, cx);
-  hover(root, "s1", true, cx);
   for (let i = 0; i < 20; i++) render();
-  await turns();
+  await clock.advance(250 * 4);
   assert.equal(reads().length, 1, "pending: no second read");
   release();
   await cx.settle();
@@ -183,10 +201,12 @@ test("one read per machine at a time; renders never read; a new agent outside th
   for (let i = 0; i < 12; i++) await clock.advance(250);
   for (let i = 0; i < 20; i++) render();
   assert.equal(reads().length, 2);
-  assert.equal(findAll(content(render()), (e) => e.elementId?.startsWith("quick-pane-")).length, 0, "that tab without a map");
+  assert.equal(maps(render()), 0, "that tab without a map");
   // Opened on purpose again: one more read.
   hover(render(), "s1", false, cx);
+  await clock.advance(GRACE);
   hover(render(), "s1", true, cx);
+  await clock.advance(ARM);
   await turns();
   assert.equal(reads().length, 3);
   release();
@@ -194,12 +214,187 @@ test("one read per machine at a time; renders never read; a new agent outside th
   assert.deepEqual(cx.errors, []);
 });
 
+test("agents that change while a read runs are read for once it is done, unless its answer has them", async () => {
+  world([ag("t1", "tb1"), ag("t2", "tb1")]);
+  const pending = [];
+  herdr.onExec((c) => (c.command === "sh" ? new Promise((r) => pending.push(r)) : undefined));
+  const { cx, render } = mount(Spaces, { props: {} });
+  hover(render(), "s1", true, cx);
+  await clock.advance(ARM);
+  await turns();
+  assert.equal(reads().length, 1);
+  // A split adds t9 while the read is out: the ticks may not read now, and must not forget it.
+  world([ag("t1", "tb1"), ag("t2", "tb1"), ag("t9", "tb1")]);
+  await clock.advance(250 * 4);
+  assert.equal(reads().length, 1, "one read per machine at a time");
+  pending.shift()(answer()); // the old tree, without t9
+  await cx.settle();
+  await clock.advance(250);
+  await turns();
+  assert.equal(reads().length, 2, "read again for t9");
+  const withT9 = structuredClone(DOC);
+  withT9.spaces[0].tabs[0].root.children.push({ type: "block", id: "p9", content: { terminal: "t9" } });
+  pending.shift()(answer(withT9));
+  await cx.settle();
+  assert.ok(hasId(content(render()), "quick-pane-t9"));
+  // Its answer already has the next change: no read for it.
+  world([ag("t1", "tb1"), ag("t9", "tb1"), ag("t2", "tb1"), ag("t3", "tb1")]);
+  await clock.advance(250 * 4);
+  assert.equal(reads().length, 2, "t3 is in the tree already");
+  assert.deepEqual(cx.errors, []);
+});
+
+test("a later read that fails keeps the last good document and its maps; the failure is logged once until one works", async () => {
+  world([ag("t1", "tb1"), ag("t4", "tb2")]);
+  herdr.onExec((c) => (c.command === "sh" ? answer() : undefined), { times: 1 });
+  const { cx, render } = mount(Spaces, { props: {} });
+  await rest(render(), "s1", cx);
+  assert.equal(maps(render()), 2);
+  for (const [i, reply] of [new Error("timed out"), { code: 1, stderr: "no core\nmore" }, { code: 0, stdout: "hello\n" }].entries()) {
+    herdr.onExec((c) => (c.command === "sh" ? reply : undefined), { times: 1 });
+    hover(render(), "s1", false, cx);
+    await clock.advance(GRACE);
+    await rest(render(), "s1", cx);
+    assert.equal(reads().length, 2 + i);
+    assert.equal(maps(render()), 2, `maps kept after failure ${i + 1}`);
+  }
+  assert.deepEqual(logs, ["roundup-spaces: no pane maps (this computer): timed out"], "the first failure only");
+  herdr.onExec((c) => (c.command === "sh" ? answer() : undefined), { times: 1 });
+  hover(render(), "s1", false, cx);
+  await clock.advance(GRACE);
+  await rest(render(), "s1", cx);
+  herdr.onExec((c) => (c.command === "sh" ? { code: 1, stderr: "no core" } : undefined), { times: 1 });
+  hover(render(), "s1", false, cx);
+  await clock.advance(GRACE);
+  await rest(render(), "s1", cx);
+  assert.equal(logs.at(-1), "roundup-spaces: no pane maps (this computer): exit 1: no core", "after a good read, a failure is logged again");
+  // A new agent the old tree doesn't hold: only its tab goes without a map.
+  world([ag("t1", "tb1"), ag("t4", "tb2"), ag("t8", "tb2")]);
+  await clock.advance(250);
+  await cx.settle();
+  const c = content(render());
+  assert.ok(hasId(c, "quick-pane-t1") && !hasId(c, "quick-pane-t4"));
+  assert.ok(hasId(c, "quick-row-t1") && hasId(c, "quick-row-t4") && hasId(c, "quick-row-t8"));
+  assert.deepEqual(cx.errors, []);
+});
+
+test("crossing badges reads nothing; leaving before ARM and coming back waits the whole ARM again", async () => {
+  world([ag("t1", "tb1"), ag("t2", "tb1"), ag("t5", "tb5", { space: "s2", pane: "p5" }), ag("t6", "tb5", { space: "s2", pane: "p6" })], { two: true });
+  herdr.onExec((c) => (c.command === "sh" ? answer() : undefined));
+  const { cx, render } = mount(Spaces, { props: {} });
+  hover(render(), "s1", true, cx);
+  await clock.advance(50);
+  hover(render(), "s1", false, cx);
+  hover(render(), "s2", true, cx);
+  await clock.advance(50);
+  hover(render(), "s2", false, cx);
+  for (let i = 0; i < 8; i++) await clock.advance(250);
+  assert.equal(reads().length, 0, "no read, neither on the way nor on a tick after");
+  assert.equal(shows(render(), "s1") || shows(render(), "s2"), false, "both cards forgotten");
+  hover(render(), "s1", true, cx);
+  await clock.advance(100);
+  hover(render(), "s1", false, cx);
+  await clock.advance(100);
+  hover(render(), "s1", true, cx);
+  await clock.advance(ARM - 1);
+  assert.equal(reads().length, 0, "the first entry's timer doesn't count for the second");
+  await clock.advance(1);
+  await turns();
+  assert.equal(reads().length, 1);
+  assert.deepEqual(cx.errors, []);
+});
+
+test("from badge to card the card and its reads stay; GRACE after leaving both it is gone and reads nothing more", async () => {
+  world([ag("t1", "tb1"), ag("t2", "tb1")]);
+  herdr.onExec((c) => (c.command === "sh" ? answer() : undefined));
+  const { view, cx, render } = mount(Spaces, { props: {} });
+  await rest(render(), "s1", cx);
+  hover(render(), "s1", false, cx);
+  await clock.advance(GRACE / 2); // across the gap
+  onCard(render(), "s1", true, cx);
+  await clock.advance(GRACE * 2);
+  assert.equal(shows(render()), true, "on the card");
+  world([ag("t1", "tb1"), ag("t2", "tb1"), ag("t9", "tb1")]);
+  await clock.advance(250);
+  await turns();
+  assert.equal(reads().length, 2, "a new agent while the pointer is on the card reads");
+  await cx.settle();
+  // Back to the badge from the card: the same hover, no new read on entering.
+  onCard(render(), "s1", false, cx);
+  hover(render(), "s1", true, cx);
+  await clock.advance(ARM * 2);
+  assert.equal(reads().length, 2);
+  hover(render(), "s1", false, cx);
+  await clock.advance(GRACE - 1);
+  assert.equal(shows(render()), true, "not yet");
+  await clock.advance(1);
+  assert.equal(shows(render()), false);
+  assert.deepEqual([view.peek, view.armed, view.cardHot, view.lit], [null, null, null, null]);
+  world([ag("t1", "tb1"), ag("t2", "tb2"), ag("t7", "tb2")]);
+  for (let i = 0; i < 8; i++) await clock.advance(250);
+  assert.equal(reads().length, 2, "a closed card reads nothing");
+  assert.deepEqual(cx.errors, []);
+});
+
+test("from one card to another badge: the first is dropped at once, its timer leaves the second alone", async () => {
+  world([ag("t1", "tb1"), ag("t2", "tb1"), ag("t5", "tb5", { space: "s2", pane: "p5" }), ag("t6", "tb5", { space: "s2", pane: "p6" })], { two: true });
+  herdr.onExec((c) => (c.command === "sh" ? answer() : undefined));
+  const { view, cx, render } = mount(Spaces, { props: {} });
+  await rest(render(), "s1", cx);
+  assert.equal(view.armed, "s1");
+  hover(render(), "s1", false, cx);
+  hover(render(), "s2", true, cx);
+  assert.equal(view.armed, null, "s1 may read no more");
+  world([ag("t1", "tb1"), ag("t2", "tb1"), ag("t9", "tb1"), ag("t5", "tb5", { space: "s2", pane: "p5" }), ag("t6", "tb5", { space: "s2", pane: "p6" })], { two: true });
+  await clock.advance(ARM);
+  await cx.settle();
+  assert.equal(reads().length, 2, "s2's own read only");
+  assert.equal(shows(render(), "s2"), true);
+  assert.equal(shows(render(), "s1"), false);
+  await clock.advance(GRACE * 3);
+  assert.equal(shows(render(), "s2"), true, "s1's leave doesn't take s2's card");
+  assert.deepEqual(cx.errors, []);
+});
+
+test("a menu, a press or a jump before ARM: no read; a space down to one agent or gone ends the hover", async () => {
+  world([ag("t1", "tb1"), ag("t2", "tb1")], { two: true });
+  herdr.set({ agents: [ag("t1", "tb1"), ag("t2", "tb1"), ag("t5", "tb5", { space: "s2", pane: "p5" })] });
+  herdr.onExec((c) => (c.command === "sh" ? answer() : undefined));
+  const { view, cx, render } = mount(Spaces, { props: {} });
+  hover(render(), "s1", true, cx);
+  await clock.advance(100);
+  fire(byId(render(), "space-s1"), "mouse_down:right", {}, cx);
+  herdr.set({ shared: { [MENU_OPEN]: "ov-1" } });
+  await clock.advance(ARM);
+  herdr.set({ shared: { [MENU_OPEN]: null } });
+  await clock.advance(ARM);
+  assert.equal(reads().length, 0, "the menu's timer is gone, also once the menu is closed");
+  hover(render(), "s1", false, cx);
+  await clock.advance(GRACE);
+  hover(render(), "s1", true, cx);
+  await clock.advance(100);
+  fire(byId(render(), "crew-s1"), "mouse_down:left", {}, cx);
+  fire(byId(render(), "crew-s1"), "mouse_up:left", {}, cx);
+  await clock.advance(ARM);
+  assert.equal(reads().length, 0, "after a click on the badge");
+  hover(render(), "s1", false, cx);
+  await clock.advance(GRACE);
+  hover(render(), "s1", true, cx);
+  await clock.advance(100);
+  herdr.set({ agents: [ag("t1", "tb1"), ag("t5", "tb5", { space: "s2", pane: "p5" })] });
+  await clock.advance(250);
+  assert.equal(view.peek, null, "down to one agent: the hover ends");
+  herdr.set({ agents: [ag("t1", "tb1"), ag("t2", "tb1"), ag("t5", "tb5", { space: "s2", pane: "p5" })] });
+  await clock.advance(ARM);
+  assert.equal(reads().length, 0);
+  assert.deepEqual(cx.errors, []);
+});
+
 test("a failing read is tried once per new set of agents, not on every tick", async () => {
   world([ag("t1", "tb1"), ag("t2", "tb1")]);
   herdr.onExec((c) => (c.command === "sh" ? { code: 1 } : undefined));
   const { cx, render } = mount(Spaces, { props: {} });
-  hover(render(), "s1", true, cx);
-  await cx.settle();
+  await rest(render(), "s1", cx);
   for (let i = 0; i < 16; i++) await clock.advance(250);
   assert.equal(reads().length, 1);
   world([ag("t1", "tb1"), ag("t2", "tb2")]);
@@ -241,16 +436,31 @@ test("roundup-menu marks itself open with its overlay id and clears only its own
   assert.equal(herdr.shared(MENU_OPEN), null);
 });
 
-test("the space menu is roundup-menu; a flag left from before is cleared at start", () => {
-  herdr.set({ shared: { [MENU_OPEN]: "ov-old" } });
+test("the space menu is roundup-menu; starting roundup-spaces leaves a menu's open flag alone", () => {
+  herdr.set({ shared: { [MENU_OPEN]: "ov-live" } });
   world([ag("t1", "tb1"), ag("t2", "tb1")]);
   const { cx, render } = mount(Spaces, { props: {} });
-  assert.equal(herdr.shared(MENU_OPEN), null);
+  assert.equal(herdr.shared(MENU_OPEN), "ov-live", "a menu open while this mod reloads stays marked");
   fire(byId(render(), "space-s1"), "mouse_down:right", {}, cx);
   const opened = herdr.calls("openOverlay");
   assert.equal(opened.length, 1, "the menu opens once");
   assert.equal(opened[0][0].mod, "roundup-menu");
   assert.deepEqual(opened[0][0].props, { tab: "space", target: { id: "s1" } });
+});
+
+test("a flag a crash left behind goes with the next menu: it writes its own id and clears it on closing", async () => {
+  herdr.set({ shared: { [MENU_OPEN]: "ov-crashed" } });
+  world([ag("t1", "tb1"), ag("t2", "tb1")]);
+  const { cx, render } = mount(Spaces, { props: {} });
+  hover(render(), "s1", true, cx);
+  assert.equal(shows(render()), false, "empty while the flag is there");
+  hover(render(), "s1", false, cx);
+  const m = mount(Menu, { props: { tab: "space", target: { id: "s1" }, overlay: "ov-next" } });
+  assert.equal(herdr.shared(MENU_OPEN), "ov-next");
+  await m.view.close(m.cx);
+  assert.equal(herdr.shared(MENU_OPEN), null);
+  hover(render(), "s1", true, cx);
+  assert.equal(shows(render()), true);
 });
 
 test("menu on the badge, left, then closed: the card shows again on entering", () => {
@@ -313,6 +523,27 @@ test("a press and release on the badge go to the agent once, never select the sp
   assert.deepEqual(herdr.calls("run"), [["pane.focus", { pane: "p1" }]]);
 });
 
+test("two or more agents: a press and release on the badge select the space once, the card then empty", async () => {
+  world([ag("t1", "tb1"), ag("t2", "tb1")], { two: true });
+  herdr.set({ agents: [ag("t1", "tb1"), ag("t2", "tb1"), ag("t5", "tb5", { space: "s2", pane: "p5" }), ag("t6", "tb5", { space: "s2", pane: "p6" })] });
+  const { view, cx, render } = mount(Spaces, { props: {} });
+  let root = render();
+  hover(root, "s2", true, cx);
+  fire(byId(root, "crew-s2"), "mouse_down:left", {}, cx);
+  assert.equal(cx.stopped, 1, "the press starts no space drag");
+  fire(byId(root, "crew-s2"), "mouse_up:left", {}, cx);
+  fire(byId(root, "space-s2"), "mouse_up:left", {}, cx);
+  fire(list(root), "mouse_up:left", {}, cx);
+  assert.deepEqual(herdr.calls("run"), [["space.select", { id: "s2" }]]);
+  assert.equal(shows(render(), "s2"), false, "empty after the click, as after a jump");
+  assert.equal(view.pressed, null);
+  // A press on the badge let go elsewhere selects nothing.
+  fire(byId(render(), "crew-s2"), "mouse_down:left", {}, cx);
+  fire(list(render()), "mouse_up:left", {}, cx);
+  fire(byId(render(), "crew-s2"), "mouse_up:left", {}, cx);
+  assert.equal(herdr.calls("run").length, 1);
+});
+
 test("a badge press let go elsewhere is forgotten: a later drag onto that badge only drops", () => {
   world([ag("t1", "tb1")], { two: true });
   herdr.set({ agents: [ag("t1", "tb1"), ag("t5", "tb5", { space: "s2", pane: "p5" })] });
@@ -349,4 +580,15 @@ test("a right-click on the badge opens the menu once; the card's own presses sta
   fire(c, "mouse_down:left", {}, cx);
   fire(c, "mouse_down:right", {}, cx);
   assert.equal(cx.stopped, before + 2);
+});
+
+test("clean strips a program's spinner or star and its space, nothing else in front", () => {
+  const cases = [
+    ["⠋ codex", "codex"], ["⠏ ⠋ scratchpad", "scratchpad"], ["✳ Task", "Task"], ["✻ Working", "Working"],
+    ["✳️ Task", "Task"], ["· thinking", "thinking"], ["  ✶  x  ", "x"],
+    ["~/src/app", "~/src/app"], ["./build.sh", "./build.sh"], ["[WIP] refactor", "[WIP] refactor"],
+    ["(venv) zsh", "(venv) zsh"], ["_private", "_private"], ["© Copyright", "© Copyright"], ["🐍 Python", "🐍 Python"],
+    ["✳Task", "✳Task"], ["...", "..."], [null, ""], ["", ""],
+  ];
+  for (const [title, want] of cases) assert.equal(clean(title), want, JSON.stringify(title));
 });
