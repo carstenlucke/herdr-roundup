@@ -356,7 +356,7 @@ test("from one card to another badge: the first is dropped at once, its timer le
   assert.deepEqual(cx.errors, []);
 });
 
-test("a menu, a press or a jump before ARM: no read; a space down to one agent or gone ends the hover", async () => {
+test("a menu, a click on the badge, a press on a row or a jump before ARM: no read; a space down to one agent or gone ends the hover", async () => {
   world([ag("t1", "tb1"), ag("t2", "tb1")], { two: true });
   herdr.set({ agents: [ag("t1", "tb1"), ag("t2", "tb1"), ag("t5", "tb5", { space: "s2", pane: "p5" })] });
   herdr.onExec((c) => (c.command === "sh" ? answer() : undefined));
@@ -387,6 +387,112 @@ test("a menu, a press or a jump before ARM: no read; a space down to one agent o
   herdr.set({ agents: [ag("t1", "tb1"), ag("t2", "tb1"), ag("t5", "tb5", { space: "s2", pane: "p5" })] });
   await clock.advance(ARM);
   assert.equal(reads().length, 0);
+  // A press on another row (a click or the start of a drag).
+  hover(render(), "s1", false, cx);
+  await clock.advance(GRACE);
+  hover(render(), "s1", true, cx);
+  await clock.advance(100);
+  fire(byId(render(), "space-s2"), "mouse_down:left", {}, cx);
+  fire(list(render()), "mouse_up:left", {}, cx);
+  await clock.advance(ARM);
+  assert.equal(reads().length, 0, "after a press on a row");
+  // A jump from the card, which shows before it reads.
+  hover(render(), "s1", false, cx);
+  await clock.advance(GRACE);
+  hover(render(), "s1", true, cx);
+  await clock.advance(100);
+  click(byId(content(render()), "quick-row-t2"), cx);
+  await clock.advance(ARM);
+  assert.equal(reads().length, 0, "after a jump");
+  // The space closes under the pointer.
+  hover(render(), "s1", false, cx);
+  await clock.advance(GRACE);
+  hover(render(), "s1", true, cx);
+  await clock.advance(100);
+  herdr.set({ spaces: [space("s2", [tab("tb5")])], agents: [ag("t5", "tb5", { space: "s2", pane: "p5" })] });
+  await clock.advance(250);
+  assert.equal(view.peek, null, "gone: the hover ends");
+  await clock.advance(ARM);
+  assert.equal(reads().length, 0);
+  assert.deepEqual(cx.errors, []);
+});
+
+for (const how of ["a click on another row", "a space menu opened and closed"]) {
+  test(`an armed card left, then ${how} before GRACE: the card is still forgotten and nothing reads`, async () => {
+    world([ag("t1", "tb1"), ag("t2", "tb1")], { two: true });
+    herdr.set({ agents: [ag("t1", "tb1"), ag("t2", "tb1"), ag("t5", "tb5", { space: "s2", pane: "p5" })] });
+    herdr.onExec((c) => (c.command === "sh" ? answer() : undefined));
+    const { view, cx, render } = mount(Spaces, { props: {} });
+    await rest(render(), "s1", cx);
+    assert.equal(reads().length, 1);
+    hover(render(), "s1", false, cx);
+    await clock.advance(50);
+    if (how.startsWith("a click")) {
+      fire(byId(render(), "space-s2"), "mouse_down:left", {}, cx);
+      fire(byId(render(), "space-s2"), "mouse_up:left", {}, cx);
+    } else {
+      fire(byId(render(), "space-s2"), "mouse_down:right", {}, cx);
+      herdr.set({ shared: { [MENU_OPEN]: "ov-1" } });
+      await clock.advance(500);
+      herdr.set({ shared: { [MENU_OPEN]: null } });
+    }
+    await clock.advance(GRACE * 10);
+    assert.equal(view.peek, null);
+    assert.equal(shows(render()), false, "no card content is built");
+    world([ag("t1", "tb1"), ag("t2", "tb1"), ag("t9", "tb1")], { two: true });
+    for (let i = 0; i < 8; i++) await clock.advance(250);
+    assert.equal(reads().length, 1);
+    assert.deepEqual(cx.errors, []);
+  });
+}
+
+test("a failed read, then a new hover while another space's read holds the machine: it reads once that one is done", async () => {
+  world([ag("t1", "tb1"), ag("t2", "tb1"), ag("t5", "tb5", { space: "s2", pane: "p5" }), ag("t6", "tb5", { space: "s2", pane: "p6" })], { two: true });
+  herdr.onExec((c) => (c.command === "sh" ? { code: 1 } : undefined), { times: 1 });
+  const { cx, render } = mount(Spaces, { props: {} });
+  await rest(render(), "s1", cx);
+  assert.equal(reads().length, 1, "failed: this set of agents counts as tried");
+  hover(render(), "s1", false, cx);
+  await clock.advance(GRACE);
+  let release;
+  herdr.onExec((c) => (c.command === "sh" ? new Promise((r) => { release = r; }) : undefined));
+  hover(render(), "s2", true, cx);
+  await clock.advance(ARM);
+  await turns();
+  assert.equal(reads().length, 2, "s2's read is out");
+  hover(render(), "s2", false, cx);
+  hover(render(), "s1", true, cx);
+  await clock.advance(ARM + 250 * 2);
+  assert.equal(reads().length, 2, "the machine is busy: s1 waits");
+  // s2's answer has no tree for s1: s1 reads now, although the same set failed before.
+  release(answer({ spaces: [] }));
+  await cx.settle();
+  await clock.advance(250);
+  await turns();
+  assert.equal(reads().length, 3);
+  release(answer());
+  await cx.settle();
+  assert.equal(maps(render()), 2);
+  assert.deepEqual(cx.errors, []);
+});
+
+test("back on the same badge within GRACE, the card never entered: the same hover, no new read", async () => {
+  world([ag("t1", "tb1"), ag("t2", "tb1")]);
+  herdr.onExec((c) => (c.command === "sh" ? answer() : undefined));
+  const { view, cx, render } = mount(Spaces, { props: {} });
+  await rest(render(), "s1", cx);
+  hover(render(), "s1", false, cx);
+  await clock.advance(GRACE - 25);
+  hover(render(), "s1", true, cx);
+  await clock.advance(ARM * 2);
+  assert.equal(reads().length, 1);
+  assert.equal(view.armed, "s1");
+  hover(render(), "s1", false, cx);
+  await clock.advance(GRACE);
+  hover(render(), "s1", true, cx);
+  await clock.advance(ARM);
+  await turns();
+  assert.equal(reads().length, 2, "after GRACE: a new hover reads");
   assert.deepEqual(cx.errors, []);
 });
 

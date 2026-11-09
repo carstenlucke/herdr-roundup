@@ -309,7 +309,7 @@ export default class Spaces extends View {
     // Empty from now until the badge was left and the menu is closed, in either order.
     this.quiet = true;
     this.left = this.hot === null;
-    this.hush();
+    this.endHover();
     cx?.notify();
   }
 
@@ -357,8 +357,9 @@ export default class Spaces extends View {
     return { s, crew };
   }
 
-  // The pointer entered a badge with two or more agents. A card still open for it (the pointer
-  // back from the card, or away for less than the grace) goes on; otherwise a new hover begins,
+  // The pointer entered a badge with two or more agents. A hover of it that has armed and is not
+  // forgotten yet (the pointer back from the card, or away for less than GRACE, the native card
+  // perhaps closed already) goes on without a new read; otherwise a new hover begins,
   // and only once it has lasted ARM does it read (a pointer crossing the badge reads nothing).
   enterBadge(id, cx) {
     this.dropping?.cancel();
@@ -387,21 +388,14 @@ export default class Spaces extends View {
     });
   }
 
-  // No hover any more: no card content, no reads, no timer of it left to fire.
+  // No hover any more: no card content, no reads, no timer of it left to fire. Also on a menu,
+  // a jump or a press on a row: the next entry starts anew.
   endHover() {
     this.arming?.cancel();
     this.dropping?.cancel();
     this.arming = this.dropping = null;
     this.gen++;
     this.peek = this.armed = this.lit = this.cardHot = null;
-  }
-
-  // Menu, jump or drag: the card empties, its pending read is off; the next entry starts anew.
-  hush() {
-    this.arming?.cancel();
-    this.arming = null;
-    this.armed = this.cardHot = this.lit = null;
-    this.gen++;
   }
 
   // While a card is open (its hover lasted ARM): its agents moved where the tree read doesn't
@@ -424,7 +418,7 @@ export default class Spaces extends View {
   jump(a, cx) {
     run("pane.focus", { pane: a.pane });
     this.jumped = true;
-    this.hush();
+    this.endHover();
     cx.notify();
   }
 
@@ -525,7 +519,7 @@ export default class Spaces extends View {
         this.pressed = id;
         this.over = id;
         this.badgePress = null;
-        this.hush();
+        this.endHover();
       })
       .on_mouse_move((_e, cx) => {
         const source = spaces().find(s => s.id === this.pressed);
@@ -690,7 +684,7 @@ export default class Spaces extends View {
         if (!many) return this.jump(crew[0], cx);
         run("space.select", { id });
         this.jumped = true;
-        this.hush();
+        this.endHover();
         cx.notify();
       })
       .child(svg("mods/roundup-spaces/bot.svg").size(11))

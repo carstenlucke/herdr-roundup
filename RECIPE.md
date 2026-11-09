@@ -552,8 +552,8 @@ head in `currentColor`); from Herdr's `mods/workspace-chrome/`: `branch`,
 
 The quicklook is a gpui-base `HoverCard` (`anchor("top_left")`,
 `open_delay(400)`, `close_delay(150)`) around the badge. Its pane maps come
-from the space machine's core document `herdr-app`, read when the badge is
-entered (macOS and Linux only):
+from the space machine's core document `herdr-app`, read after 300ms of
+hover on the badge (macOS and Linux only):
 
 ```sh
 sh -c 'printf "%s\n" "$1" | hc connect' sh \
