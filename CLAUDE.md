@@ -16,7 +16,8 @@ A Herdr App layout, cloned from Herdr's `main` (0.1.13). See README.md for the l
 - Keys go in the `layout:Herdr-Roundup` section of `keys.json`, never in `global`.
 - Shared state keys: a mod's own state goes under its name (`roundup-<name>.<key>`); keys that mods share with Herdr's shipped mods (`sidebar.width`, `space.colors`, `workspace.panels`, ...) keep Herdr's names.
 - ADRs are rare: read the bar in `docs/ARCHITECTURE_DECISIONS.md` before writing one. When in doubt, none; behaviour goes in `RECIPE.md`.
-- After a change: `herdr-app check ~/.config/herdr-app/mods/<mod>` for each changed mod, then `herdr-app status` must show no errors.
+- After a change: `node --test 'tests/*.test.mjs'` must pass (Node 22.15 or later), then `herdr-app check ~/.config/herdr-app/mods/<mod>` for each changed mod, then `herdr-app status` must show no errors.
+- A fixed bug or a new behaviour gets its row in `tests/CATALOG.md` and a test whose name goes into **Covered**. `scripts/smoke.sh` runs only when an L3 row is touched: it brings a second window to the front for about two minutes.
 
 ## Before a release
 
