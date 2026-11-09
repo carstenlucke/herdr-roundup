@@ -5,7 +5,9 @@ give them. Files open in a floating preview or a tab of their own:
 Markdown rendered, code, CSV, JSON, pictures and PDFs. A files panel shows
 Symbols icons and git state, filters to the changed files and searches
 folders not yet opened. Every space shows its repo, branch, ahead/behind,
-changes and how many agents run in it; a repo's worktrees share a card.
+changes and how many agents run in it; hovering that count shows them by
+tab with a map of each tab's panes, a click goes to one. A repo's worktrees
+share a card.
 Closing a tab or pane asks first while an agent works, and a new release
 installs through an agent. Light and dark themes alike.
 
@@ -61,6 +63,20 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
     outside a repo, or clean on main under its repo's name, has none.
   - An **agent badge** on the right when agents run in the space: an 18px
     pill, rounded 9px, a small robot icon and the count in semibold 11px.
+  - With two or more agents, hovering the badge shows the **agent
+    quicklook**: a card (`popover`, 1px `border`, rounded 10px, large
+    shadow, 6px padding) 330px wide, its list at most 360px high before it
+    scrolls. The agents are grouped by tab in tab order, each tab under a
+    header in `dim` 11px: its number in semibold `muted`, its name when it
+    has one. A row (26px, 12px) has a 7px status dot (idle: a ring in
+    `idle`), the program's 14px icon, the terminal's title (else the
+    program's name), truncated, and on the right the status word in 11px
+    and the status color ("needs you", "done", "working"; "idle" in `dim`).
+    Beside a tab's rows a **pane map**, 60×40px (2px padding, 1px `border`,
+    rounded 5px): the tab's panes split as they are, in their proportions,
+    2px apart; an agent's pane in its status color, other terminals in
+    `selected`, a mod pane as a `selected` outline. Without maps the card is
+    286px wide.
   - **Worktrees** of one repo share a card: 1px `border`, rounded 10px, 3px
     padding, 6px from the rows around it. Worktree rows are indented 12px,
     with a branch icon in `dim` in place of the avatar. A space in the
@@ -171,8 +187,34 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   is idle, else in the color of the most urgent one (blocked > done >
   working): text in `blocked`, `done` or `working`, background the same at
   about 15% opacity. Tooltip, most urgent first: "3 agents: 1 blocked, 2
-  idle".
-- **Click** a space to switch to it, **right-click** for Herdr's space menu.
+  idle"; with two or more agents the quicklook takes its place. With one
+  agent a click on the badge goes to that agent's pane; with more it
+  switches to the space, as a click on the row does.
+- **Terminal titles** in the quicklook lose only a program's mark in front:
+  a Braille spinner (codex) or one of Claude Code's stars (`✳ ✻ ✽ ✶ ✢ ·`),
+  each followed by a space. `~/src`, `[WIP]`, `(venv)` or an emoji stay.
+- **Agent quicklook:** opens after the pointer rests on the badge for 400ms
+  and stays while it is on the badge or the card (150ms to cross between).
+  It reads the pane maps only once the pointer has rested on the badge for
+  300ms: a pointer crossing badges on its way reads nothing. 200ms after
+  the pointer left both badge and card, the card is forgotten and reads no
+  more.
+  Rows always come from the space's agents now; the read tree orders them
+  within a tab and gives the tab its map, only when every agent of that tab
+  is in that tab's tree. Otherwise, or when the tree can't be read, that
+  tab has no map and its rows keep the order of `agents()`; with no map at
+  all the card is the narrow one. No hint, no error. Hovering a row lights
+  its pane in the map (full color, a `foreground` outline; the others at
+  45%). A click on a row or on an agent's pane goes there (space and tab
+  with it); the card is then empty until the badge is entered or left
+  again. While the space menu is open, the card is empty: from a
+  right-click until the badge was left and the menu is closed, in either
+  order. During a space drag it is empty too. Not on the rail.
+- **Badge presses:** a press on the badge starts no space drag; a drag of
+  another row let go on the badge still drops there. A badge press let go
+  elsewhere is forgotten when the pointer leaves the badge.
+- **Click** a space to switch to it, **right-click** for Herdr's space menu
+  (from `roundup-menu`, the clone that says when it is open).
   **Drag** a space onto another of the same machine to move it there: the
   row fades to half, a 2px `accent` bar marks where it lands. Dragging a
   card's top row, or the repo name heading a card without a main-checkout
@@ -502,10 +544,53 @@ It watches each local repo's git folder with `watchFolder`. Through `hc` it
 runs `machine ls --json`, and for Connect `machine rm` and `machine add`,
 keeping the machine's address until the add succeeds, so a Connect that
 failed after the remove can be tried again. Commands: `space.select`,
-`space.move`, `space.new`. Menu: `openOverlay({ mod: "menu", kind: "popup",
+`space.move`, `space.new`, `pane.focus {pane}` (the quicklook and a lone
+agent's badge). Menu: `openOverlay({ mod: "roundup-menu", kind: "popup",
 props: { tab: "space", target: { id } } })`. Own art: `bot.svg` (a robot
 head in `currentColor`); from Herdr's `mods/workspace-chrome/`: `branch`,
 `plus`, `monitor`, `server`, `chevron-down`, `chevron-right`, `folder`.
+
+The quicklook is a gpui-base `HoverCard` (`anchor("top_left")`,
+`open_delay(400)`, `close_delay(150)`) around the badge. Its pane maps come
+from the space machine's core document `herdr-app`, read after 300ms of
+hover on the badge (macOS and Linux only):
+
+```sh
+sh -c 'printf "%s\n" "$1" | hc connect' sh \
+  '{"jsonrpc":"2.0","id":1,"method":"doc.get","params":{"name":"herdr-app","on":null}}'
+```
+
+through `exec` with a 3s timeout; `on` (the space's `machine`, null here)
+goes in the request, not to `exec`. `pane-map.js` takes the answer to id 1
+(`result: { value, version }`), finds the tab in `value.spaces[].tabs[]`
+by its id without the app's `<machine>/` prefix, and reduces its `root` to
+the map: `row`/`column` nodes with `children`, `block` leaves with
+`content.terminal` (an agent's `address`, unprefixed) or `content.mod`,
+each with `size.weight` (none: 1). It reads one machine at a time and
+keeps the last readable answer per machine: a failed read (exit ≠ 0, an
+exception or timeout, an answer without a document) keeps the one before,
+which may show a tab's old arrangement of splits until a read works again
+(a tab whose current agents aren't all in it still goes without a map).
+The first failure per machine goes to the log once (`console.log`, the
+exit code and first stderr line or the exception), again only after a read
+worked; `hc` must be on the PATH that `exec` sees. It reads when a hover on
+the badge has lasted 300ms and, while that card may be open (pointer on
+badge or card, or less than 200ms away), once per new set of the space's
+agents (address and tab) that the tree doesn't hold; a set that turns up
+while that machine's read is still running is read for once it is done,
+unless its answer already holds it. A new hover, a menu, a click on the
+badge or a jump, a press on a row, or the space down to one agent or gone
+ends the old one and its timers. Programs' icons as in
+the shipped `agents` mod: `svg(icon)` when `tint`, else `image(icon)`.
+
+**`roundup-menu`** (clone of `menu` 0.1.14, `place: "none"`): Herdr's
+context menu, which `roundup-spaces` opens for a space. Its one change:
+`init` writes its overlay id (`props().overlay`) to shared
+`roundup-menu.open`, and `close()` clears the key only while it still holds
+that id. `roundup-spaces` never writes the key: a menu open while it
+reloads stays marked. A key left by a crash with the menu open keeps the
+quicklook empty until the next space menu opens and closes (it writes its
+own id, then clears it): a known gap, healed by that, not by waiting.
 
 **`roundup-tabs`** (clone of `tabs` 0.1.13, `place: "none"`, title "Tabs"):
 Herdr's tab bar, except how a tab closes (`close.js`). The choice is shared
@@ -708,7 +793,8 @@ global `tab.close` and `pane.close`.
   the `roundup-` prefix; a folder's name is the mod's identity.
 - **Block ids** must stay unique; a duplicate crashes Herdr App.
 - **Programs, files, network:** `roundup-spaces` runs `git` in every space's
-  folder, remote ones too, and `hc`. `roundup-files` runs `git`, `sh` and
+  folder, remote ones too, and `hc` (for the quicklook through `sh`: `hc
+  connect`, only `doc.get`). `roundup-files` runs `git`, `sh` and
   `find` (PowerShell on Windows) in the shown folder, on its machine, and
   reads the files it previews. `roundup-preview` runs `sh`, `sips`,
   `osascript`, `git`, the login shell and the editor (Built from), reads
@@ -738,11 +824,32 @@ global `tab.close` and `pane.close`.
 - **The HoverCard draws above popups**, so a card left open covers the menu.
   Its content is empty right after a click until the pointer leaves, and
   while shared `roundup-workspace-chrome.menu` says the menu is open (the
-  pointer can come back to the name over it).
+  pointer can come back to the name over it). Herdr gives mods no signal
+  for an open overlay, and its `menu` sets no shared state: so the space
+  menu is `roundup-menu`, whose `roundup-menu.open` holds the open menu's
+  overlay id, and only that menu may clear it (a newer one may have taken
+  it).
+- **The split arrangement isn't in the mod API:** `panes()` has no
+  geometry. The quicklook reads it from the core document `herdr-app`
+  (`doc.get` over `hc connect`), whose schema calls it opaque JSON: its
+  form can change with any herdr-core. `pane-map.js` therefore checks
+  every node and draws no map for a tab with anything it doesn't know
+  (`size.px`, another node type, another `content`); never half a map.
+  Rows never come from the tree, only their order. Not on Windows (no
+  `sh`). A tree read before a new split doesn't have its terminal: the
+  tab goes without a map until a read has it.
+- **A press on the badge must not start the row's drag**, but its release
+  must still reach the row, or a drag of another space let go on the badge
+  wouldn't drop: stop only `mouse_down`. A badge press released outside
+  the list never reaches a handler here, so leaving the badge forgets it;
+  otherwise a later drag let go on that badge would also jump.
 - **`line_height(16)` is 16 times the font size**, not 16px, and pushes the
   text out of the 46px row: write `"16px"`.
 - **A text in an `h_flex` doesn't wrap** without `min_w(0)`; the reason in
   the card ran past its edge.
+- **`h_flex` centers its children across its axis:** the quicklook's pane
+  map drew a row's panes 0px high (a line). Its frame and splits
+  `items_stretch()`, each tile `self_stretch()`.
 - **268px:** on macOS "Herdr Roundup" (92px) leaves 2px beside the search
   button, so nothing fits beside the name; the version goes under it. The
   lit area's padding hangs into the row's margin and gap
@@ -902,7 +1009,14 @@ global `tab.close` and `pane.close`.
   on one card under the repo's name, each with a branch icon for an avatar.
   A space in the main checkout then heads the card instead of the header.
 - An agent started in a space shows a badge with `1`: gray while idle, in
-  `working` while it works, in `blocked` while it waits for you.
+  `working` while it works, in `blocked` while it waits for you. A click on
+  it goes to that agent's pane.
+- With a second agent in a split of another tab, hovering the badge shows
+  the quicklook: both agents under their tabs, each tab's map split as the
+  panes are (also right after dragging a divider and opening it again);
+  hovering a row lights its pane; a click goes there, switching space and
+  tab. A right-click on the row shows the menu with no card over it, and
+  the card comes back once the menu is closed and the badge entered again.
 - The sidebar toggle narrows to the rail (numbers and `●`/`·`) and widens
   back to the width it had.
 - Every pane header shows its terminal's address (`t5j`); double-clicking

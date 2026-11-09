@@ -4,7 +4,7 @@
     "name": "main",
     "version": "0.1.13"
   },
-  "version": "0.8.1",
+  "version": "0.9.0",
   "preview": "layouts/Herdr-Roundup.svg",
   "terminal_menu": "roundup-pane",
   "type": "row",
