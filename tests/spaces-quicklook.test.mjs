@@ -396,7 +396,7 @@ test("a menu, a click on the badge, a press on a row or a jump before ARM: no re
   fire(list(render()), "mouse_up:left", {}, cx);
   await clock.advance(ARM);
   assert.equal(reads().length, 0, "after a press on a row");
-  // A jump from the card, which shows before it reads.
+  // The jump handler before ARM (the harness has the card's content before the native card opens).
   hover(render(), "s1", false, cx);
   await clock.advance(GRACE);
   hover(render(), "s1", true, cx);
