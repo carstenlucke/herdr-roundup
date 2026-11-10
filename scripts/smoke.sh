@@ -34,7 +34,7 @@ while [ $# -gt 0 ]; do
 done
 
 die() { echo "smoke.sh: $*" >&2; exit 1; }
-for tool in jq git python3 rsync sips osascript herdr-app hc; do command -v "$tool" >/dev/null || die "needs $tool"; done
+for tool in jq git python3 node rsync sips osascript herdr-app hc; do command -v "$tool" >/dev/null || die "needs $tool"; done
 [ -x "$APP_BIN" ] || die "no Herdr app at $APP_BIN"
 
 # ── the isolated instance ─────────────────────────────────────────────────────────────────
@@ -810,19 +810,26 @@ t_chr34c() {
 case_ CHR-34 t_chr34c
 
 # ── restart 4: a pre-release on offer, at the layout's 268 px sidebar ─────────────────────
+# The beta of the next minor version: always newer than the installed one (a fixed 0.10.0-beta.1 stopped
+# being offered once 0.10.0 was out), and as long as "0.10.0-beta.1 available".
+INSTALLED=$(jq -r .version "$REPO/layouts/Herdr-Roundup.json")
+BETA=$(echo "$INSTALLED" | awk -F'[.-]' '{print $1 "." $2 + 1 ".0-beta.1"}')
 # auto stays false, so no check replaces the seeded latest.
 quit_app
 sh_edit '. + {"roundup-workspace-chrome.update.prerelease": true, "roundup-workspace-chrome.update.dismissed": null,
-  "roundup-workspace-chrome.update.latest": {"version": "0.10.0-beta.1", "url": "https://github.com/carstenlucke/herdr-roundup/releases"}}'
+  "roundup-workspace-chrome.update.latest": {"version": "'"$BETA"'", "url": "https://github.com/carstenlucke/herdr-roundup/releases"}}'
 start_app
 t_chr41() {
+  # The mod's own rule: offered only when newer than what's installed (version.js).
+  node --input-type=module -e "import { newer } from '$REPO/mods/roundup-workspace-chrome/version.js'; process.exit(newer('$BETA', '$INSTALLED') ? 0 : 1)" ||
+    { fail "the seeded $BETA isn't newer than the installed $INSTALLED: nothing would be offered"; return; }
   sleep 3
-  [ "$(sh_get roundup-workspace-chrome.update.latest | jq -r '.version // empty')" = 0.10.0-beta.1 ] ||
+  [ "$(sh_get roundup-workspace-chrome.update.latest | jq -r '.version // empty')" = "$BETA" ] ||
     { fail "latest isn't the seeded beta: $(sh_get roundup-workspace-chrome.update.latest)"; return; }
   shot 60-brand-beta || { fail "no shot"; return; }
   # The brand row, cut from the window.
   cut "$OUT/60-brand-beta.png" "$OUT/61-brand-beta-row.png" 56 268 || true
-  WHY="shot 61-brand-beta-row (else 60): \"Herdr Roundup\" whole, under it \"0.10.0-beta.1 ava…\" in accent ending under the name's end, clear of the search button; the point on the logo"
+  WHY="shot 61-brand-beta-row (else 60): \"Herdr Roundup\" whole, under it \"$BETA ava…\" in accent ending under the name's end, clear of the search button; the point on the logo"
   return 2
 }
 case_ CHR-41 t_chr41
