@@ -128,3 +128,9 @@ test("the blocks the mods look up exist with the right shape", () => {
   const ids = body.children.map((c) => c.id);
   for (const id of ["files", "changes"]) assert.ok(ids.includes(id), `${FILE}: "panel-body" holds ${JSON.stringify(ids)}, not "${id}"`);
 });
+
+// LAY-23
+test("RECIPE.md stays under 64 KB, or herdr.dev's gallery skips the layout", () => {
+  const bytes = statSync(repo("RECIPE.md")).size;
+  assert.ok(bytes < 64 * 1024, `RECIPE.md has ${bytes} bytes; herdr.dev's gallery skips one of 65,536 or more: shorten it`);
+});

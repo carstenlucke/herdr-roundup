@@ -39,4 +39,5 @@ A Herdr App layout, cloned from Herdr's `main` (0.1.14). See README.md for the l
 - A `HoverCard` draws above popups: empty its content while a popup it would cover is open.
 - A `HoverCard` wraps its trigger in an element no style reaches, which never shrinks below its content: `truncate` inside it cuts nothing unless given a width (`nameRoom` in `roundup-workspace-chrome/brand.js`).
 - Herdr gives mods no signal for an open overlay, and its shipped `menu` sets no shared state: a mod that must know opens a clone that says so (`roundup-menu`, `roundup-menu.open`).
+- herdr.dev's gallery skips a layout whose `RECIPE.md` is 64 KB or larger, with no notice but a warning in `https://assets.herdr.dev/layouts/index.json`. Keep it well below (LAY-23); new detail goes into the code's comments, not the recipe.
 - Mods don't get the split arrangement (`panes()` has no geometry). It is only in each machine's core document `herdr-app` (`doc.get` over `hc connect`), opaque JSON whose form can change with herdr-core: read it defensively, with a fallback (`mods/roundup-spaces/pane-map.js`).
