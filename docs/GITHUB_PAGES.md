@@ -6,7 +6,7 @@ The project page: https://carstenlucke.github.io/herdr-roundup/
 
 - `site/` is the whole page: `index.html`, `style.css` and its pictures in `site/img/`. Static, no build step.
 - The pictures come from `scripts/preview.py`: each is a scene of the same drawn window, cropped to one feature. `scripts/site.sh` renders them all into `site/img/` (needs `python3`, `rsvg-convert`, `cwebp`, and Herdr App installed for its program icons). So they are made locally and committed, never in CI. It draws everything into a temporary folder first and replaces `site/img/` only when all pictures are done; `og.png` is the picture a shared link shows (PNG, which link previews widely support).
-- Without a scene (or with the scene `window`), `preview.py` draws the bare window: `layouts/Herdr-Roundup.svg`, the picture Settings shows, and what `site.sh` uses for `window.webp` and `og.png`. `poster` instead puts that window beside the name, the claim and the main features, only for `preview.png` (README, RECIPE, herdr.dev); it is no scene, so `--scenes` and `site.sh` leave it out. Keep it that way (tests/CATALOG.md LAY-21).
+- Without a scene (or with the scene `window`), `preview.py` draws the bare window: `layouts/Herdr-Roundup.svg`, the picture Settings shows, and what `site.sh` uses for `window.webp` and `og.png`. `preview.png` (RECIPE, herdr.dev's gallery) is that SVG rendered at twice its size: a plain picture of the window. The gallery screens its pictures and dropped the layout while `preview.png` was the poster (LAY-23). `poster` instead puts the window beside the name, the claim and the main features, only for README's `assets/poster.png`; it is no scene, so `--scenes` and `site.sh` leave it out. Keep it that way (tests/CATALOG.md LAY-21, LAY-23).
 
 ## Publishing
 
