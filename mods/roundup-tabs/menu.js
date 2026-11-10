@@ -24,19 +24,21 @@ export const PAD = 5, ROW = 31, SEP_M = 4, SEP_H = 1, HEAD_PT = 3, HEAD_PB = 2, 
 export const LINE = SEP_M + SEP_H + SEP_M, HEAD = LINE + HEAD_PT + HEAD_LINE + HEAD_PB;
 
 // Rows are { label, icon, act, keys?, sep? }. The three choices for `kind` ("tab" or "pane") follow
-// under "Ask before closing a tab/pane", a check where the commands carry their icon.
+// under "Ask before closing a tab/pane", a check where the commands carry their icon; with kind null
+// (a menu that closes nothing) they stay out.
 // ↑/↓ move, Enter runs, Esc closes. `view.at` is the highlighted row, `view.handle` the menu's focus.
 export function menuView(view, rows, kind) {
-  const t = theme(), mode = confirmMode(kind);
-  const list = [...rows, ...MODES.map(([m, label], i) => ({ label, mode: m, head: i === 0, act: () => setConfirmMode(kind, m) }))];
-  const choose = (i) => { closeOverlay(props().overlay); list[i].act(); };
+  const t = theme(), mode = kind ? confirmMode(kind) : null;
+  const list = [...rows, ...(kind ? MODES.map(([m, label], i) => ({ label, mode: m, head: i === 0, act: () => setConfirmMode(kind, m) })) : [])];
+  const choose = (i) => { closeOverlay(props().overlay); list[i]?.act(); };
   const line = () => div().mx(7).my(SEP_M).h(SEP_H).bg(t.border);
   return v_flex().id("menu").track_focus(view.handle).w_full().min_h(0).p(PAD).bg(t.popover).text_size(12.8)
     .on_key_down((e, cx) => {
+      if (e.key === "escape") return closeOverlay(props().overlay);
+      if (!list.length) return;
       if (e.key === "down") view.at = (view.at + 1) % list.length;
       else if (e.key === "up") view.at = (view.at + list.length - 1) % list.length;
       else if (e.key === "enter") return choose(view.at);
-      else if (e.key === "escape") return closeOverlay(props().overlay);
       else return;
       cx.notify();
     })

@@ -29,13 +29,14 @@ function icon(p, size, color) {
 }
 
 // Herdr's pane menu (`menu`, tab "pane") item for item, with Close pane going through closePane.
+// A terminal shown outside a tab (a layout terminal block, a window) has no pane to split, zoom or
+// close: its pane is the block's id. Those rows (`inTab`) go, as in Herdr's menu 0.1.14, and with
+// Close pane the choice of when closing asks.
+const inTab = (target) => panes().some((p) => p.pane === target.pane);
 function menuRows(target) {
   const all = terminals(), term = all.find((t) => t.address === target.terminal);
   const parent = term?.parent && all.find((t) => t.address === term.parent);
-  const pane = target.pane;
-  // A terminal shown outside a tab (a layout terminal block, a window) has no pane to
-  // split, zoom or close: its pane is the block's id. Those rows (`inTab`) go, as in Herdr's menu 0.1.14.
-  const inTab = panes().some((p) => p.pane === pane);
+  const pane = target.pane, tabbed = inTab(target);
   return [
     { label: "Split right", icon: "panel-right", inTab: true, act: () => run("pane.split", { direction: "right", pane }), keys: shortcut(["pane.split:right"]) },
     { label: "Split down", icon: "panel-right", inTab: true, act: () => run("pane.split", { direction: "down", pane }), keys: shortcut(["pane.split:down"]) },
@@ -45,7 +46,7 @@ function menuRows(target) {
       : { label: "Send right-clicks to pane", icon: "terminal", act: () => run("terminal.right_click", { terminal: term.address, to: "program" }) }] : []),
     ...(parent ? [{ label: `Send back to ${parent.name || parent.address}`, icon: "terminal", act: () => run("terminal.park", { terminal: term.address }) }] : []),
     { label: "Close pane", icon: "x", sep: true, inTab: true, act: () => closePane(pane), keys: shortcut(["roundup-tabs.close-pane", "pane.close"]) },
-  ].filter((row) => inTab || !row.inTab);
+  ].filter((row) => tabbed || !row.inTab);
 }
 
 async function saveName(target, raw) {
@@ -115,7 +116,7 @@ export default class Pane extends View {
 
   render(cx) {
     if (props()?.rename) return this.renderDialog();
-    if (props()?.target) return menuView(this, menuRows(props().target), "pane");
+    if (props()?.target) return menuView(this, menuRows(props().target), inTab(props().target) ? "pane" : null);
     const t = theme();
     const p = this.me();
     if (!p) return div();
