@@ -8,7 +8,7 @@ A layout for [Herdr App](https://herdr.dev), built on Herdr's default layout (`m
 
 The layout is called `Herdr-Roundup`: Herdr's Settings show a layout by its file name, and a name with a space can't be switched to. Its mods keep the short `roundup-` prefix.
 
-[![Herdr-Roundup: name, claim and main features beside the window, with Claude Code working beside Codex (done) and a shell, their space's agent card open, and a README in the floating preview](assets/poster.png)](https://carstenlucke.github.io/herdr-roundup/)
+[![Herdr-Roundup: name, claim and main features beside the window, with Claude Code working beside Codex (done) and a shell, their space's agent card open, and a README in the floating preview](preview.png)](https://carstenlucke.github.io/herdr-roundup/)
 
 ## Contents
 
@@ -18,12 +18,12 @@ The layout is called `Herdr-Roundup`: Herdr's Settings show a layout by its file
 | `mods/roundup-*/` | The layout's own mods. Until a mod is cloned here, the layout uses Herdr's shipped ones (`agents`, `changes`, `workspace-status`). The side panel's file list is `roundup-files`, in place of Herdr's `files`; a double-click on a file shows it in `roundup-preview`'s floating window, a Cmd-double-click in a tab of its own (Markdown, PDF, images, CSV/TSV, JSON, code) |
 | `themes/` | Themes. One named `Herdr-Roundup.json` is the layout's own: Settings offers it only there |
 | `keys.json` | The `layout:Herdr-Roundup` section: keys that apply only while this layout shows |
-| `assets/` | Files for this README, such as the logo and the poster |
+| `assets/` | Files for this README, such as the logo |
 | `docs/ARCHITECTURE_DECISIONS.md` | The few decisions whose reasons need keeping, and when to write one: an index, details in `docs/adr/` |
 | `docs/GITHUB_PAGES.md` | How the project page is made and published |
 | `scripts/sync.sh` | Installs all of the above into `~/.config/herdr-app` |
 | `site/` | The project's web page (GitHub Pages): `index.html`, `style.css` and its pictures in `site/img/` |
-| `scripts/preview.py` | Draws the layout's preview picture for Settings, with `poster` README's `assets/poster.png`, and with a scene name the site's pictures |
+| `scripts/preview.py` | Draws the layout's preview picture for Settings, with `poster` README's `preview.png`, and with a scene name the site's pictures |
 | `scripts/site.sh` | Redraws `site/img/` (needs `python3`, `rsvg-convert`, `cwebp` and Herdr App installed) |
 | `.github/workflows/pages.yml` | Publishes `site/` to GitHub Pages, only when run by hand |
 | `scripts/build-icons.mjs` | Regenerates `roundup-files`' icons from a pinned release of Symbols (needs `curl`, `unzip`, Node) |

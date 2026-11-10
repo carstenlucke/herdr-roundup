@@ -6,9 +6,8 @@
 #   python3 scripts/preview.py . layouts/Herdr-Roundup.svg
 #   rsvg-convert -z 2 layouts/Herdr-Roundup.svg -o preview.png
 # Settings shows the SVG: the bare window, as it is without a scene (or with the scene "window").
-# RECIPE.md and herdr.dev's gallery show the PNG: the same plain window, no poster (the gallery
-# screens its pictures and dropped the poster). README.md shows the poster instead:
-#   python3 scripts/preview.py . /tmp/poster.svg poster && rsvg-convert -z 2 /tmp/poster.svg -o assets/poster.png
+# README.md and RECIPE.md show the PNG, drawn from the poster instead:
+#   python3 scripts/preview.py . /tmp/poster.svg poster && rsvg-convert -z 2 /tmp/poster.svg -o preview.png
 # The poster puts the window beside name, claim and the main features (FEATURES), the sheep sunk
 # into the background above it; its window shows the quicklook card of search-filters' agents. assets/logo-mark.png is assets/logo.png in grey, 480px, 8 colors;
 # a filter turns its dark wool into the light mark. "poster" is no scene: --scenes leaves it out.
@@ -24,7 +23,7 @@ if sys.argv[1:] == ["--scenes"]:
     print("\n".join(SCENES))
     sys.exit()
 REPO, OUT = sys.argv[1], sys.argv[2]
-# "poster": the bare window in its poster, for assets/poster.png. No scene: the bare window, Settings' preview.
+# "poster": the bare window in its poster, for preview.png. No scene: the bare window, Settings' preview.
 POSTER = sys.argv[3:4] == ["poster"]
 SCENE = sys.argv[3] if len(sys.argv) > 3 and not POSTER else "window"
 if SCENE != "window" and SCENE not in SCENES:
