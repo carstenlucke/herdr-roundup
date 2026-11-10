@@ -1,32 +1,43 @@
-// The update check (issue #9): this layout's latest GitHub release against the installed version.
+// The update check (issue #9): this layout's latest GitHub release against the installed version. With
+// pre-releases subscribed (`prerelease`), the newest release including alpha, beta and rc ones.
 // It only looks and tells. Installing is an agent's job, in a tab of its own, and it asks before changing anything.
 import { shared, setShared, notify, knownAgents, run, appHome, exec, window, spaces } from "herdr";
-import { PAGE, newer, tagVersion, pick as pickFrom, brief } from "./version.js";
+import { PAGE, newer, isPre, tagVersion, newest, pick as pickFrom, brief } from "./version.js";
 
-export { newer } from "./version.js";
+export { newer, isPre } from "./version.js";
 
+// The latest stable release; the release list (newest first, drafts left out) for the pre-release channel.
 export const RELEASES = "https://api.github.com/repos/carstenlucke/herdr-roundup/releases/latest";
+export const RELEASE_LIST = "https://api.github.com/repos/carstenlucke/herdr-roundup/releases?per_page=30";
 const DAY = 24 * 60 * 60 * 1000;
 
 // State under this mod's name (`roundup-workspace-chrome.update.<key>`), shared so the menu's popup sees it too:
 // lastCheck (ms, set before asking), checked (ms of the last answer), latest ({ version, url }),
 // dismissed (a skipped version), notified (the version the toast was shown for), auto (false: only when asked),
-// error (why the last check failed, null after one that didn't).
+// error (why the last check failed, null after one that didn't), prerelease (true: alpha, beta and rc releases too),
+// checking (true while the brand copy's check runs).
 export const get = (key) => shared(`roundup-workspace-chrome.update.${key}`);
 export const put = (key, value) => setShared(`roundup-workspace-chrome.update.${key}`, value);
 
-// The release to offer over `installed`: newer and not skipped. Null otherwise.
+// Whether pre-releases are subscribed (off unless switched on in the menu).
+export const prerelease = () => get("prerelease") === true;
+
+// The release to offer over `installed`: newer, not skipped, and a pre-release only when subscribed (a `latest`
+// left from before the switch went off isn't offered). Null otherwise.
 export function available(installed) {
   const latest = get("latest");
-  return latest && newer(latest.version, installed) && latest.version !== get("dismissed") ? latest : null;
+  return latest && newer(latest.version, installed) && latest.version !== get("dismissed") &&
+    (prerelease() || !isPre(latest.version)) ? latest : null;
 }
 
-// GitHub's latest release: { ok: true, version, url } or { ok: false, why }. Nothing but a plain GET with a generic
-// User-Agent, which GitHub requires: no token, nothing about the person.
-export async function latest() {
+// GitHub's latest release, with `pre` the newest one pre-releases included: { ok: true, version, url } or
+// { ok: false, why }. Nothing but a plain GET with a generic User-Agent, which GitHub requires: no token, nothing
+// about the person.
+export async function latest(pre = false) {
+  const url = pre ? RELEASE_LIST : RELEASES;
   let response;
   try {
-    response = await fetch(RELEASES, { headers: { Accept: "application/vnd.github+json", "User-Agent": "herdr-roundup" } });
+    response = await fetch(url, { headers: { Accept: "application/vnd.github+json", "User-Agent": "herdr-roundup" } });
   } catch {
     return { ok: false, why: "No connection to api.github.com" };
   }
@@ -35,6 +46,12 @@ export async function latest() {
   if (!response.ok) return { ok: false, why: `GitHub answered ${response.status}` };
   let release;
   try { release = await response.json(); } catch { return { ok: false, why: "GitHub's answer couldn't be read" }; }
+  if (pre) {
+    if (!Array.isArray(release)) return { ok: false, why: "GitHub's answer couldn't be read" };
+    if (!release.length) return { ok: false, why: "No release on GitHub yet" };
+    const found = newest(release, true);
+    return found ? { ok: true, ...found } : { ok: false, why: "No release's tag is a version" };
+  }
   const tag = String(release?.tag_name ?? ""), version = tagVersion(tag);
   if (!version) return { ok: false, why: `The latest release's tag isn't a version (${tag || "none"})` };
   return { ok: true, version, url: release.html_url || PAGE };
@@ -59,7 +76,7 @@ function announce(installed, release) {
 // says what it found, and shows a skipped version again. Returns the error's reason, or null.
 export async function check(installed, manual) {
   put("lastCheck", Date.now());
-  const r = await latest();
+  const r = await latest(prerelease());
   put("error", r.ok ? null : r.why);
   if (!r.ok) {
     if (manual) notify({ level: "warning", title: "Couldn't check for updates", body: r.why });
@@ -74,7 +91,8 @@ export async function check(installed, manual) {
     } else if (get("dismissed") !== r.version && get("notified") !== r.version) announce(installed, r);
   } else if (manual) {
     notify({ level: "success", title: "Herdr Roundup is up to date",
-      body: r.version === installed ? `${installed} is the latest release` : `You have ${installed}, the latest release is ${r.version}` });
+      body: (r.version === installed ? `${installed} is the latest release` : `You have ${installed}, the latest release is ${r.version}`) +
+        (prerelease() ? ", pre-releases included" : "") });
   }
   return null;
 }
@@ -85,7 +103,8 @@ export async function check(installed, manual) {
 // whether to trust a folder asks once.
 export async function install(installed, version) {
   const release = pick(version);
-  if (!release || !newer(release.version, installed)) {
+  // A pre-release only while subscribed: a toast from before the switch went off offers nothing.
+  if (!release || !newer(release.version, installed) || (isPre(release.version) && !prerelease())) {
     notify({ level: "info", title: "Nothing to update", body: `Herdr Roundup ${installed} is the latest release known` });
     return;
   }

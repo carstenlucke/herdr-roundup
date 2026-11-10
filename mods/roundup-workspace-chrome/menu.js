@@ -5,7 +5,7 @@
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { theme, props, run, shared, setShared, closeOverlay } from "herdr";
-import { get, put, available } from "./update.js";
+import { get, put, available, prerelease } from "./update.js";
 import { info, infoHeight } from "./info.js";
 import { popupHeight } from "./brand.js";
 
@@ -19,49 +19,63 @@ const icon = (name) => `mods/roundup-workspace-chrome/${name}.svg`;
 // Whether the update rows show is fixed when the menu opens (`m.release`), as the popup's height is. Their version
 // is the shared one: a check that finds a newer release while the menu is open changes the labels with it. The
 // command carries the version the label named (`update@0.8.0`), so a check ending after the click changes nothing.
+// When nothing is on offer any more (pre-releases switched off, say), the rows stay, dimmed, and do nothing.
+// `keep`: the menu stays open, so a choice can be seen taking effect; the others leave it (a tab, the browser) or
+// take its rows away (Skip).
 function rows(m) {
-  const offered = "release" in m ? m.release : available(m.installed);
-  const release = offered && (available(m.installed) ?? offered), auto = get("auto") !== false, details = shared(DETAILS) !== false;
+  const offered = "release" in m ? m.release : available(m.installed), now = available(m.installed);
+  const release = offered && (now ?? offered), gone = Boolean(offered) && !now;
+  const auto = get("auto") !== false, details = shared(DETAILS) !== false;
+  const offer = (row) => gone ? { ...row, accent: false, dim: true, keep: true, act: () => {} } : row;
   return [
-    { label: "Check for updates", icon: "refresh", act: () => run("roundup-workspace-chrome.check") },
+    { label: "Check for updates", icon: "refresh", keep: true, act: () => run("roundup-workspace-chrome.check") },
     ...(release ? [
-      { label: `Update to ${release.version} with an agent…`, icon: "bot", accent: true, act: () => run(`roundup-workspace-chrome.update@${release.version}`) },
-      { label: `Release notes ${release.version}`, icon: "notes", act: () => run(`roundup-workspace-chrome.notes@${release.version}`) },
-      { label: `Skip ${release.version}`, icon: "skip", act: () => put("dismissed", release.version) },
+      offer({ label: `Update to ${release.version} with an agent…`, icon: "bot", accent: true, act: () => run(`roundup-workspace-chrome.update@${release.version}`) }),
+      offer({ label: `Release notes ${release.version}`, icon: "notes", act: () => run(`roundup-workspace-chrome.notes@${release.version}`) }),
+      offer({ label: `Skip ${release.version}`, icon: "skip", act: () => put("dismissed", release.version) }),
     ] : []),
-    { label: "Daily", check: auto, act: () => { put("auto", true); run("roundup-workspace-chrome.auto"); }, head: "Check for updates", sep: true },
-    { label: "Only when I ask", check: !auto, act: () => put("auto", false) },
-    { label: "Show details on hover", check: details, act: () => setShared(DETAILS, !details), sep: true },
+    { label: "Daily", check: auto, keep: true, act: () => { put("auto", true); run("roundup-workspace-chrome.auto"); }, head: "Check for updates", sep: true },
+    { label: "Only when I ask", check: !auto, keep: true, act: () => put("auto", false) },
+    // The other channel's answer is no use: forget it and ask at once (a manual check, so a toast says what it found).
+    { label: "Include pre-releases", check: prerelease(), sep: true, keep: true,
+      act: () => { put("prerelease", !prerelease()); put("latest", null); run("roundup-workspace-chrome.check"); } },
+    { label: "Show details on hover", check: details, keep: true, act: () => setShared(DETAILS, !details), sep: true },
   ];
 }
 
 // The popup's height (brand.js's popupHeight).
 export const menuHeight = (m) => popupHeight(rows(m), infoHeight(m));
 
-// ↑/↓ move, Enter runs, Esc closes. `view.at` is the highlighted row, `view.handle` the menu's focus.
+// ↑/↓ move, Enter runs, Esc closes. `view.at` is the highlighted row, `view.handle` the menu's focus. A `keep` row
+// runs with the menu left open; its shared state redraws it.
 export function menuView(view) {
   const t = theme(), m = props().menu, list = rows(m);
-  const choose = (i) => { closeOverlay(props().overlay); list[i].act(); };
+  const choose = (i, cx) => {
+    if (!list[i].keep) closeOverlay(props().overlay);
+    view.at = i;
+    list[i].act();
+    cx?.notify();
+  };
   const line = () => div().mx(7).my(4).h(1).bg(t.border);
   return v_flex().id("menu").track_focus(view.handle).w_full().min_h(0).p(5).bg(t.popover).text_size(12.8)
     .on_key_down((e, cx) => {
       if (e.key === "down") view.at = (view.at + 1) % list.length;
       else if (e.key === "up") view.at = (view.at + list.length - 1) % list.length;
-      else if (e.key === "enter") return choose(view.at);
+      else if (e.key === "enter") return choose(view.at, cx);
       else if (e.key === "escape") return closeOverlay(props().overlay);
       else return;
       cx.notify();
     })
-    .child(div().px(8).py(6).child(info(t, m)))
+    .child(div().px(8).py(6).child(info(t, { ...m, live: true })))
     .child(line())
     .children(list.map((it, i) => v_flex()
       .when(Boolean(it.sep), el => el.child(line()))
       .when(Boolean(it.head), el => el.child(div().px(8).pt(3).pb(2).text_size(11).text_color(t.dim).child(it.head)))
-      .child(h_flex().id(`mi-${i}`).h(31).px(8).gap(9).rounded(7).items_center().text_color(it.accent ? t.accent : t.foreground)
-        .when(i === view.at, el => el.bg(t.selected)).hover(s => s.bg(t.hover))
-        .on_click(() => choose(i))
+      .child(h_flex().id(`mi-${i}`).h(31).px(8).gap(9).rounded(7).items_center().text_color(it.accent ? t.accent : it.dim ? t.dim : t.foreground)
+        .when(i === view.at, el => el.bg(t.selected)).when(!it.dim, el => el.hover(s => s.bg(t.hover)))
+        .on_click((_e, cx) => choose(i, cx))
         .child(it.icon
-          ? svg(icon(it.icon)).size(14).flex_none().text_color(it.accent ? t.accent : t.muted)
+          ? svg(icon(it.icon)).size(14).flex_none().text_color(it.accent ? t.accent : it.dim ? t.dim : t.muted)
           : div().size(14).flex_none().when(it.check, el => el.child(svg(icon("check")).size(14).text_color(t.accent))))
         .child(div().flex_1().truncate().child(it.label)))));
 }

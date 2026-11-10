@@ -50,7 +50,7 @@ herdr-app do layout.switch '{"name":"Herdr-Roundup"}'
 
 The version you have is under the name at the top left. Once a day the layout asks GitHub whether there is a newer release: a plain `GET` to `api.github.com` with a generic User-Agent, so GitHub sees nothing but your IP. A new version shows as a point on the logo, `0.8.0 available` under the name and one notification.
 
-Click the logo or the name for the menu: check now, update, read the release notes, skip a version, or choose "Only when I ask" to stop the daily check. Updating opens a tab with your agent and a brief: it reads the release, tells you what would change (keys or mods you edited yourself included) and asks before it installs anything.
+Click the logo or the name for the menu: check now, update, read the release notes, skip a version, or choose "Only when I ask" to stop the daily check. Only stable releases are offered unless you tick "Include pre-releases": then alpha, beta and rc releases (`0.10.0-beta.1`) count as updates too. Updating opens a tab with your agent and a brief: it reads the release, tells you what would change (keys or mods you edited yourself included) and asks before it installs anything.
 
 ## Working on it
 

@@ -1,10 +1,10 @@
 import { View, div, image, svg } from "gpui-kit";
 import { h_flex, v_flex, HoverCard } from "gpui-base";
 import { theme, run, props, window, shared, setShared, updates, layout, appHome, readTextFile, watchFolder, openOverlay, nextCommand } from "herdr";
-import { get, available, due, check, install, openNotes } from "./update.js";
+import { get, put, available, due, check, install, openNotes } from "./update.js";
 import { menuView, menuHeight, DETAILS, MENU_OPEN } from "./menu.js";
 import { info } from "./info.js";
-import { pressOf, pressMoved, isClick, herdrVersion, subLine } from "./brand.js";
+import { pressOf, pressMoved, isClick, herdrVersion, subLine, menuWidth } from "./brand.js";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -41,8 +41,9 @@ export default class WorkspaceChrome extends View {
     if (props()?.footer) return;
     // Only the brand copy checks for updates, takes the commands and reads the installed version.
     this.checking = false;
-    // A menu still open when Herdr quit doesn't keep the card away for good.
+    // A menu still open when Herdr quit doesn't keep the card away for good, nor a check cut off by it the open menu.
     setShared(MENU_OPEN, false);
+    put("checking", false);
     cx.spawn(async (cx) => {
       for (;;) {
         // `update@0.8.0`, `notes@0.8.0`: the version the menu or toast named.
@@ -87,10 +88,13 @@ export default class WorkspaceChrome extends View {
     // A manual check asked for during another one runs after it, so it still answers with a toast.
     if (this.checking) { if (manual) this.manualPending = true; return; }
     this.checking = true;
+    // Shared for the menu's popup, which stays open while a check it started runs.
+    put("checking", true);
     cx.notify();
     cx.spawn(async (cx) => {
       await check(installed, manual).catch(() => null);
       this.checking = false;
+      put("checking", false);
       if (this.manualPending) {
         this.manualPending = false;
         const now = this.file?.version;
@@ -116,7 +120,7 @@ export default class WorkspaceChrome extends View {
     // What the popup's height is summed from, fixed while it is open: a check that ends meanwhile doesn't add
     // rows or a status line the popup has no room for.
     const menu = { installed, herdr: herdrVersion(this.file), release: available(installed), error: get("error") ?? null };
-    openOverlay({ mod: "roundup-workspace-chrome", kind: "popup", width: 260, height: menuHeight(menu), props: { menu } });
+    openOverlay({ mod: "roundup-workspace-chrome", kind: "popup", width: menuWidth(menu.release), height: menuHeight(menu), props: { menu } });
   }
   // The menu's head as a card, with a hint that a click gives more.
   card(t, installed) {
@@ -135,8 +139,10 @@ export default class WorkspaceChrome extends View {
       .on_mouse_down("left", (e) => this.pressed(e)).on_mouse_move((e) => this.moved(e)).on_click((e, cx) => { this.openMenu(e); cx.notify(); })
       .child(div().relative().flex_none().child(image("mods/roundup-workspace-chrome/logo.png").size(20).rounded(5))
         .when(Boolean(release), el => el.child(div().absolute().top(-3).right(-3).size(10).rounded_full().border(2).border_color(t.chrome).bg(t.accent))))
-      .child(v_flex().child(div().font_semibold().text_size(13).line_height("16px").text_color(t.foreground).child("Herdr Roundup"))
-        .when(Boolean(sub), el => el.child(div().text_size(11).line_height("14px").text_color(release ? t.accent : t.dim).child(sub))));
+      // The name keeps its width; a longer sub line ("0.10.0-beta.1 available", 117 px to the name's 96) is cut where
+      // the row has no room for it, and doesn't push the search button away.
+      .child(v_flex().min_w(0).child(div().whitespace_nowrap().font_semibold().text_size(13).line_height("16px").text_color(t.foreground).child("Herdr Roundup"))
+        .when(Boolean(sub), el => el.child(div().min_w(0).truncate().text_size(11).line_height("14px").text_color(release ? t.accent : t.dim).child(sub))));
     // Content only while hovered, not right after a click and never over the open menu: the card's layer is above the
     // popup, and the pointer can come back to the name while the menu is open.
     const shown = this.hot && !this.quiet && shared(DETAILS) !== false && !shared(MENU_OPEN);

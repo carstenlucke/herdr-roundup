@@ -40,6 +40,9 @@ export function headHeight({ herdr, checking, error }) {
   return 19 + facts * 15 + facts * 3 + (s ? 3 + 19 + (s === "error" ? 15 : 0) : 0);
 }
 
+// The popup's width: wider when it offers a pre-release, so "Update to 0.10.0-alpha.12 with an agent…" isn't cut.
+export const menuWidth = (release) => release && /^\d+\.\d+\.\d+-/.test(release.version) ? 300 : 260;
+
 // The popup's height for its rows ({ head, sep }) under a head `head` px tall: 5 px padding each side, the head
 // (6 + its lines + 6) and a divider (9), 31 px a row, 19 px a heading, 9 px a divider.
 export const popupHeight = (rows, head) => rows.reduce((h, r) => h + 31 + (r.head ? 19 : 0) + (r.sep ? 9 : 0), 10 + 12 + head + 9);
