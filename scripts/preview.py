@@ -955,9 +955,10 @@ if SCENE != "window" or POSTER:
     add('<defs><filter id="soft" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="10"/></filter></defs>')
 
 if SCENE == "update":
-    # A click on logo or name: the menu at the pointer, the details on top.
-    MX, MY, MW = 120, 40, 260
-    MH = 10 + 12 + 91 + 9 + 7 * 31 + 19 + 9 + 9
+    # A click on logo or name: the menu at the pointer (300px, brand.js's MENU_WIDTH), the details on top.
+    # Its height: padding, the head and its divider, 8 rows, one heading and 3 dividers.
+    MX, MY, MW = 120, 40, 300
+    MH = 10 + 12 + 91 + 9 + 8 * 31 + 19 + 3 * 9
     overlay(MX, MY, MW, MH)
     ix, iy = MX + 5 + 8, MY + 5 + 6
     text(ix, iy + 12, "Herdr Roundup", 13, "foreground", 600)
@@ -976,6 +977,7 @@ if SCENE == "update":
         dict(label=f"Skip {NEXT}", glyph="skip"),
         dict(label="Daily", check=True, sep=True, head="Check for updates"),
         dict(label="Only when I ask"),
+        dict(label="Include pre-releases", sep=True),
         dict(label="Show details on hover", check=True, sep=True),
     ])
 
@@ -1144,7 +1146,7 @@ CROPS = {
     "rename": ((W - RENAME_W) / 2 - 60, (H - RENAME_H) / 2 - 50, RENAME_W + 120, RENAME_H + 100),
     "close-menu": (WX, 0, 520, 290),
     "close-confirm": ((W - CONFIRM_W) / 2 - 60, (H - CONFIRM_H) / 2 - 50, CONFIRM_W + 120, CONFIRM_H + 100),
-    "update": (0, 0, 420, 440),
+    "update": (0, 0, MX + MW + 40, MY + MH + 24) if SCENE == "update" else None,
     "preview-tab": (WX, 0, PX - WX, 640),
     "float": (FX - 40, FT - 40, FW + 80, FH + 90),
 }

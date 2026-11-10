@@ -80,9 +80,9 @@ test("no hex color in the mods' JavaScript", () => {
 });
 
 // LAY-03
-test("the root version is major.minor.patch and has its release notes", () => {
+test("the root version is major.minor.patch, or a pre-release of one, and has its release notes", () => {
   const v = layout.version;
-  assert.match(String(v), /^\d+\.\d+\.\d+$/, `${FILE}: root "version" is ${JSON.stringify(v)}, which update.js can't compare`);
+  assert.match(String(v), /^\d+\.\d+\.\d+(-(alpha|beta|rc)(\.\d+)?)?$/, `${FILE}: root "version" is ${JSON.stringify(v)}, which update.js can't compare`);
   assert.ok(existsSync(repo(`RELEASE-v${v}.md`)), `${FILE}: version ${v} has no RELEASE-v${v}.md beside it`);
 });
 

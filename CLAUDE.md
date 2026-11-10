@@ -22,7 +22,8 @@ A Herdr App layout, cloned from Herdr's `main` (0.1.13). See README.md for the l
 ## Before a release
 
 - Raise `"version"` on the root of `layouts/Herdr-Roundup.json`. It is the layout's only version: `roundup-workspace-chrome` reads it from the file (`layout()` leaves out fields Herdr doesn't know) and shows it under the name at the top left and in its details.
-- Every release gets a tag `v<version>` matching that root `"version"`, plus a GitHub release with notes written for the person who updates (`gh release create v<version> --notes-file …`). Only a release, not a tag, reaches the update check (`releases/latest`), and the updating agent reads its notes before changing anything.
+- Every release gets a tag `v<version>` matching that root `"version"`, plus a GitHub release with notes written for the person who updates (`gh release create v<version> --notes-file …`). Only a release, not a tag, reaches the update check (the release list), and the updating agent reads its notes before changing anything.
+- A pre-release is `<major>.<minor>.<patch>-alpha|beta|rc[.N]` (`0.10.0-beta.1`, no leading zeros), tagged the same way and created with `gh release create … --prerelease`, so GitHub shows it as one too. The check goes by the tag: a suffix makes it a pre-release, offered only to who ticked "Include pre-releases" in the logo menu; a release flagged `--prerelease` whose tag has no suffix is offered to no one.
 
 - The site (`site/`, GitHub Pages) is published only by hand: after changing it or a feature it shows, run `scripts/site.sh`, commit `site/img/`, and once on `main` run `gh workflow run pages.yml`. A new feature gets a scene in `scripts/preview.py` and a section in `site/index.html`. Details: `docs/GITHUB_PAGES.md`.
 - Decide whether the layout needs a new preview picture: does it look different from what Settings shows (a plain frame, or the last `layouts/Herdr-Roundup.svg`)? If so, draw `layouts/Herdr-Roundup.svg` and set `"preview": "layouts/Herdr-Roundup.svg"` on the layout root. `scripts/sync.sh` already copies it.
@@ -36,5 +37,6 @@ A Herdr App layout, cloned from Herdr's `main` (0.1.13). See README.md for the l
 - A popup overlay is a copy of its mod that ends when it closes, timers and tasks included: work that must outlive it runs in the copy that stays.
 - In a `window_drag` block a drag still ends in `on_click`; tell them apart by the pointer's moves (RECIPE "Click or drag"), or stop `mouse_down` and lose the drag there.
 - A `HoverCard` draws above popups: empty its content while a popup it would cover is open.
+- A `HoverCard` wraps its trigger in an element no style reaches, which never shrinks below its content: `truncate` inside it cuts nothing unless given a width (`nameRoom` in `roundup-workspace-chrome/brand.js`).
 - Herdr gives mods no signal for an open overlay, and its shipped `menu` sets no shared state: a mod that must know opens a clone that says so (`roundup-menu`, `roundup-menu.open`).
 - Mods don't get the split arrangement (`panes()` has no geometry). It is only in each machine's core document `herdr-app` (`doc.get` over `hc connect`), opaque JSON whose form can change with herdr-core: read it defensively, with a fallback (`mods/roundup-spaces/pane-map.js`).

@@ -40,6 +40,17 @@ export function headHeight({ herdr, checking, error }) {
   return 19 + facts * 15 + facts * 3 + (s ? 3 + 19 + (s === "error" ? 15 : 0) : 0);
 }
 
+// The room in px for the name's column in the brand row of a sidebar `sidebar` px wide, `left` px padded on the
+// left (76 beside macOS's traffic lights, else 14): the row's right padding 10, search and sidebar buttons 26 each
+// with a gap of 4 before each, the logo 20 and its gap 8. Null without a width. The sub line gets it as its max
+// width: gpui-base's HoverCard wraps logo and name in an element no style reaches, which never shrinks below its
+// content, so a longer line would run under the search button instead of being cut (seen at 268 px).
+export const nameRoom = (sidebar, left) => Number.isFinite(sidebar) ? Math.max(0, sidebar - left - 10 - 2 * (26 + 4) - 20 - 8) : null;
+
+// The popup's width, for "Update to 0.10.0-alpha.12 with an agent…". Always this wide: which release the rows name
+// can change while the menu is open (pre-releases switched on there), and its width can't.
+export const MENU_WIDTH = 300;
+
 // The popup's height for its rows ({ head, sep }) under a head `head` px tall: 5 px padding each side, the head
 // (6 + its lines + 6) and a divider (9), 31 px a row, 19 px a heading, 9 px a divider.
 export const popupHeight = (rows, head) => rows.reduce((h, r) => h + 31 + (r.head ? 19 : 0) + (r.sep ? 9 : 0), 10 + 12 + head + 9);

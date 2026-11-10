@@ -161,18 +161,21 @@ test("every svg and png a mod draws exists, and none of its own lies unused", ()
 });
 
 // CHR-31
-test("only update.js fetches, and only the releases URL; no other network address in the mods", () => {
+test("only update.js fetches, and only the release list's pages; no other network address in the mods", () => {
   const bad = [];
   for (const mod of roundupMods)
     for (const file of jsFiles(mod)) {
       const text = code(file);
       for (const m of text.matchAll(/(?<![\w.$])fetch\(\s*([^,)\s]*)/g))
-        if (file !== "mods/roundup-workspace-chrome/update.js" || m[1] !== "RELEASES") bad.push(`${file}:${lineOf(text, m.index)}: fetch(${m[1]}`);
+        if (file !== "mods/roundup-workspace-chrome/update.js" || m[1] !== "url") bad.push(`${file}:${lineOf(text, m.index)}: fetch(${m[1]}`);
       for (const m of text.matchAll(/\b(?:https?|wss?|ftp):\/\/[^\s"'`)]+/g))
         if (!/^https:\/\/(api\.)?github\.com\/(repos\/)?carstenlucke\/herdr-roundup(\/|$)/.test(m[0])) bad.push(`${file}:${lineOf(text, m.index)}: ${m[0]}`);
     }
   assert.deepEqual(bad, []);
-  assert.match(read("mods/roundup-workspace-chrome/update.js"), /export const RELEASES = "https:\/\/api\.github\.com\/repos\/carstenlucke\/herdr-roundup\/releases\/latest"/);
+  const update = read("mods/roundup-workspace-chrome/update.js");
+  assert.match(update, /export const RELEASE_LIST = "https:\/\/api\.github\.com\/repos\/carstenlucke\/herdr-roundup\/releases\?per_page=30"/);
+  assert.match(update, /const url = page === 1 \? RELEASE_LIST : `\$\{RELEASE_LIST\}&page=\$\{page\}`;/, "fetch's url is the list or one of its pages");
+  assert.doesNotMatch(update, /herdr-roundup\/releases\/latest/, "both channels read the list");
 });
 
 // PAN-01
