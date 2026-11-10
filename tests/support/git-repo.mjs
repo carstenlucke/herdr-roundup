@@ -1,6 +1,8 @@
 // Real git repos in temp folders, for L2 tests. Importing this makes git in this test process
 // independent of the person's and the CI's config: no global or system config, a fixed identity,
-// English messages, and no repo search above the temp folder.
+// English messages, no repo search above the temp folder, and no automatic maintenance: since git
+// 2.47 a commit may start `git maintenance` detached, whose objects/maintenance.lock comes and goes
+// under a test that compares .git before and after (SPC-05 failed so on CI, 2026-11-10).
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync, statSync, readdirSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -8,12 +10,12 @@ import { join, dirname } from "node:path";
 
 const TMP = realpathSync(tmpdir());
 const configDir = mkdtempSync(join(TMP, "roundup-gitconfig-"));
-const emptyConfig = join(configDir, "config");
-writeFileSync(emptyConfig, "");
+const testConfig = join(configDir, "config");
+writeFileSync(testConfig, "[maintenance]\n\tauto = false\n[gc]\n\tauto = 0\n");
 process.on("exit", () => rmSync(configDir, { recursive: true, force: true }));
 
 Object.assign(process.env, {
-  GIT_CONFIG_GLOBAL: emptyConfig,
+  GIT_CONFIG_GLOBAL: testConfig,
   GIT_CONFIG_NOSYSTEM: "1",
   GIT_AUTHOR_NAME: "Roundup Test", GIT_AUTHOR_EMAIL: "test@example.invalid",
   GIT_COMMITTER_NAME: "Roundup Test", GIT_COMMITTER_EMAIL: "test@example.invalid",
