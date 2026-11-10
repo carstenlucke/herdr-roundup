@@ -1,6 +1,6 @@
 # Herdr Roundup
 
-A Herdr App layout, cloned from Herdr's `main` (0.1.13). See README.md for the layout of the repo.
+A Herdr App layout, cloned from Herdr's `main` (0.1.14). See README.md for the layout of the repo.
 
 ## Before changing anything
 

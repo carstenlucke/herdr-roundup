@@ -4,7 +4,7 @@
 
 <p align="center"><a href="https://carstenlucke.github.io/herdr-roundup/"><b>→ See every feature, with pictures, on the project page</b></a></p>
 
-A layout for [Herdr App](https://herdr.dev), started from Herdr's default layout (`main`, Herdr 0.1.13).
+A layout for [Herdr App](https://herdr.dev), built on Herdr's default layout (`main`, Herdr 0.1.14).
 
 The layout is called `Herdr-Roundup`: Herdr's Settings show a layout by its file name, and a name with a space can't be switched to. Its mods keep the short `roundup-` prefix.
 

@@ -2,7 +2,7 @@
 // below the shown folder (for search). Here, on another machine (`on`), and on Windows (the
 // index not yet).
 //
-// listDir is Herdr's `files` 0.1.13 `directory()` (Apache-2.0). buildIndex is adapted from
+// listDir was adapted from Herdr's `files` 0.1.13 `directory()` (Apache-2.0). buildIndex is adapted from
 // cybertron288/herdr-mods `filetree` (MIT, (c) 2026 cybertron288), itself a port of
 // claude-code-filetree (MIT, (c) 2026 Kurt Buhler). See THIRD_PARTY_NOTICES.md.
 import { exec, home, window } from "herdr";
