@@ -198,7 +198,7 @@ test("roundup-files is a focusable clone of Herdr's files, in the layout's files
   const m = JSON.parse(read("mods/roundup-files/mod.json"));
   assert.equal(m.focusable, true, "mods/roundup-files/mod.json: focusable");
   assert.equal(m.place, "none", "mods/roundup-files/mod.json: place");
-  assert.deepEqual(m.cloned_from, { name: "files", version: "0.1.13" }, "mods/roundup-files/mod.json: cloned_from");
+  assert.deepEqual(m.cloned_from, { name: "files", version: "0.1.14" }, "mods/roundup-files/mod.json: cloned_from");
   let files;
   (function walk(v) { if (v && typeof v === "object") { if (v.id === "files") files = v; Object.values(v).forEach(walk); } })(layout);
   assert.equal(files?.content?.mod, "roundup-files", `layouts/${NAME}.json: block "files"`);

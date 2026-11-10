@@ -33,16 +33,19 @@ function menuRows(target) {
   const all = terminals(), term = all.find((t) => t.address === target.terminal);
   const parent = term?.parent && all.find((t) => t.address === term.parent);
   const pane = target.pane;
+  // A terminal shown outside a tab (a layout terminal block, a window) has no pane to
+  // split, zoom or close: its pane is the block's id. Those rows (`inTab`) go, as in Herdr's menu 0.1.14.
+  const inTab = panes().some((p) => p.pane === pane);
   return [
-    { label: "Split right", icon: "panel-right", act: () => run("pane.split", { direction: "right", pane }), keys: shortcut(["pane.split:right"]) },
-    { label: "Split down", icon: "panel-right", act: () => run("pane.split", { direction: "down", pane }), keys: shortcut(["pane.split:down"]) },
-    { label: "Zoom", icon: "square", act: () => run("pane.zoom", { pane }), keys: shortcut(["pane.zoom"]) },
+    { label: "Split right", icon: "panel-right", inTab: true, act: () => run("pane.split", { direction: "right", pane }), keys: shortcut(["pane.split:right"]) },
+    { label: "Split down", icon: "panel-right", inTab: true, act: () => run("pane.split", { direction: "down", pane }), keys: shortcut(["pane.split:down"]) },
+    { label: "Zoom", icon: "square", inTab: true, act: () => run("pane.zoom", { pane }), keys: shortcut(["pane.zoom"]) },
     ...(term ? [term.labels?.["herdr.right-click"] === "program"
       ? { label: "Use Herdr right-click menu", icon: "terminal", act: () => run("terminal.right_click", { terminal: term.address, to: "menu" }) }
       : { label: "Send right-clicks to pane", icon: "terminal", act: () => run("terminal.right_click", { terminal: term.address, to: "program" }) }] : []),
     ...(parent ? [{ label: `Send back to ${parent.name || parent.address}`, icon: "terminal", act: () => run("terminal.park", { terminal: term.address }) }] : []),
-    { label: "Close pane", icon: "x", sep: true, act: () => closePane(pane), keys: shortcut(["roundup-tabs.close-pane", "pane.close"]) },
-  ];
+    { label: "Close pane", icon: "x", sep: true, inTab: true, act: () => closePane(pane), keys: shortcut(["roundup-tabs.close-pane", "pane.close"]) },
+  ].filter((row) => inTab || !row.inTab);
 }
 
 async function saveName(target, raw) {

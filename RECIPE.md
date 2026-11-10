@@ -39,7 +39,7 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   12px padding, `popover`, 1px `border`, radius 10, a large shadow, 4px
   under the row. "Herdr Roundup" in semibold 13px, then four lines at 12px,
   label in `dim` left, value in `foreground` right: Installed `0.7.0`, Based
-  on `Herdr 0.1.13`, Latest `0.8.0` (`accent` when newer, `0.8.0 · skipped`
+  on `Herdr 0.1.14`, Latest `0.8.0` (`accent` when newer, `0.8.0 · skipped`
   when skipped), Checked `today 09:12` / `yesterday 18:40` / `Nov 3 09:12`;
   Latest and Checked show `–` before the first answer. Then, only when it
   has something to say, a status line at 11.5px with a 12px icon: a turning
@@ -89,13 +89,19 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
     machine's name, its state when not connected, `+` (a new space there),
     a green (`ansi2`) or gray dot, a fold chevron. An empty machine shows
     "New space there"; one still loading, "Loading…".
-  - On the rail a space is a 26px row with its number and `●` in the status
-    color when an agent there is blocked or done, else `·`: it speaks up
-    only when it needs you.
+  - On the rail every item sits centred in a 32px cell, rounded 6px. A
+    space is a 26px cell, `selected` when active, `hover` otherwise, with
+    its number and, 5px from its right edge, `●` in the status color when an
+    agent there is blocked or done, else `·`: it speaks up only when it
+    needs you. A machine header is its icon alone, 4px down, with a 6px dot
+    (green or gray, `chrome` ring) on its lower right for a remote machine,
+    and its name and state as tooltip; "New space there" is a `+` in an
+    18px box with a 1px `dim` border.
 - **Agents** (Herdr's shipped `agents` list, the other half, at least 90px).
 - **Footer** (69px, `border` line on top): "Settings" (with a small `accent`
   dot when an app update is ready) and "Add machine" in `dim`, each with a
-  14px icon; on the rail only the icons.
+  14px icon; on the rail only the icons, centred in 32px cells with the label
+  as tooltip, the dot on the Settings icon's top right.
 
 **Work area**, top to bottom:
 
@@ -113,7 +119,8 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   close. Terminal padding 14 × 12px. Right-clicking a terminal shows Herdr's
   pane menu (Split right, Split down, Zoom, where right-clicks go, Close
   pane), then "Ask before closing a pane" with the same three choices, for
-  panes only.
+  panes only. A terminal outside a tab (a layout terminal block, a window)
+  has no pane: its menu leaves out Split, Zoom and Close pane.
 - **Side panel** on the right, hidden at first (368px, 280–900px): a stack
   of `roundup-files` and Herdr's `changes`, picked with the Files and
   Changes buttons at the right of the tab bar. `roundup-files` is a card
@@ -448,7 +455,7 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
 
 ## Built from
 
-**Layout** `layouts/Herdr-Roundup.json`, cloned from Herdr's `main` 0.1.13
+**Layout** `layouts/Herdr-Roundup.json`, cloned from Herdr's `main` 0.1.14
 (`cloned_from`) with a root `"version"` (`0.7.0`). Root `row` (`titlebar:
 "none"`, `traffic_lights: [12, 16]`, `background: "canvas"`,
 `terminal_padding: [14, 12]`, `terminal_menu: "roundup-pane"`, divider 1px
@@ -477,7 +484,7 @@ header differ from `main`: they point at the `roundup-` mods. The block ids
 stay Herdr's, so the tab bar's Files button (`layout.select {stack:
 "panel-body", child: "files"}`) finds it.
 
-**`roundup-workspace-chrome`** (clone of `workspace-chrome` 0.1.13, `place:
+**`roundup-workspace-chrome`** (clone of `workspace-chrome` 0.1.14, `place:
 "none"`), two looks by `props().footer`. The brand row reads the layout's
 file with `readTextFile(appHome() + "/layouts/" + shared("layout") +
 ".json")`, as `layout()` leaves out the root's `version`, and again when
@@ -546,7 +553,7 @@ Its own art: `logo.png` (160×160, three black sheep), `search.svg`,
 `bot.svg`, `notes.svg`, `skip.svg`, `check.svg`, `circle-alert.svg`, and
 `spinner.svg` (copied from `workspace-chrome`).
 
-**`roundup-pane`** (clone of `pane` 0.1.13, `place: "none"`, title "Pane
+**`roundup-pane`** (clone of `pane` 0.1.14, `place: "none"`, title "Pane
 header"). One copy per pane, `props()` `{pane, terminal}`, its pane found
 in `panes()`. herdr-core can't rename a running terminal (`hc run --name`
 only at start), so a terminal pane's name is its core label
@@ -559,7 +566,9 @@ same mod, `openOverlay({ mod: "roundup-pane", kind: "dialog", width: 380,
 height: 196, props: { rename: { pane, terminal, value, fallback } } })`,
 shaped like Herdr's `prompt`. It is also the `terminal_menu`: a popup
 (`mod.json` `overlay` 240×332), `props()` `{tab: "pane", target: {pane,
-terminal}, overlay}`, Herdr's pane menu item for item, drawn by `menu.js`.
+terminal}, overlay}`, Herdr's pane menu item for item, drawn by `menu.js`;
+the rows marked `inTab` (Split, Zoom, Close pane) only when `target.pane` is
+in `panes()`.
 Closing is `closePane(pane)` from `close.js` (see `roundup-tabs`). It has no
 key command: `cmd-shift-w` goes to `roundup-tabs.close-pane`, since a command
 of this mod would reach every shown header. Commands: `pane.focus`, `pane.split`, `pane.zoom`,
@@ -568,7 +577,7 @@ art: `rename.svg` (a pencil) and the shipped header's `split-right`,
 `split-down`, `zoom`, `unzoom`, `close`; the working spinner is Herdr's
 `mods/workspace-chrome/spinner.svg`.
 
-**`roundup-spaces`** (clone of `spaces` 0.1.13, `place: "none"`, title
+**`roundup-spaces`** (clone of `spaces` 0.1.14, `place: "none"`, title
 "Spaces"). Reads `spaces()`, `panes()`, `terminals()` (each agent's `turn`),
 `agents()`, `machines()`, `theme()`, `settings().dark`, `window()?.active`
 and shared `space.colors` (Herdr's; it adds colors for new spaces and drops
@@ -636,7 +645,7 @@ reloads stays marked. A key left by a crash with the menu open keeps the
 quicklook empty until the next space menu opens and closes (it writes its
 own id, then clears it): a known gap, healed by that, not by waiting.
 
-**`roundup-tabs`** (clone of `tabs` 0.1.13, `place: "none"`, title "Tabs"):
+**`roundup-tabs`** (clone of `tabs` 0.1.14, `place: "none"`, title "Tabs"):
 Herdr's tab bar, except how a tab closes (`close.js`). The choice is shared
 `roundup-tabs.confirm-close` for tabs, `roundup-pane.confirm-close` for
 panes: `never`, `agents` (also when unset) or `always`. A tab's busy agents
@@ -648,7 +657,7 @@ the mod itself as a popup (220×237, `props: { menu: { id, space } }`), drawn
 like Herdr's by `menu.js`; Herdr's `menu` would run `tab.close` past the
 choice. Key commands: `close` (the shown tab) and `close:<id>`.
 
-**`roundup-confirm`** (clone of `confirm` 0.1.13, `place: "none"`): Herdr's
+**`roundup-confirm`** (clone of `confirm` 0.1.14, `place: "none"`): Herdr's
 question dialog, props `{ title, detail, command: { name, args } }`; Confirm
 runs `command`. Each button has its own focus handle with `tab_index(0)`;
 the dialog keeps the chosen one (Cancel in `init`), moves it on Tab and
@@ -687,7 +696,7 @@ writes `{float, loads, raw, length, hash, error, at}` of its text under `tab:<fi
 or `float:<file>` to shared `roundup-preview.debug`; two shown tabs of one file
 share a record).
 
-**`roundup-files`** (clone of `files` 0.1.13, `place: "none"`, title
+**`roundup-files`** (clone of `files` 0.1.14, `place: "none"`, title
 "Files", `focusable: true`). `main.js` draws the panel and, with
 `props().menu`, the context menu; `disk.js` lists folders (`sh` here and on
 other machines, PowerShell on Windows, as `files` does) and builds the
@@ -1023,7 +1032,7 @@ global `tab.close` and `pane.close`.
 - The top left shows the logo, "Herdr Roundup" and the version under it; at
   268px nothing truncates the name, and dragging the name moves the window
   without opening the menu.
-- Hovering logo or name shows the card (Installed, Based on `Herdr 0.1.13`,
+- Hovering logo or name shows the card (Installed, Based on `Herdr 0.1.14`,
   Latest, Checked); clicking opens the menu with those facts on top, and no
   card shows over it.
 - With a newer release on GitHub, the logo has the point, the second line
