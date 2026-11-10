@@ -130,12 +130,11 @@ scale() {
   px=$(sips -g pixelWidth "$1" | awk '/pixelWidth/ {print $2}')
   if [ -n "$w" ] && [ "$w" -gt 0 ] 2>/dev/null; then echo $(( (px + w / 2) / w )); elif [ "$px" -gt 2000 ]; then echo 2; else echo 1; fi
 }
-# cut <png> <out> <height pt> <width pt>: the window's top left corner of that size. sips takes the
-# offset as y x, and 0 0 as none (it then cuts from the middle): 1 1.
-cut() {
-  local s
-  s=$(scale "$1")
-  sips -c $(( $3 * s )) $(( $4 * s )) --cropOffset 1 1 "$1" --out "$2" >/dev/null 2>&1
+# crop_shot <png> <out> <height pt> <width pt> <scale>: the window's top left corner of that size,
+# <scale> from scale(), asked once per shot. sips takes the offset as y x, and 0 0 as none (it then
+# cuts from the middle): 1 1.
+crop_shot() {
+  sips -c $(( $3 * $5 )) $(( $4 * $5 )) --cropOffset 1 1 "$1" --out "$2" >/dev/null 2>&1
 }
 # crop_md5 <png> <x0 fraction> <y0 fraction>: md5 of the part right of x0 and below y0 (the panel).
 crop_md5() {
@@ -627,25 +626,61 @@ case_ WIN-06 t_win06
 
 # SPC-39: the sidebar's rail at macOS's 76 px and at 44 px, with the spaces above; back to 268 px after.
 # Whether each item sits in the middle only a look can tell: the L2 tests check the sizes it is drawn with.
+# Spaces are added up to ten (SPC-37: "10" keeps clear of its mark), the tenth with a terminal that
+# reports itself blocked (OSC 7501 `state=blocked`), so its mark is the wider `●`; they go after.
+RAIL_SPACES=() BLOCKED_SPACE=
 t_spc39_at() {
-  local px png h
+  local px png h s n sp argv
+  n=$(ls_json | jq '.spaces | length')
+  # The tenth space is the one added last, so there must be fewer than ten to start with.
+  [ "$n" -lt 10 ] || { fail "needs fewer than 10 spaces at the start, found $n"; return; }
+  while [ "$n" -lt 10 ]; do
+    n=$((n + 1))
+    sp=$(new_space "rail-$n" "$FX/repo") || { fail "space rail-$n didn't open"; return; }
+    RAIL_SPACES+=("$sp")
+  done
+  BLOCKED_SPACE=${RAIL_SPACES[${#RAIL_SPACES[@]}-1]}
+  argv=$(jq -nc '["sh", "-c", "printf \"\\033]7501;state=blocked\\007\"; exec sleep 600"]')
+  cmd tab.new "$(jq -nc --arg s "$BLOCKED_SPACE" --argjson argv "$argv" '{space: $s, name: "asks", argv: $argv}')" >/dev/null ||
+    { fail "tab.new with the blocked terminal failed"; return; }
+  wait_for 10 'ls_json | jq -e --arg s "$BLOCKED_SPACE" "[.spaces[] | select(.id == \$s) | .tabs[].terminals[].status] | index(\"blocked\")" >/dev/null' ||
+    { fail "the last space's terminal didn't report blocked: $(ls_json | jq -c --arg s "$BLOCKED_SPACE" '[.spaces[] | select(.id == $s) | .tabs[].terminals[].status]')"; return; }
+  cmd space.select --id "$SP_TABS" >/dev/null || true
   for px in 76 44; do
     cmd layout.resize --id sidebar --px "$px" >/dev/null || { fail "layout.resize to $px px failed"; return; }
     sleep 1
     png=$OUT/45-rail-$px.png
     shot "45-rail-$px" || { fail "no shot at $px px"; return; }
     # The whole column: the window's height in points.
-    h=$(( $(sips -g pixelHeight "$png" | awk '/pixelHeight/ {print $2}') / $(scale "$png") ))
-    cut "$png" "$OUT/46-rail-$px-cut.png" "$h" "$px" || true
+    s=$(scale "$png")
+    h=$(( $(sips -g pixelHeight "$png" | awk '/pixelHeight/ {print $2}') / s ))
+    crop_shot "$png" "$OUT/46-rail-$px-cut.png" "$h" "$px" "$s" || true
     wait_for 5 clean || { fail "status errors at $px px: $(errors)"; return; }
   done
-  WHY="shots 46-rail-76-cut, 46-rail-44-cut (else 45-*): the + and each space's number in the middle of the column, the active one on a rounded cell with its mark inside at the right; the »/gear/+ below in the middle too"
+  WHY="shots 46-rail-76-cut, 46-rail-44-cut (else 45-*): the + and the »/gear/+ below in the middle of the column; each space's number left of its mark, 9 and 10 in one column, the 10 clear of its red ●; the active one on a rounded cell with its mark inside at the right"
   return 2
 }
 t_spc39() {
-  local rc=0
+  local rc=0 sp before bad="" left
+  before=$(focused_space)
   t_spc39_at || rc=$?
-  cmd layout.resize --id sidebar --px 268 >/dev/null || { [ "$rc" = 1 ] || fail "layout.resize back to 268 px failed"; return 1; }
+  # Every step of the cleanup is tried; what fails turns the row into FAIL.
+  cmd layout.resize --id sidebar --px 268 >/dev/null || bad="$bad; layout.resize back to 268 px failed"
+  for sp in ${RAIL_SPACES[@]+"${RAIL_SPACES[@]}"}; do
+    cmd space.close --id "$sp" --confirmed true >/dev/null || bad="$bad; space.close $sp failed"
+  done
+  if [ "${#RAIL_SPACES[@]}" -gt 0 ]; then
+    left=$(printf '%s\n' "${RAIL_SPACES[@]}" | jq -R . | jq -s .)
+    wait_for 10 'ls_json | jq -e --argjson ids "$left" "[.spaces[].id | select(IN(\$ids[]))] | length == 0" >/dev/null' ||
+      bad="$bad; spaces still open: $(ls_json | jq -c --argjson ids "$left" '[.spaces[] | select(.id | IN($ids[])) | .name]')"
+  fi
+  # Back to the space shown before, its panel settled, as the rows after expect.
+  if [ -n "$before" ]; then cmd space.select --id "$before" >/dev/null || bad="$bad; space.select back to $before failed"; fi
+  sleep 1
+  if [ -n "$bad" ]; then
+    [ "$rc" = 1 ] && WHY="$WHY$bad" || fail "${bad#; }"
+    return 1
+  fi
   return "$rc"
 }
 case_ SPC-39 t_spc39
@@ -828,7 +863,7 @@ t_chr41() {
     { fail "latest isn't the seeded beta: $(sh_get roundup-workspace-chrome.update.latest)"; return; }
   shot 60-brand-beta || { fail "no shot"; return; }
   # The brand row, cut from the window.
-  cut "$OUT/60-brand-beta.png" "$OUT/61-brand-beta-row.png" 56 268 || true
+  crop_shot "$OUT/60-brand-beta.png" "$OUT/61-brand-beta-row.png" 56 268 "$(scale "$OUT/60-brand-beta.png")" || true
   WHY="shot 61-brand-beta-row (else 60): \"Herdr Roundup\" whole, under it \"$BETA ava…\" in accent ending under the name's end, clear of the search button; the point on the logo"
   return 2
 }

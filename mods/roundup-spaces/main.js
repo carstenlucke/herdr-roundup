@@ -30,6 +30,9 @@ const ROW = 32;
 const ROW_TWO = 44;
 // The rail: each item in a cell this wide, centred (Herdr's spaces 0.1.14).
 const RAIL_CELL = 32;
+// A space's number on the rail: centred in this many px at the cell's left; the mark sits RAIL_MARK px
+// from its right (Herdr: 5), so "10" and the 10px-wide `●` keep about 3px apart.
+const RAIL_NUMBER = 18, RAIL_MARK = 3;
 const railCell = (el) => h_flex().flex_none().justify_center().child(el);
 const where = (s, ps) => JSON.stringify([s.machine ?? null, place(s, ps)]);
 // Changes made outside Herdr (an editor's save, a commit in another app): looked
@@ -589,17 +592,25 @@ export default class Spaces extends View {
       const rebuilt = this.rebuilt(machine) || !!repair;
       const folded = this.folded.has(m);
       const icon = svg(`mods/workspace-chrome/${m ? "server" : "monitor"}.svg`).size(13).flex_none();
-      const badge = div().absolute().right(-3).bottom(-2).size(6).rounded(3).border_1().border_color(t.chrome).bg(connected ? t.ansi2 : t.dim);
+      const dot = div().absolute().right(-3).bottom(-2).size(6).rounded(3).border_1().border_color(t.chrome).bg(repair?.error ? t.blocked : connected ? t.ansi2 : t.dim);
+      // On the rail there is no room for "rebuilt · Connect": the tooltip says it and a click
+      // connects (Herdr's spaces 0.1.14 only folds there; widening the sidebar was the way).
+      const railTip = !m ? "This computer"
+        : repair?.busy ? `${m} · connecting…`
+        : repair?.error ? `${m} · ${repair.error} · click to try again`
+        : rebuilt ? `${m} · rebuilt · click to connect to the new one`
+        : `${m} · ${connected ? "connected" : (machine?.state ?? "asleep").replace(/_/g, " ")}`;
       const head = h_flex().id(`machine-${m ?? "local"}`).h(26).flex_none().px(collapsed ? 0 : 8).gap(7).items_center().text_size(11).text_color(t.dim)
-        .when(collapsed, el => el.mt(4).w(RAIL_CELL).justify_center().rounded(6).tooltip(m ? `${m} · ${connected ? "connected" : (machine?.state ?? "asleep").replace(/_/g, " ")}` : "This computer"))
+        .when(collapsed, el => el.mt(4).w(RAIL_CELL).justify_center().rounded(6).tooltip(railTip))
         .cursor_pointer().hover(s => s.bg(t.hover))
         .on_click((_e, cx) => {
+          if (collapsed && rebuilt) return this.reconnect(machine, cx);
           folded ? this.folded.delete(m) : this.folded.add(m);
           localStorage.setItem("machines.folded", JSON.stringify([...this.folded]));
           cx.notify();
         })
         .when(!collapsed, el => el.child(icon))
-        .when(collapsed, el => el.child(div().relative().flex_none().child(icon).when(Boolean(m), el => el.child(badge))))
+        .when(collapsed, el => el.child(div().relative().flex_none().child(icon).when(Boolean(m), el => el.child(dot))))
         .when(!collapsed, el => el.child(div().flex_1().truncate().child(m ?? "This computer"))
           .when(!connected && !rebuilt, el => el.child(div().flex_none().child((machine?.state ?? "asleep").replace(/_/g, " "))))
           .when(rebuilt, el => el.child(h_flex().flex_none().gap(3).items_center()
@@ -620,8 +631,9 @@ export default class Spaces extends View {
           .child(h_flex().size(18).rounded(5).border_1().border_color(t.dim).items_center().justify_center()
             .child(svg("mods/workspace-chrome/plus.svg").size(10))))
         .when(!collapsed, el => el.child(svg("mods/workspace-chrome/plus.svg").size(12)).child("New space there"));
-      if (!collapsed && rebuilt) return [head];
       const cell = collapsed ? railCell : (el) => el;
+      // A rebuilt machine's spaces are the old core's: only its header, wide and on the rail.
+      if (rebuilt) return [cell(head)];
       return [cell(head), ...(folded ? [] : mine.length ? draw(mine) : [loading(m) ? loadingRow(m) : cell(empty)])];
     });
   }
@@ -827,8 +839,10 @@ export default class Spaces extends View {
       .when(w.active, (el) => el.bg(t.selected))
       .when(!w.active, (el) => el.hover((s) => s.bg(t.hover)))
       .on_click(() => run("space.select", { id: w.id }))
-      .child(div().text_color(w.active ? t.foreground : t.muted).child(String(i + 1)))
-      .child(div().absolute().right(5).text_color(tone(t, w.status)).child(glyph(w.status))));
+      // The number in a zone of its own at the left, so "10" keeps clear of the mark (Herdr's
+      // spaces 0.1.14 centres it in the cell, where two digits run into the mark).
+      .child(div().absolute().left(0).w(RAIL_NUMBER).flex().justify_center().text_color(w.active ? t.foreground : t.muted).child(String(i + 1)))
+      .child(div().absolute().right(RAIL_MARK).text_color(tone(t, w.status)).child(glyph(w.status))));
   }
 
   render() {
