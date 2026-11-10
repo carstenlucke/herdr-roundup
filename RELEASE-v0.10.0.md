@@ -1,33 +1,30 @@
 # Herdr Roundup 0.10.0
 
-The update check can now offer pre-releases too, if you want them. The menu under the logo also stays open while you change its settings, so you can see each choice take effect.
+The update check can now offer pre-releases, and the menu under the logo stays open while you change its settings.
 
 ![Herdr Roundup](https://raw.githubusercontent.com/carstenlucke/herdr-roundup/v0.10.0/preview.png)
 
 ## Updates
 
-- **Include pre-releases:** a new choice in the menu under the logo, off by default. With it off, only stable releases are offered, as before. With it on, alpha, beta and rc releases (`0.11.0-beta.1`) count as updates too. They show the same way as any update: the point on the logo, the new version under the name, one notification and the menu's update rows.
-- **Versions in the right order:** `0.11.0-alpha.1` comes before `0.11.0-beta.1`, then `0.11.0-rc.1`, then `0.11.0`. From a beta, the release that follows it is an update, even after you switch pre-releases off again.
-- **Switching takes effect at once:** ticking or unticking the choice checks again right away and tells you what it found. A check that was still running when you switched is ignored: it can no longer offer a beta you just switched off.
-- **Said where it matters:** the agent's brief says when it is installing a pre-release, and "up to date" adds ", pre-releases included" while the choice is on.
-- **More reliable for everyone:** both channels now read GitHub's list of releases, not just its "latest" entry. A release tagged as a beta but not marked as a pre-release on GitHub no longer makes every stable check fail. A newer stable release is still found when a later hotfix and many pre-releases come before it in the list.
+- **Include pre-releases:** a new choice in the logo menu, off by default. When on, alpha, beta and rc releases (`0.11.0-beta.1`) are offered like any other update.
+- **Right order:** `0.11.0-alpha.1` < `0.11.0-beta.1` < `0.11.0-rc.1` < `0.11.0`. From a beta, the next release is an update even with pre-releases switched off.
+- **Takes effect at once:** switching the choice checks again right away. A check still running from before the switch is ignored.
+- **More reliable:** the check reads GitHub's list of releases instead of only "latest". A beta tag not marked as a pre-release on GitHub no longer breaks the stable check.
 
-## The menu under the logo
+## The logo menu
 
-- **It stays open for its choices:** Check for updates, Daily, Only when I ask, Include pre-releases and Show details on hover leave the menu open. Update, Release notes and Skip still close it.
-- **It shows what happens while open:** a running check shows as "checking…" in the Checked line, and a failed one as "failed" (the notification gives the reason). If an offered update goes away while the menu is open, for example because you switched pre-releases off, its rows stay but are dimmed and do nothing. A release found while the menu is open shows under Latest and in a notification; its rows appear the next time you open the menu.
-- **Wider:** the menu is now 300 px wide, so "Update to 0.11.0-alpha.12 with an agent…" fits.
+- **Stays open** for Check for updates, Daily, Only when I ask, Include pre-releases and Show details on hover. Update, Release notes and Skip close it.
+- **Shows what happens:** "checking…" or "failed" in the Checked line. An update that goes away while the menu is open stays dimmed and inactive.
+- **300 px wide**, so long versions fit.
 
 ## Corrections
 
-- **The line under the name:** a long second line, such as "0.11.0-beta.1 available", is now cut off under the name. It no longer runs under the search button.
+- A long line under the name ("0.11.0-beta.1 available") is cut off and no longer runs under the search button.
 
 ## Before you update
 
-For the person, or the agent, installing this release:
-
-- `scripts/sync.sh` replaces the layout file, every `roundup-*` mod, the repo's themes and the `layout:Herdr-Roundup` section of `keys.json`, as in 0.9.1. Edits you made to those files are lost. Your global keys, other layouts and Herdr's own mods stay untouched.
-- No new mods and no key changes. Only `roundup-workspace-chrome` changes.
-- **New shared state:** `roundup-workspace-chrome.update.prerelease` (true once you tick Include pre-releases) and `roundup-workspace-chrome.update.checking` (true while a check runs). Nothing else is written.
-- **What changes in what the layout asks GitHub:** the check now sends `GET https://api.github.com/repos/carstenlucke/herdr-roundup/releases?per_page=30` instead of `…/releases/latest`, with the same two headers as before: no token, nothing about you. Only when a page holds 30 releases does it read the next one (`&page=2`, …), at most 5 pages. With the project's few releases today, a check is still one request, once a day or when you click Check for updates.
-- Pre-releases stay off after the update until you tick the choice.
+- `scripts/sync.sh` replaces the layout, every `roundup-*` mod, the repo's themes and the `layout:Herdr-Roundup` section of `keys.json`. Your edits to those are lost; global keys, other layouts and Herdr's own mods stay untouched.
+- Only `roundup-workspace-chrome` changes. No new mods, no key changes.
+- New shared state: `roundup-workspace-chrome.update.prerelease` and `roundup-workspace-chrome.update.checking`.
+- The check now asks `GET https://api.github.com/repos/carstenlucke/herdr-roundup/releases?per_page=30` instead of `…/releases/latest`, with the same headers and no token. Further pages (at most 5) only if a page is full; today that is one request per check.
+- Pre-releases stay off until you tick the choice.
