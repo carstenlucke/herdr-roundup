@@ -37,5 +37,6 @@ A Herdr App layout, cloned from Herdr's `main` (0.1.13). See README.md for the l
 - A popup overlay is a copy of its mod that ends when it closes, timers and tasks included: work that must outlive it runs in the copy that stays.
 - In a `window_drag` block a drag still ends in `on_click`; tell them apart by the pointer's moves (RECIPE "Click or drag"), or stop `mouse_down` and lose the drag there.
 - A `HoverCard` draws above popups: empty its content while a popup it would cover is open.
+- A `HoverCard` wraps its trigger in an element no style reaches, which never shrinks below its content: `truncate` inside it cuts nothing unless given a width (`nameRoom` in `roundup-workspace-chrome/brand.js`).
 - Herdr gives mods no signal for an open overlay, and its shipped `menu` sets no shared state: a mod that must know opens a clone that says so (`roundup-menu`, `roundup-menu.open`).
 - Mods don't get the split arrangement (`panes()` has no geometry). It is only in each machine's core document `herdr-app` (`doc.get` over `hc connect`), opaque JSON whose form can change with herdr-core: read it defensively, with a fallback (`mods/roundup-spaces/pane-map.js`).

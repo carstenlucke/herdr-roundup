@@ -4,7 +4,7 @@ import { theme, run, props, window, shared, setShared, updates, layout, appHome,
 import { get, put, available, due, check, install, openNotes } from "./update.js";
 import { menuView, menuHeight, DETAILS, MENU_OPEN } from "./menu.js";
 import { info } from "./info.js";
-import { pressOf, pressMoved, isClick, herdrVersion, subLine, menuWidth } from "./brand.js";
+import { pressOf, pressMoved, isClick, herdrVersion, subLine, menuWidth, nameRoom } from "./brand.js";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -17,6 +17,9 @@ function find(node, id) {
 
 // The sidebar's rail goes by its width, not a flag: dragging its edge narrows it too.
 const narrow = () => (find(layout(), "sidebar")?.size?.px ?? Infinity) < 160;
+
+// The brand row's left padding when wide: room for the traffic lights on macOS, unless in full screen.
+const left = () => window()?.platform === "macos" && !window()?.fullscreen ? 76 : 14;
 
 // To the rail (on macOS wide enough for the traffic lights), or back to the width it had.
 function toggleSidebar() {
@@ -131,6 +134,7 @@ export default class WorkspaceChrome extends View {
   brand(t) {
     const installed = this.file?.version, release = available(installed);
     const sub = subLine(installed, release, this.checking);
+    const room = nameRoom(find(layout(), "sidebar")?.size?.px, left());
     // Lit and a pointer on hover, as the buttons beside it, so it reads as something to click. The padding hangs into
     // the row's margin and gap, so at 268 px the name keeps its width (2 px to spare beside the search button).
     const trigger = h_flex().id("brand-name").gap(8).items_center().h(36).pl(6).ml(-6).pr(4).mr(-4).rounded(8).cursor_pointer()
@@ -140,9 +144,9 @@ export default class WorkspaceChrome extends View {
       .child(div().relative().flex_none().child(image("mods/roundup-workspace-chrome/logo.png").size(20).rounded(5))
         .when(Boolean(release), el => el.child(div().absolute().top(-3).right(-3).size(10).rounded_full().border(2).border_color(t.chrome).bg(t.accent))))
       // The name keeps its width; a longer sub line ("0.10.0-beta.1 available", 117 px to the name's 96) is cut where
-      // the row has no room for it, and doesn't push the search button away.
+      // the row has no room for it (brand.js's nameRoom), and doesn't run under the search button.
       .child(v_flex().min_w(0).child(div().whitespace_nowrap().font_semibold().text_size(13).line_height("16px").text_color(t.foreground).child("Herdr Roundup"))
-        .when(Boolean(sub), el => el.child(div().min_w(0).truncate().text_size(11).line_height("14px").text_color(release ? t.accent : t.dim).child(sub))));
+        .when(Boolean(sub), el => el.child(div().when(room !== null, el => el.max_w(room)).min_w(0).truncate().text_size(11).line_height("14px").text_color(release ? t.accent : t.dim).child(sub))));
     // Content only while hovered, not right after a click and never over the open menu: the card's layer is above the
     // popup, and the pointer can come back to the name while the menu is open.
     const shown = this.hot && !this.quiet && shared(DETAILS) !== false && !shared(MENU_OPEN);
@@ -168,8 +172,7 @@ export default class WorkspaceChrome extends View {
           .when(Boolean(updates().app.ready), el => el.child(div().size(6).rounded_full().bg(t.accent))))
         .child(row("machine", "plus", "Add machine", true, () => run("mod.open", { name: "machine-add" })));
     }
-    return h_flex().size_full().bg(t.chrome).pl(collapsed ? 6 : 14).pr(10).gap(4).items_center().text_size(13.5)
-      .when(window()?.platform === "macos" && !window()?.fullscreen && !collapsed, el => el.pl(76))
+    return h_flex().size_full().bg(t.chrome).pl(collapsed ? 6 : left()).pr(10).gap(4).items_center().text_size(13.5)
       .when(!collapsed, el => el.child(h_flex().flex_1().min_w(0).items_center().child(this.brand(t))))
       .when(!collapsed, el => el.child(this.button("search", svg("mods/roundup-workspace-chrome/search.svg").size(15), () => run("mod.open", { name: "picker" }))))
       // On the macOS rail the traffic lights fill the row; the agents list's » unfolds it.

@@ -768,6 +768,30 @@ t_chr34c() {
 }
 case_ CHR-34 t_chr34c
 
+# ── restart 4: a pre-release on offer, at the layout's 268 px sidebar ─────────────────────
+# auto stays false, so no check replaces the seeded latest.
+quit_app
+sh_edit '. + {"roundup-workspace-chrome.update.prerelease": true, "roundup-workspace-chrome.update.dismissed": null,
+  "roundup-workspace-chrome.update.latest": {"version": "0.10.0-beta.1", "url": "https://github.com/carstenlucke/herdr-roundup/releases"}}'
+start_app
+t_chr41() {
+  local size w px scale
+  sleep 3
+  [ "$(sh_get roundup-workspace-chrome.update.latest | jq -r '.version // empty')" = 0.10.0-beta.1 ] ||
+    { fail "latest isn't the seeded beta: $(sh_get roundup-workspace-chrome.update.latest)"; return; }
+  shot 60-brand-beta || { fail "no shot"; return; }
+  # The brand row, cut from the window: the shot's pixels per point from the window's width in points
+  # (System Events doesn't always answer: then 2 for a shot over 2000 px wide, else 1).
+  size=$(osascript -e "tell application \"System Events\" to get size of first window of (first process whose unix id is $PID)" 2>/dev/null || true)
+  w=${size%%,*}
+  px=$(sips -g pixelWidth "$OUT/60-brand-beta.png" | awk '/pixelWidth/ {print $2}')
+  if [ -n "$w" ] && [ "$w" -gt 0 ] 2>/dev/null; then scale=$(( (px + w / 2) / w )); elif [ "$px" -gt 2000 ]; then scale=2; else scale=1; fi
+  sips -c $((56 * scale)) $((268 * scale)) --cropOffset 1 1 "$OUT/60-brand-beta.png" --out "$OUT/61-brand-beta-row.png" >/dev/null 2>&1 || true
+  WHY="shot 61-brand-beta-row (else 60): \"Herdr Roundup\" whole, under it \"0.10.0-beta.1 ava…\" in accent ending under the name's end, clear of the search button; the point on the logo"
+  return 2
+}
+case_ CHR-41 t_chr41
+
 clean || res status FAIL "errors at the end: $(errors)"
 status_json > "$OUT/status-end.json" || true
 
