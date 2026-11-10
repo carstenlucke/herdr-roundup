@@ -1,8 +1,9 @@
 // node --test 'tests/*.test.mjs'
 // scripts/preview.py's outputs: Settings shows the bare window (no scene, or "window"), only
-// "poster" (README's preview.png) puts it beside name, claim and features, and --scenes, which
-// site.sh draws, leaves the poster out. The poster's window shows the agent quicklook card,
-// Settings' doesn't. Herdr's program icons come from a stub home.
+// "poster" (README's assets/poster.png) puts it beside name, claim and features, and --scenes,
+// which site.sh draws, leaves the poster out. The poster's window shows the agent quicklook card,
+// Settings' doesn't. preview.png, which herdr.dev's gallery shows, is the bare window, not the
+// poster. Herdr's program icons come from a stub home.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -53,6 +54,23 @@ test("preview.py: the poster shows the agent quicklook card, Settings' window do
     const plain = draw(dir), poster = draw(dir, "poster");
     assert.doesNotMatch(plain, /id="quicklook"/, "Settings' window has no hover card open");
     assert.equal((poster.match(/id="quicklook"/g) ?? []).length, 1, "the poster's window shows the card once");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// LAY-23
+test("preview.png is the bare window of layouts/Herdr-Roundup.svg, not the poster", (t) => {
+  if (spawnSync("rsvg-convert", ["--version"]).status !== 0) return t.skip("no rsvg-convert");
+  const dir = mkdtempSync(join(tmpdir(), "roundup-png-"));
+  try {
+    const out = join(dir, "preview.png");
+    const r = spawnSync("rsvg-convert", ["-z", "2", join(REPO, "layouts/Herdr-Roundup.svg"), "-o", out], { encoding: "utf8" });
+    assert.equal(r.status, 0, r.stderr);
+    assert.ok(readFileSync(out).equals(readFileSync(join(REPO, "preview.png"))),
+      "redraw preview.png: rsvg-convert -z 2 layouts/Herdr-Roundup.svg -o preview.png");
+    assert.match(readFileSync(join(REPO, "RECIPE.md"), "utf8"), /\]\(preview\.png\)/, "RECIPE shows preview.png");
+    assert.match(readFileSync(join(REPO, "README.md"), "utf8"), /\]\(assets\/poster\.png\)/, "README shows the poster");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
