@@ -161,7 +161,7 @@ test("every svg and png a mod draws exists, and none of its own lies unused", ()
 });
 
 // CHR-31
-test("only update.js fetches, and only the releases URLs; no other network address in the mods", () => {
+test("only update.js fetches, and only the release list's pages; no other network address in the mods", () => {
   const bad = [];
   for (const mod of roundupMods)
     for (const file of jsFiles(mod)) {
@@ -173,9 +173,9 @@ test("only update.js fetches, and only the releases URLs; no other network addre
     }
   assert.deepEqual(bad, []);
   const update = read("mods/roundup-workspace-chrome/update.js");
-  assert.match(update, /export const RELEASES = "https:\/\/api\.github\.com\/repos\/carstenlucke\/herdr-roundup\/releases\/latest"/);
   assert.match(update, /export const RELEASE_LIST = "https:\/\/api\.github\.com\/repos\/carstenlucke\/herdr-roundup\/releases\?per_page=30"/);
-  assert.match(update, /const url = pre \? RELEASE_LIST : RELEASES;/, "fetch's url is one of the two");
+  assert.match(update, /const url = page === 1 \? RELEASE_LIST : `\$\{RELEASE_LIST\}&page=\$\{page\}`;/, "fetch's url is the list or one of its pages");
+  assert.doesNotMatch(update, /herdr-roundup\/releases\/latest/, "both channels read the list");
 });
 
 // PAN-01

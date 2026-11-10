@@ -34,7 +34,9 @@ test("tagVersion reads an alpha, beta or rc tag only when pre-releases are wante
   assert.equal(tagVersion("v0.10.0-beta.2"), null);
   assert.equal(tagVersion("v0.10.0-beta.2", true), "0.10.0-beta.2");
   assert.equal(tagVersion("v0.10.0-alpha", true), "0.10.0-alpha");
-  assert.equal(tagVersion("v00.10.0-rc.1", true), "0.10.0-rc.1");
+  assert.equal(tagVersion("v0.10.0-beta.0", true), "0.10.0-beta.0");
+  assert.equal(tagVersion("v00.10.0-rc.1", true), null, "a leading zero: v0.10.0-rc.1 would name another tag");
+  assert.equal(tagVersion("v0.10.0-beta.01", true), null);
   assert.equal(tagVersion("v0.9.1", true), "0.9.1");
   for (const tag of ["v0.10.0-pre.1", "v0.10.0-beta.x", "v0.10.0-Beta.1", "v0.10.0-beta.1; rm -rf ~", "v0.10.0-"])
     assert.equal(tagVersion(tag, true), null, tag);
@@ -48,6 +50,10 @@ test("newest: the highest version of the list, drafts and other tags left out, p
   assert.deepEqual(newest(list, false), { version: "0.9.1", url: `${PAGE}/tag/v0.9.1` });
   assert.deepEqual(newest([r("v0.10.0-rc.1", { prerelease: true }), r("v0.10.0")], true).version, "0.10.0", "the release beats its rc");
   assert.equal(newest([r("v1.0.0", { prerelease: true })], false), null, "GitHub's flag counts too");
+  assert.equal(newest([r("v1.0.0", { prerelease: true })], true), null, "flagged without a suffix: left out on both channels");
+  assert.deepEqual(newest([r("v1.0.0", { prerelease: true }), r("v0.9.1")], true).version, "0.9.1");
+  assert.equal(newest([r("v0.10.0-beta.1")], true).version, "0.10.0-beta.1", "a pre-release tag without the flag is one");
+  assert.equal(newest([r("v0.10.0-beta.1")], false), null);
   assert.deepEqual(newest([{ tag_name: "v0.9.0" }], true), { version: "0.9.0", url: PAGE });
   assert.equal(newest([], true), null);
   assert.equal(newest({ message: "Not Found" }, true), null);
@@ -57,8 +63,10 @@ test("pick takes a pre-release the command names", () => {
   assert.deepEqual(pick("0.10.0-beta.1", null), { version: "0.10.0-beta.1", url: `${PAGE}/tag/v0.10.0-beta.1` });
 });
 
-test("tagVersion reads v<major>.<minor>.<patch> without leading zeros and rejects anything else", () => {
-  assert.equal(tagVersion("v01.02.03"), "1.2.3");
+test("tagVersion reads v<major>.<minor>.<patch> as written and rejects anything else, leading zeros too", () => {
+  assert.equal(tagVersion("v01.02.03"), null);
+  assert.equal(tagVersion("v0.0.0"), "0.0.0");
+  assert.equal(tagVersion("v0.99999999999999999999.0"), "0.99999999999999999999.0", "the tag's digits, not a Number's");
   assert.equal(tagVersion("0.8.1"), "0.8.1");
   assert.equal(tagVersion("v0.9.0-rc.1"), null);
   assert.equal(tagVersion("latest"), null);

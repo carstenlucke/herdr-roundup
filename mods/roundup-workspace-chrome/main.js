@@ -4,7 +4,7 @@ import { theme, run, props, window, shared, setShared, updates, layout, appHome,
 import { get, put, available, due, check, install, openNotes } from "./update.js";
 import { menuView, menuHeight, DETAILS, MENU_OPEN } from "./menu.js";
 import { info } from "./info.js";
-import { pressOf, pressMoved, isClick, herdrVersion, subLine, menuWidth, nameRoom } from "./brand.js";
+import { pressOf, pressMoved, isClick, herdrVersion, subLine, MENU_WIDTH, nameRoom } from "./brand.js";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -15,19 +15,23 @@ function find(node, id) {
   return null;
 }
 
-// The sidebar's rail goes by its width, not a flag: dragging its edge narrows it too.
-const narrow = () => (find(layout(), "sidebar")?.size?.px ?? Infinity) < 160;
+// The sidebar's width in px, undefined when the layout has none.
+const sidebarPx = () => find(layout(), "sidebar")?.size?.px;
+
+// Whether a sidebar `px` wide (sidebarPx()) is the rail: it goes by its width, not a flag, as dragging its edge
+// narrows it too. Without a width, wide.
+const narrow = (px) => (px ?? Infinity) < 160;
 
 // The brand row's left padding when wide: room for the traffic lights on macOS, unless in full screen.
 const left = () => window()?.platform === "macos" && !window()?.fullscreen ? 76 : 14;
 
 // To the rail (on macOS wide enough for the traffic lights), or back to the width it had.
 function toggleSidebar() {
-  const width = find(layout(), "sidebar")?.size?.px;
-  if (!narrow()) setShared("sidebar.width", width);
+  const width = sidebarPx(), rail = narrow(width);
+  if (!rail) setShared("sidebar.width", width);
   // Mods edited before the rail went by width still read the flag.
-  setShared("sidebar.collapsed", !narrow());
-  run("layout.resize", { id: "sidebar", px: narrow() ? (shared("sidebar.width") ?? 268) : window()?.platform === "macos" ? 76 : 44 });
+  setShared("sidebar.collapsed", !rail);
+  run("layout.resize", { id: "sidebar", px: rail ? (shared("sidebar.width") ?? 268) : window()?.platform === "macos" ? 76 : 44 });
 }
 
 export default class WorkspaceChrome extends View {
@@ -123,7 +127,7 @@ export default class WorkspaceChrome extends View {
     // What the popup's height is summed from, fixed while it is open: a check that ends meanwhile doesn't add
     // rows or a status line the popup has no room for.
     const menu = { installed, herdr: herdrVersion(this.file), release: available(installed), error: get("error") ?? null };
-    openOverlay({ mod: "roundup-workspace-chrome", kind: "popup", width: menuWidth(menu.release), height: menuHeight(menu), props: { menu } });
+    openOverlay({ mod: "roundup-workspace-chrome", kind: "popup", width: MENU_WIDTH, height: menuHeight(menu), props: { menu } });
   }
   // The menu's head as a card, with a hint that a click gives more.
   card(t, installed) {
@@ -131,10 +135,10 @@ export default class WorkspaceChrome extends View {
       .child(info(t, { installed, herdr: herdrVersion(this.file), checking: this.checking }))
       .child(div().mt(9).pt(7).border_t(1).border_color(t.border).text_size(11.5).text_color(available(installed) ? t.accent : t.dim).child("Click the Roundup title for update options"));
   }
-  brand(t) {
+  brand(t, sidebar, pad) {
     const installed = this.file?.version, release = available(installed);
     const sub = subLine(installed, release, this.checking);
-    const room = nameRoom(find(layout(), "sidebar")?.size?.px, left());
+    const room = nameRoom(sidebar, pad);
     // Lit and a pointer on hover, as the buttons beside it, so it reads as something to click. The padding hangs into
     // the row's margin and gap, so at 268 px the name keeps its width (2 px to spare beside the search button).
     const trigger = h_flex().id("brand-name").gap(8).items_center().h(36).pl(6).ml(-6).pr(4).mr(-4).rounded(8).cursor_pointer()
@@ -159,9 +163,10 @@ export default class WorkspaceChrome extends View {
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation()).on_click(action).child(label);
   }
   render() {
-    const t = theme();
-    const collapsed = narrow();
     if (props()?.menu) return menuView(this);
+    const t = theme();
+    // One look at the layout and the window per draw: the rail, the padding and the name's room all come from it.
+    const sidebar = sidebarPx(), collapsed = narrow(sidebar), pad = left();
     if (props()?.footer) {
       const row = (id, icon, label, dim, action) => h_flex().id(id).h(28).px(8).gap(9).items_center().rounded(8)
         .text_color(dim ? t.dim : t.muted).hover(s => s.bg(t.hover).text_color(t.foreground)).cursor_pointer()
@@ -172,8 +177,8 @@ export default class WorkspaceChrome extends View {
           .when(Boolean(updates().app.ready), el => el.child(div().size(6).rounded_full().bg(t.accent))))
         .child(row("machine", "plus", "Add machine", true, () => run("mod.open", { name: "machine-add" })));
     }
-    return h_flex().size_full().bg(t.chrome).pl(collapsed ? 6 : left()).pr(10).gap(4).items_center().text_size(13.5)
-      .when(!collapsed, el => el.child(h_flex().flex_1().min_w(0).items_center().child(this.brand(t))))
+    return h_flex().size_full().bg(t.chrome).pl(collapsed ? 6 : pad).pr(10).gap(4).items_center().text_size(13.5)
+      .when(!collapsed, el => el.child(h_flex().flex_1().min_w(0).items_center().child(this.brand(t, sidebar, pad))))
       .when(!collapsed, el => el.child(this.button("search", svg("mods/roundup-workspace-chrome/search.svg").size(15), () => run("mod.open", { name: "picker" }))))
       // On the macOS rail the traffic lights fill the row; the agents list's » unfolds it.
       .when(!(collapsed && window()?.platform === "macos"), el => el.child(this.button("sidebar-toggle", svg("mods/roundup-workspace-chrome/sidebar.svg").size(15), toggleSidebar)));

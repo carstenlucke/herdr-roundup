@@ -47,8 +47,9 @@ export function headHeight({ herdr, checking, error }) {
 // content, so a longer line would run under the search button instead of being cut (seen at 268 px).
 export const nameRoom = (sidebar, left) => Number.isFinite(sidebar) ? Math.max(0, sidebar - left - 10 - 2 * (26 + 4) - 20 - 8) : null;
 
-// The popup's width: wider when it offers a pre-release, so "Update to 0.10.0-alpha.12 with an agent…" isn't cut.
-export const menuWidth = (release) => release && /^\d+\.\d+\.\d+-/.test(release.version) ? 300 : 260;
+// The popup's width, for "Update to 0.10.0-alpha.12 with an agent…". Always this wide: which release the rows name
+// can change while the menu is open (pre-releases switched on there), and its width can't.
+export const MENU_WIDTH = 300;
 
 // The popup's height for its rows ({ head, sep }) under a head `head` px tall: 5 px padding each side, the head
 // (6 + its lines + 6) and a divider (9), 31 px a row, 19 px a heading, 9 px a divider.

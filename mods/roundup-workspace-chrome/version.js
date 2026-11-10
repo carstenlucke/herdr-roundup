@@ -2,8 +2,8 @@
 // command names and the agent's brief. No `herdr` import, so tests run it in node.
 export const PAGE = "https://github.com/carstenlucke/herdr-roundup/releases";
 // A version this layout releases: major.minor.patch, a pre-release with an alpha, beta or rc suffix
-// ("0.10.0-beta.2"). Anything else in a tag isn't offered.
-export const VERSION = /^v?(\d+)\.(\d+)\.(\d+)(?:-((?:alpha|beta|rc)(?:\.\d+)?))?$/;
+// ("0.10.0-beta.2"), numbers without leading zeros (as SemVer has them). Anything else in a tag isn't offered.
+export const VERSION = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:alpha|beta|rc)(?:\.(?:0|[1-9]\d*))?))?$/;
 
 // Whether a version is a pre-release ("0.10.0-beta.2").
 export const isPre = (v) => /^v?\d+\.\d+\.\d+-/.test(String(v ?? ""));
@@ -33,20 +33,23 @@ export function newer(a, b) {
   return preOrder(x[4], y[4]) > 0;
 }
 
-// A release tag's version ("v0.8.1" → "0.8.1", leading zeros dropped), or null for anything else. A pre-release
-// ("v0.10.0-beta.2") only with `pre`: without it a pre-release isn't offered.
+// A release tag's version ("v0.8.1" → "0.8.1"), or null for anything else. A pre-release ("v0.10.0-beta.2") only
+// with `pre`: without it a pre-release isn't offered. The tag as written, less its "v": brief() and pick() build the
+// tag back from it (`v${version}`), so a tag with leading zeros (v00.10.0), which that wouldn't name, isn't one.
 export function tagVersion(tag, pre = false) {
   const m = VERSION.exec(String(tag ?? ""));
   if (!m || (m[4] && !pre)) return null;
-  return `${Number(m[1])}.${Number(m[2])}.${Number(m[3])}${m[4] ? `-${m[4]}` : ""}`;
+  return `${m[1]}.${m[2]}.${m[3]}${m[4] ? `-${m[4]}` : ""}`;
 }
 
 // The newest of GitHub's release list (GET …/releases) as { version, url }, or null: drafts and tags that aren't
-// a version left out, pre-releases (by tag or GitHub's flag) only with `pre`.
+// a version left out, pre-releases (by tag or GitHub's flag) only with `pre`. A release flagged as a pre-release
+// whose tag has no suffix is left out on both channels: only the tag says what it is once saved as `latest`, and
+// saved as a stable one it would be offered without pre-releases subscribed.
 export function newest(list, pre) {
   let best = null;
   for (const r of Array.isArray(list) ? list : []) {
-    if (!r || r.draft || (r.prerelease && !pre)) continue;
+    if (!r || r.draft || (r.prerelease && (!pre || !isPre(r.tag_name)))) continue;
     const version = tagVersion(r.tag_name, pre);
     if (version && (!best || newer(version, best.version))) best = { version, url: r.html_url || PAGE };
   }

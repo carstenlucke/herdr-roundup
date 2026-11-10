@@ -1,14 +1,15 @@
-// The update check (issue #9): this layout's latest GitHub release against the installed version. With
+// The update check (issue #9): this layout's newest stable GitHub release against the installed version. With
 // pre-releases subscribed (`prerelease`), the newest release including alpha, beta and rc ones.
 // It only looks and tells. Installing is an agent's job, in a tab of its own, and it asks before changing anything.
 import { shared, setShared, notify, knownAgents, run, appHome, exec, window, spaces } from "herdr";
-import { PAGE, newer, isPre, tagVersion, newest, pick as pickFrom, brief } from "./version.js";
+import { PAGE, newer, isPre, newest, pick as pickFrom, brief } from "./version.js";
 
 export { newer, isPre } from "./version.js";
 
-// The latest stable release; the release list (newest first, drafts left out) for the pre-release channel.
-export const RELEASES = "https://api.github.com/repos/carstenlucke/herdr-roundup/releases/latest";
+// The release list, newest first (drafts aren't listed without a token), for both channels: `releases/latest`
+// would hand the stable one a pre-release tagged without GitHub's flag. Page by page, at most PAGES of PER_PAGE.
 export const RELEASE_LIST = "https://api.github.com/repos/carstenlucke/herdr-roundup/releases?per_page=30";
+export const PER_PAGE = 30, PAGES = 5;
 const DAY = 24 * 60 * 60 * 1000;
 
 // State under this mod's name (`roundup-workspace-chrome.update.<key>`), shared so the menu's popup sees it too:
@@ -30,31 +31,34 @@ export function available(installed) {
     (prerelease() || !isPre(latest.version)) ? latest : null;
 }
 
-// GitHub's latest release, with `pre` the newest one pre-releases included: { ok: true, version, url } or
-// { ok: false, why }. Nothing but a plain GET with a generic User-Agent, which GitHub requires: no token, nothing
-// about the person.
+// GitHub's newest stable release, with `pre` the newest one pre-releases included: { ok: true, version, url } or
+// { ok: false, why }. The highest version over the pages read: a full page goes on to the next, up to PAGES, as a
+// hotfix (0.9.3) and many pre-releases can push a higher stable release (0.10.0) onto page 2. Nothing but plain
+// GETs with a generic User-Agent, which GitHub requires: no token, nothing about the person.
 export async function latest(pre = false) {
-  const url = pre ? RELEASE_LIST : RELEASES;
-  let response;
-  try {
-    response = await fetch(url, { headers: { Accept: "application/vnd.github+json", "User-Agent": "herdr-roundup" } });
-  } catch {
-    return { ok: false, why: "No connection to api.github.com" };
+  const all = [];
+  for (let page = 1; page <= PAGES; page++) {
+    const url = page === 1 ? RELEASE_LIST : `${RELEASE_LIST}&page=${page}`;
+    let response;
+    try {
+      response = await fetch(url, { headers: { Accept: "application/vnd.github+json", "User-Agent": "herdr-roundup" } });
+    } catch {
+      return { ok: false, why: "No connection to api.github.com" };
+    }
+    if (response.status === 404) return { ok: false, why: "No release on GitHub yet" };
+    if (response.status === 403 || response.status === 429) return { ok: false, why: "GitHub's rate limit, try again in an hour" };
+    if (!response.ok) return { ok: false, why: `GitHub answered ${response.status}` };
+    let list;
+    try { list = await response.json(); } catch { return { ok: false, why: "GitHub's answer couldn't be read" }; }
+    if (!Array.isArray(list)) return { ok: false, why: "GitHub's answer couldn't be read" };
+    all.push(...list);
+    if (list.length < PER_PAGE) break;
   }
-  if (response.status === 404) return { ok: false, why: "No release on GitHub yet" };
-  if (response.status === 403 || response.status === 429) return { ok: false, why: "GitHub's rate limit, try again in an hour" };
-  if (!response.ok) return { ok: false, why: `GitHub answered ${response.status}` };
-  let release;
-  try { release = await response.json(); } catch { return { ok: false, why: "GitHub's answer couldn't be read" }; }
-  if (pre) {
-    if (!Array.isArray(release)) return { ok: false, why: "GitHub's answer couldn't be read" };
-    if (!release.length) return { ok: false, why: "No release on GitHub yet" };
-    const found = newest(release, true);
-    return found ? { ok: true, ...found } : { ok: false, why: "No release's tag is a version" };
-  }
-  const tag = String(release?.tag_name ?? ""), version = tagVersion(tag);
-  if (!version) return { ok: false, why: `The latest release's tag isn't a version (${tag || "none"})` };
-  return { ok: true, version, url: release.html_url || PAGE };
+  if (!all.length) return { ok: false, why: "No release on GitHub yet" };
+  const found = newest(all, pre);
+  if (found) return { ok: true, ...found };
+  if (all.length >= PER_PAGE * PAGES) return { ok: false, why: `No matching release among the latest ${PER_PAGE * PAGES} releases` };
+  return { ok: false, why: pre ? "No release's tag is a version" : "No release's tag is a stable version" };
 }
 
 // The release a command names (`update@0.8.0`), against the latest one known (version.js).
@@ -76,7 +80,11 @@ function announce(installed, release) {
 // says what it found, and shows a skipped version again. Returns the error's reason, or null.
 export async function check(installed, manual) {
   put("lastCheck", Date.now());
-  const r = await latest(prerelease());
+  const pre = prerelease();
+  const r = await latest(pre);
+  // The channel was switched while GitHub answered: the answer is the other channel's, its error and toast too.
+  // Nothing is kept; the menu's switch asked for a check, which runs on the new channel right after this one.
+  if (prerelease() !== pre) return null;
   put("error", r.ok ? null : r.why);
   if (!r.ok) {
     if (manual) notify({ level: "warning", title: "Couldn't check for updates", body: r.why });
@@ -92,7 +100,7 @@ export async function check(installed, manual) {
   } else if (manual) {
     notify({ level: "success", title: "Herdr Roundup is up to date",
       body: (r.version === installed ? `${installed} is the latest release` : `You have ${installed}, the latest release is ${r.version}`) +
-        (prerelease() ? ", pre-releases included" : "") });
+        (pre ? ", pre-releases included" : "") });
   }
   return null;
 }

@@ -275,14 +275,16 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   0.8.0 is out" / "You have 0.7.0 · Click to update with an agent" (`info`).
   Clicking it starts the update.
 - **Pre-releases:** off by default, the check sees only stable releases
-  (GitHub's `releases/latest`). With **Include pre-releases** on, it takes
+  (tags without a suffix). With **Include pre-releases** on, it takes
   the newest of all releases, alpha, beta and rc ones included
   (`0.10.0-beta.1`), and offers it as any update: point, second line, toast,
   menu. Versions order as SemVer: `0.10.0-alpha.1` < `0.10.0-beta.1` <
   `0.10.0-rc.1` < `0.10.0`, so from a beta the release that follows it is an
   update, also after the switch is off again. A second line longer than the
   name ("0.10.0-beta.1 available") is cut where the row has no room.
-- **Click on logo or name** opens the menu (a popup at the pointer, 260px,
+  Switching while a check runs throws that check's answer away (no toast,
+  nothing kept): the switch's own check, on the new channel, runs after it.
+- **Click on logo or name** opens the menu (a popup at the pointer, 300px,
   like the tab menus: `popover`, 5px padding, 12.8px). A press that moves
   the window is a drag, not a click; a double-click maximizes, as anywhere
   in the row. While the menu is open, or right after the click, the details
@@ -320,8 +322,9 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
     (pre-releases switched off), they are `dim` and do nothing. A release
     found while it is open shows in Latest (`accent`) and in the toast, not
     as rows: those come with the next opening.
-  - 260px wide, 300px when it offers a pre-release, so "Update to
-    0.10.0-alpha.12 with an agent…" isn't cut.
+  - 300px wide, whatever it offers, so "Update to 0.10.0-alpha.12 with an
+    agent…" isn't cut: the rows can come to name a pre-release while it is
+    open (switched on there), and its width is fixed at the opening.
 - **Updating with an agent** opens a tab "Update Herdr Roundup" in a space
   on this computer (the shown one if it is here, else the first one here,
   else a new one), in the app's folder, with the first installed agent
@@ -486,16 +489,22 @@ stores the width in shared `sidebar.width`, sets `sidebar.collapsed`, runs
 
 The update check is `update.js`, run by the brand copy only. `latest()` is
 a `fetch` GET of
-`https://api.github.com/repos/carstenlucke/herdr-roundup/releases/latest`
+`https://api.github.com/repos/carstenlucke/herdr-roundup/releases?per_page=30`
 with `Accept: application/vnd.github+json` and `User-Agent: herdr-roundup`
-(no token, nothing about the person); the version is `tag_name` without its
-`v`, the link `html_url`; versions compare by SemVer (major, minor, patch as
-numbers, then a pre-release before its release). A tag is `v1.2.3`, or with
+(no token, nothing about the person), on both channels; drafts aren't
+listed without a token. A full page (30) goes on to the next
+(`&page=2`, …), up to 5; the highest version over all pages read wins, as
+a hotfix and many pre-releases can push a higher release onto page 2. A
+failure on any page fails the check; 150 releases without a match say so.
+The version is `tag_name` without its `v`, as written (a leading zero
+isn't a version, as `v` + version must name the tag again), the link
+`html_url`; versions compare by SemVer (major, minor, patch as numbers,
+then a pre-release before its release). A tag is `v1.2.3`, or with
 pre-releases on also `v1.2.3-alpha`, `-beta` or `-rc` with an optional
-`.N`; any other suffix isn't offered. With pre-releases on, the GET goes to
-`…/releases?per_page=30` instead (drafts aren't listed without a token) and
-takes the highest version there, pre-releases by tag or by GitHub's
-`prerelease` flag. Shared state under `roundup-workspace-chrome.update.`: `lastCheck`
+`.N`; any other suffix isn't offered. Without pre-releases, a release with
+GitHub's `prerelease` flag or a suffix is left out; a flagged one without a
+suffix is left out on both channels. `check()` notes the channel before it
+asks and keeps nothing of an answer that comes after a switch. Shared state under `roundup-workspace-chrome.update.`: `lastCheck`
 (ms, set before the request), `checked` (ms of the last answer), `latest`
 (`{version, url}`), `dismissed`, `notified`, `auto` (false: only when
 asked), `error` (the last reason, null after an answer), `checking` (true while
@@ -520,7 +529,7 @@ set `HERDR_APP_HOME` to it, as the agent's shell may not. `.notes` runs
 The card is gpui-base's `HoverCard` (anchor `top_left`, open delay 500,
 close delay 150) around logo and name, content `info.js`. The menu is the
 mod again as a popup, `openOverlay({mod: "roundup-workspace-chrome", kind:
-"popup", width: 260 (300 for a pre-release), height, props: {menu:
+"popup", width: 300, height, props: {menu:
 {installed, herdr, release, error}}})`, drawn by `menu.js` after roundup-tabs' `menu.js`. Its height is
 summed from fixed line heights (`menuHeight`, `infoHeight`) with the
 release and error as they were at the click, so a check ending while it is
@@ -847,9 +856,10 @@ global `tab.close` and `pane.close`.
 - **`run()` returns null:** a command names nothing it made, hence the
   before/after look at `panes()` to find the new preview pane.
 - **GitHub's API** allows 60 unauthenticated requests per hour per IP,
-  shared with all else on it; over that it answers 403 or 429. Without a
-  release (tags don't count) `releases/latest` answers 404, so every release
-  needs a GitHub release tagged `v` + the root `"version"`.
+  shared with all else on it; over that it answers 403 or 429. A check is
+  one request until there are 30 releases, at most 5 after. Without a
+  release (tags don't count) the list is empty, so every release needs a
+  GitHub release tagged `v` + the root `"version"`.
 - **Click or drag:** in a `window_drag` block a press on logo and name moves
   the window, and its release still arrives as `on_click`. Stopping
   `mouse_down` would cost the drag, so the mod measures: a drag moves the

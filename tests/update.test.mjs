@@ -8,7 +8,7 @@ import { herdr, reset, fetch, response, clock, mount, waitFor, space, tab, walk,
 import { tempDir, cleanup } from "./support/git-repo.mjs";
 
 const update = await import("../mods/roundup-workspace-chrome/update.js");
-const { RELEASES, RELEASE_LIST, latest, check, due, available, install, openNotes } = update;
+const { RELEASE_LIST, PER_PAGE, PAGES, put, latest, check, due, available, install, openNotes } = update;
 const PAGE = "https://github.com/carstenlucke/herdr-roundup/releases";
 const KEY = (k) => `roundup-workspace-chrome.update.${k}`;
 const state = (k) => herdr.shared(KEY(k));
@@ -24,17 +24,17 @@ beforeEach(() => {
 });
 after(cleanup);
 
-test("latest sends one plain GET to the releases API with only Accept and User-Agent", async () => {
-  fetch.reply(200, release("v0.9.0"));
+test("latest sends one plain GET to the release list with only Accept and User-Agent", async () => {
+  fetch.reply(200, [release("v0.9.0")]);
   await latest();
   assert.equal(fetch.calls.length, 1);
-  assert.equal(fetch.calls[0].url, RELEASES);
+  assert.equal(fetch.calls[0].url, RELEASE_LIST);
   assert.equal(fetch.calls[0].init.method ?? "GET", "GET");
   assert.deepEqual(fetch.calls[0].init.headers, { Accept: "application/vnd.github+json", "User-Agent": "herdr-roundup" });
   assert.equal(fetch.calls[0].init.body, undefined);
 });
 
-test("latest says why it found no version, and reads one from the tag", async () => {
+test("latest says why it found no stable version, and reads one from the tag", async () => {
   const answers = [
     [() => new TypeError("fetch failed"), { ok: false, why: "No connection to api.github.com" }],
     [() => response(404), { ok: false, why: "No release on GitHub yet" }],
@@ -42,11 +42,14 @@ test("latest says why it found no version, and reads one from the tag", async ()
     [() => response(429), { ok: false, why: "GitHub's rate limit, try again in an hour" }],
     [() => response(500), { ok: false, why: "GitHub answered 500" }],
     [() => response(200, "{not json"), { ok: false, why: "GitHub's answer couldn't be read" }],
-    [() => response(200, release("latest")), { ok: false, why: "The latest release's tag isn't a version (latest)" }],
-    [() => response(200, {}), { ok: false, why: "The latest release's tag isn't a version (none)" }],
-    [() => response(200, release("v0.9.0-rc.1")), { ok: false, why: "The latest release's tag isn't a version (v0.9.0-rc.1)" }],
-    [() => response(200, release("v01.02.03")), { ok: true, version: "1.2.3", url: `${PAGE}/tag/v01.02.03` }],
-    [() => response(200, { tag_name: "v0.9.0" }), { ok: true, version: "0.9.0", url: PAGE }],
+    [() => response(200, release("v0.9.0")), { ok: false, why: "GitHub's answer couldn't be read" }],
+    [() => response(200, []), { ok: false, why: "No release on GitHub yet" }],
+    [() => response(200, [release("latest"), {}]), { ok: false, why: "No release's tag is a stable version" }],
+    // A pre-release tagged without GitHub's flag is passed over, not an error for every stable check.
+    [() => response(200, [release("v0.9.0-rc.1")]), { ok: false, why: "No release's tag is a stable version" }],
+    [() => response(200, [release("v0.10.0-beta.1"), release("v0.9.1")]), { ok: true, version: "0.9.1", url: `${PAGE}/tag/v0.9.1` }],
+    [() => response(200, [release("v01.02.03")]), { ok: false, why: "No release's tag is a stable version" }],
+    [() => response(200, [{ tag_name: "v0.9.0" }]), { ok: true, version: "0.9.0", url: PAGE }],
   ];
   for (const [respond, expected] of answers) {
     fetch.respond = respond;
@@ -71,10 +74,11 @@ test("with pre-releases, latest asks for the release list the same plain way and
   }
 });
 
-test("the check asks the list only while pre-releases are subscribed, and its toasts name them", async () => {
-  fetch.reply(200, release("v0.9.1"));
+test("the check takes a pre-release from the list only while pre-releases are subscribed, and its toasts name them", async () => {
+  fetch.reply(200, [release("v0.10.0-beta.1", { prerelease: true }), release("v0.9.1")]);
   await check("0.9.1", true);
-  assert.equal(fetch.calls.at(-1).url, RELEASES, "stable by default");
+  assert.equal(fetch.calls.at(-1).url, RELEASE_LIST);
+  assert.deepEqual(state("latest"), { version: "0.9.1", url: `${PAGE}/tag/v0.9.1` }, "stable by default");
   assert.equal(toasts().at(-1).body, "0.9.1 is the latest release");
 
   herdr.set({ shared: { [KEY("prerelease")]: true } });
@@ -96,6 +100,72 @@ test("the check asks the list only while pre-releases are subscribed, and its to
   assert.equal(toasts().at(-1).title, "Herdr Roundup 0.10.0 is out");
 });
 
+// Pages of GitHub's release list by URL: pages[0] is the first (no &page=), pages[1] the one with &page=2, ...
+const paged = (pages) => (url) => {
+  const n = Number(/&page=(\d+)$/.exec(url)?.[1] ?? 1);
+  return pages[n - 1] instanceof Error ? pages[n - 1] : response(200, pages[n - 1] ?? []);
+};
+const pres = (n, minor = 11) => Array.from({ length: n }, (_, i) => release(`v0.${minor}.0-alpha.${n - i}`, { prerelease: true }));
+
+test("latest reads on while a page is full, and takes the highest version over all pages it read", async () => {
+  // A hotfix and 29 pre-releases fill page 1; the higher stable release is on page 2.
+  fetch.respond = paged([[release("v0.9.3"), ...pres(29)], [release("v0.10.0"), release("v0.9.2")]]);
+  assert.deepEqual(await latest(), { ok: true, version: "0.10.0", url: `${PAGE}/tag/v0.10.0` });
+  assert.deepEqual(fetch.calls.map((c) => c.url), [RELEASE_LIST, `${RELEASE_LIST}&page=2`]);
+  assert.deepEqual(fetch.calls[1].init.headers, { Accept: "application/vnd.github+json", "User-Agent": "herdr-roundup" });
+  assert.equal((await latest(true)).version, "0.11.0-alpha.29", "the pre channel reads both pages too");
+
+  fetch.calls = [];
+  fetch.respond = paged([[release("v0.9.3"), release("v0.9.2")]]);
+  assert.equal((await latest()).version, "0.9.3");
+  assert.equal(fetch.calls.length, 1, "a page short of full is the last");
+});
+
+test("latest reads at most PAGES pages, and says so when none of them has a matching release", async () => {
+  assert.deepEqual([PER_PAGE, PAGES], [30, 5]);
+  fetch.respond = paged(Array.from({ length: 6 }, (_, i) => pres(PER_PAGE, 20 - i)));
+  assert.deepEqual(await latest(), { ok: false, why: "No matching release among the latest 150 releases" });
+  assert.equal(fetch.calls.length, PAGES);
+  assert.equal(fetch.calls.at(-1).url, `${RELEASE_LIST}&page=5`);
+});
+
+test("a failure on a later page fails the check", async () => {
+  fetch.respond = paged([[release("v0.9.3"), ...pres(29)], new TypeError("fetch failed")]);
+  assert.deepEqual(await latest(), { ok: false, why: "No connection to api.github.com" });
+  fetch.respond = (url) => url === RELEASE_LIST ? response(200, [release("v0.9.3"), ...pres(29)]) : response(403);
+  assert.equal(await check("0.9.1", true), "GitHub's rate limit, try again in an hour");
+  assert.equal(state("latest"), null);
+});
+
+test("a check whose channel is switched while GitHub answers keeps nothing and says nothing", async () => {
+  const before = { [KEY("latest")]: null, [KEY("checked")]: 7, [KEY("dismissed")]: "0.9.0", [KEY("notified")]: "0.9.0", [KEY("error")]: "old" };
+  const kept = () => ["latest", "checked", "dismissed", "notified", "error"].map(state);
+  const directions = [[false, true, [release("v0.9.2")]], [true, false, [release("v0.10.0-beta.1", { prerelease: true }), release("v0.9.1")]]];
+  for (const [from, to, answer] of directions) {
+    for (const manual of [false, true]) {
+      reset();
+      herdr.set({ shared: { ...before, [KEY("prerelease")]: from } });
+      const gate = fetch.defer();
+      const running = check("0.9.1", manual);
+      put("prerelease", to);
+      gate.resolve(200, answer);
+      assert.equal(await running, null);
+      assert.deepEqual(kept(), [null, 7, "0.9.0", "0.9.0", "old"], `${from} → ${to}, manual ${manual}`);
+      assert.deepEqual(toasts(), [], `${from} → ${to}, manual ${manual}`);
+    }
+  }
+  // A failure that comes after the switch is the old channel's too: no error, no warning.
+  reset();
+  herdr.set({ shared: before });
+  const gate = fetch.defer();
+  const running = check("0.9.1", true);
+  put("prerelease", true);
+  gate.reject();
+  assert.equal(await running, null);
+  assert.equal(state("error"), "old");
+  assert.deepEqual(toasts(), []);
+});
+
 test("check writes lastCheck before the answer, error on failure, checked and latest only on success", async () => {
   clock.useFakeNow();
   const gate = fetch.defer();
@@ -108,7 +178,7 @@ test("check writes lastCheck before the answer, error on failure, checked and la
   assert.equal(state("checked"), null);
   assert.equal(state("latest"), null);
 
-  fetch.reply(200, release("v0.9.0"));
+  fetch.reply(200, [release("v0.9.0")]);
   assert.equal(await check("0.8.1", false), null);
   assert.equal(state("error"), null);
   assert.equal(state("checked"), Date.now());
@@ -120,7 +190,7 @@ test("the automatic check gives no toast on failure and one per new version, non
   await check("0.8.1", false);
   assert.deepEqual(toasts(), []);
 
-  fetch.reply(200, release("v0.9.0"));
+  fetch.reply(200, [release("v0.9.0")]);
   await check("0.8.1", false);
   assert.deepEqual(toasts(), [{
     level: "info", title: "Herdr Roundup 0.9.0 is out", body: "You have 0.8.1 · Click to update with an agent",
@@ -131,11 +201,11 @@ test("the automatic check gives no toast on failure and one per new version, non
   assert.equal(toasts().length, 1, "not again for the same version");
 
   herdr.set({ shared: { [KEY("dismissed")]: "0.10.0" } });
-  fetch.reply(200, release("v0.10.0"));
+  fetch.reply(200, [release("v0.10.0")]);
   await check("0.8.1", false);
   assert.equal(toasts().length, 1, "none for a dismissed version");
 
-  fetch.reply(200, release("v0.8.1"));
+  fetch.reply(200, [release("v0.8.1")]);
   await check("0.8.1", false);
   assert.equal(toasts().length, 1, "none when up to date");
 });
@@ -146,15 +216,15 @@ test("a manual check always gives one toast, and shows a dismissed version again
   assert.deepEqual(toasts().at(-1), { level: "warning", title: "Couldn't check for updates", body: "GitHub's rate limit, try again in an hour" });
 
   herdr.set({ shared: { [KEY("dismissed")]: "0.9.0", [KEY("notified")]: "0.9.0" } });
-  fetch.reply(200, release("v0.9.0"));
+  fetch.reply(200, [release("v0.9.0")]);
   await check("0.8.1", true);
   assert.equal(toasts().at(-1).title, "Herdr Roundup 0.9.0 is out");
   assert.equal(state("dismissed"), null);
 
-  fetch.reply(200, release("v0.8.1"));
+  fetch.reply(200, [release("v0.8.1")]);
   await check("0.8.1", true);
   assert.deepEqual(toasts().at(-1), { level: "success", title: "Herdr Roundup is up to date", body: "0.8.1 is the latest release" });
-  fetch.reply(200, release("v0.8.0"));
+  fetch.reply(200, [release("v0.8.0")]);
   await check("0.8.1", true);
   assert.deepEqual(toasts().at(-1).body, "You have 0.8.1, the latest release is 0.8.0");
   assert.equal(toasts().length, 4);
@@ -319,7 +389,7 @@ test("the brand's commands: update@V names V, a slow or failing install holds no
 
 test("the brand's check and update wait for the version; notes don't", async () => {
   await brand(null);
-  fetch.reply(200, release("v0.9.0"));
+  fetch.reply(200, [release("v0.9.0")]);
   herdr.set({ knownAgents: [claude] });
   await herdr.command("check");
   await herdr.command("update@0.9.0");
@@ -336,18 +406,44 @@ test("a manual check asked for during a running one runs right after it, and toa
   assert.equal(fetch.calls.length, 1);
   await herdr.command("check");
   assert.equal(fetch.calls.length, 1, "waits for the running one");
-  fetch.reply(200, release("v0.8.1"));
-  first.resolve(200, release("v0.8.1"));
+  fetch.reply(200, [release("v0.8.1")]);
+  first.resolve(200, [release("v0.8.1")]);
   await waitFor(() => toasts().length === 2);
   assert.equal(fetch.calls.length, 2);
   assert.deepEqual(toasts().map((t) => t.title), ["Herdr Roundup is up to date", "Herdr Roundup is up to date"]);
+});
+
+test("switched during a running check, the queued manual one asks on the new channel and only it says what it found", async () => {
+  await brand("0.9.1");
+  const first = fetch.defer();
+  await herdr.command("check");
+  // The menu's Include pre-releases: flip, forget, check (queued behind the running one).
+  put("prerelease", true); put("latest", null);
+  await herdr.command("check");
+  fetch.reply(200, [release("v0.10.0-beta.1", { prerelease: true }), release("v0.9.1")]);
+  first.resolve(200, [release("v0.9.1")]);
+  await waitFor(() => toasts().length === 1);
+  await waitFor(() => state("checking") === false);
+  assert.equal(fetch.calls.length, 2);
+  assert.deepEqual(toasts().map((t) => t.title), ["Herdr Roundup 0.10.0-beta.1 is out"]);
+  assert.equal(state("latest").version, "0.10.0-beta.1");
+});
+
+test("the menu opens 300 px wide, whatever it offers when it opens", async () => {
+  const { view } = await brand("0.9.1");
+  const open = () => { view.pressed({ position: { x: 1, y: 1 } }); view.openMenu({ position: { x: 1, y: 1 }, click_count: 1 }); };
+  for (const latest of [null, { version: "0.9.2", url: "u" }, { version: "0.10.0-alpha.12", url: "u" }]) {
+    herdr.set({ shared: { [KEY("latest")]: latest, [KEY("prerelease")]: true } });
+    open();
+  }
+  assert.deepEqual(herdr.calls("openOverlay").map(([spec]) => [spec.kind, spec.width]), [["popup", 300], ["popup", 300], ["popup", 300]]);
 });
 
 test("the auto command checks at once when due, and not otherwise", async () => {
   clock.useFakeNow();
   await brand();
   herdr.set({ shared: { [KEY("auto")]: true, [KEY("lastCheck")]: Date.now() } });
-  fetch.reply(200, release("v0.8.1"));
+  fetch.reply(200, [release("v0.8.1")]);
   await herdr.command("auto");
   assert.equal(fetch.calls.length, 0, "not due");
   herdr.set({ shared: { [KEY("lastCheck")]: Date.now() - 24 * 60 * 60 * 1000 } });
@@ -444,6 +540,6 @@ test("the brand copy shares whether its check runs", async () => {
   const gate = fetch.defer();
   await herdr.command("check");
   assert.equal(state("checking"), true);
-  gate.resolve(200, release("v0.8.1"));
+  gate.resolve(200, [release("v0.8.1")]);
   await waitFor(() => state("checking") === false);
 });

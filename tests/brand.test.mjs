@@ -2,7 +2,7 @@
 // roundup-workspace-chrome's brand: click or drag, its texts, and the menu popup's height.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { pressOf, pressMoved, isClick, herdrVersion, subLine, when, headHeight, popupHeight, menuWidth, nameRoom } from "../mods/roundup-workspace-chrome/brand.js";
+import { pressOf, pressMoved, isClick, herdrVersion, subLine, when, headHeight, popupHeight, nameRoom } from "../mods/roundup-workspace-chrome/brand.js";
 
 const at = (x, y, more = {}) => ({ position: { x, y }, click_count: 1, ...more });
 const press = (moves) => {
@@ -48,12 +48,6 @@ test("The name's column gets the sidebar less the row's paddings, buttons and lo
   assert.equal(nameRoom(360, 76), 186);
   assert.equal(nameRoom(150, 76), 0);
   assert.equal(nameRoom(undefined, 76), null, "no width: no limit");
-});
-
-test("The menu is 260 px wide, 300 when it offers a pre-release", () => {
-  assert.equal(menuWidth(null), 260);
-  assert.equal(menuWidth({ version: "0.10.0" }), 260);
-  assert.equal(menuWidth({ version: "0.10.0-alpha.12" }), 300);
 });
 
 test("when(): today HH:MM, yesterday HH:MM, else Mon D HH:MM, zero-padded", () => {
