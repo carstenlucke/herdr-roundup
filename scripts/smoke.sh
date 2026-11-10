@@ -121,6 +121,22 @@ shot() {
   [ "$(frontmost)" = "$PID" ] || { echo "  shot $1: the test window lost the front" >&2; return 1; }
   app shot "$OUT/$1.png" >/dev/null 2>&1 || { echo "  (no shot $1)" >&2; return 1; }
 }
+# scale <png>: the shot's pixels per point, from the window's width in points (System Events
+# doesn't always answer: then 2 for a shot over 2000 px wide, else 1).
+scale() {
+  local size w px
+  size=$(osascript -e "tell application \"System Events\" to get size of first window of (first process whose unix id is $PID)" 2>/dev/null || true)
+  w=${size%%,*}
+  px=$(sips -g pixelWidth "$1" | awk '/pixelWidth/ {print $2}')
+  if [ -n "$w" ] && [ "$w" -gt 0 ] 2>/dev/null; then echo $(( (px + w / 2) / w )); elif [ "$px" -gt 2000 ]; then echo 2; else echo 1; fi
+}
+# cut <png> <out> <height pt> <width pt>: the window's top left corner of that size. sips takes the
+# offset as y x, and 0 0 as none (it then cuts from the middle): 1 1.
+cut() {
+  local s
+  s=$(scale "$1")
+  sips -c $(( $3 * s )) $(( $4 * s )) --cropOffset 1 1 "$1" --out "$2" >/dev/null 2>&1
+}
 # crop_md5 <png> <x0 fraction> <y0 fraction>: md5 of the part right of x0 and below y0 (the panel).
 crop_md5() {
   python3 -I - "$@" <<'PY'
@@ -609,6 +625,31 @@ t_win06() {
 }
 case_ WIN-06 t_win06
 
+# SPC-39: the sidebar's rail at macOS's 76 px and at 44 px, with the spaces above; back to 268 px after.
+# Whether each item sits in the middle only a look can tell: the L2 tests check the sizes it is drawn with.
+t_spc39_at() {
+  local px png h
+  for px in 76 44; do
+    cmd layout.resize --id sidebar --px "$px" >/dev/null || { fail "layout.resize to $px px failed"; return; }
+    sleep 1
+    png=$OUT/45-rail-$px.png
+    shot "45-rail-$px" || { fail "no shot at $px px"; return; }
+    # The whole column: the window's height in points.
+    h=$(( $(sips -g pixelHeight "$png" | awk '/pixelHeight/ {print $2}') / $(scale "$png") ))
+    cut "$png" "$OUT/46-rail-$px-cut.png" "$h" "$px" || true
+    wait_for 5 clean || { fail "status errors at $px px: $(errors)"; return; }
+  done
+  WHY="shots 46-rail-76-cut, 46-rail-44-cut (else 45-*): the + and each space's number in the middle of the column, the active one on a rounded cell with its mark inside at the right; the »/gear/+ below in the middle too"
+  return 2
+}
+t_spc39() {
+  local rc=0
+  t_spc39_at || rc=$?
+  cmd layout.resize --id sidebar --px 268 >/dev/null || { [ "$rc" = 1 ] || fail "layout.resize back to 268 px failed"; return 1; }
+  return "$rc"
+}
+case_ SPC-39 t_spc39
+
 # FLT-10, first half: the window outlives a reload of roundup-files; it stays open into restart 1.
 t_flt10a() {
   cmd space.select --id "$SP_PV" >/dev/null
@@ -775,18 +816,12 @@ sh_edit '. + {"roundup-workspace-chrome.update.prerelease": true, "roundup-works
   "roundup-workspace-chrome.update.latest": {"version": "0.10.0-beta.1", "url": "https://github.com/carstenlucke/herdr-roundup/releases"}}'
 start_app
 t_chr41() {
-  local size w px scale
   sleep 3
   [ "$(sh_get roundup-workspace-chrome.update.latest | jq -r '.version // empty')" = 0.10.0-beta.1 ] ||
     { fail "latest isn't the seeded beta: $(sh_get roundup-workspace-chrome.update.latest)"; return; }
   shot 60-brand-beta || { fail "no shot"; return; }
-  # The brand row, cut from the window: the shot's pixels per point from the window's width in points
-  # (System Events doesn't always answer: then 2 for a shot over 2000 px wide, else 1).
-  size=$(osascript -e "tell application \"System Events\" to get size of first window of (first process whose unix id is $PID)" 2>/dev/null || true)
-  w=${size%%,*}
-  px=$(sips -g pixelWidth "$OUT/60-brand-beta.png" | awk '/pixelWidth/ {print $2}')
-  if [ -n "$w" ] && [ "$w" -gt 0 ] 2>/dev/null; then scale=$(( (px + w / 2) / w )); elif [ "$px" -gt 2000 ]; then scale=2; else scale=1; fi
-  sips -c $((56 * scale)) $((268 * scale)) --cropOffset 1 1 "$OUT/60-brand-beta.png" --out "$OUT/61-brand-beta-row.png" >/dev/null 2>&1 || true
+  # The brand row, cut from the window.
+  cut "$OUT/60-brand-beta.png" "$OUT/61-brand-beta-row.png" 56 268 || true
   WHY="shot 61-brand-beta-row (else 60): \"Herdr Roundup\" whole, under it \"0.10.0-beta.1 ava…\" in accent ending under the name's end, clear of the search button; the point on the logo"
   return 2
 }
