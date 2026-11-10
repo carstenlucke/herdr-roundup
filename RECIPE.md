@@ -91,12 +91,15 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
     "New space there"; one still loading, "Loading…".
   - On the rail every item sits centred in a 32px cell, rounded 6px. A
     space is a 26px cell, `selected` when active, `hover` otherwise, with
-    its number and, 5px from its right edge, `●` in the status color when an
-    agent there is blocked or done, else `·`: it speaks up only when it
-    needs you. A machine header is its icon alone, 4px down, with a 6px dot
-    (green or gray, `chrome` ring) on its lower right for a remote machine,
-    and its name and state as tooltip; "New space there" is a `+` in an
-    18px box with a 1px `dim` border.
+    its number centred in the cell's left 18px and, 3px from its right edge,
+    `●` in the status color when an agent there is blocked or done, else
+    `·`: it speaks up only when it needs you. Herdr centres the number in
+    the whole cell with the mark 5px in, where "10" runs into the `●`; here
+    9 and 10 stand in one column, about 3px clear of it. A machine header is its icon alone, 4px down,
+    with a 6px dot (green or gray, `chrome` ring, `blocked` after a failed
+    Connect) on its lower right for a remote machine, and its name and
+    state as tooltip; "New space there" is a `+` in an 18px box with a 1px
+    `dim` border.
 - **Agents** (Herdr's shipped `agents` list, the other half, at least 90px).
 - **Footer** (69px, `border` line on top): "Settings" (with a small `accent`
   dot when an app update is ready) and "Add machine" in `dim`, each with a
@@ -243,7 +246,11 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   command end, so a quick command there (`echo x >> file`) shows within 10s.
 - **Machine headers:** click to fold or unfold; folds stay after a restart.
   A rebuilt or replaced machine shows "rebuilt · Connect"; Connect removes
-  it and adds it again under the same name.
+  it and adds it again under the same name. Its spaces (the old core's)
+  are not listed, wide or on the rail. On the rail, where there is no room
+  for "Connect", a click on its icon connects instead of folding, and the
+  tooltip says "<name> · rebuilt", "connecting…" or the error with "click
+  to try again" (Herdr's spaces 0.1.14 only folds there).
 - **Sidebar toggle:** narrows to the rail and widens back to the width it
   had. Below 160px the sidebar counts as the rail, however it got there. On
   the macOS rail the agents list's `»` unfolds it.
@@ -568,7 +575,11 @@ shaped like Herdr's `prompt`. It is also the `terminal_menu`: a popup
 (`mod.json` `overlay` 240×332), `props()` `{tab: "pane", target: {pane,
 terminal}, overlay}`, Herdr's pane menu item for item, drawn by `menu.js`;
 the rows marked `inTab` (Split, Zoom, Close pane) only when `target.pane` is
-in `panes()`.
+in `panes()`, and with them "Ask before closing a pane" and its three
+choices (`menuView(…, null)` leaves them out). The popup keeps its
+`mod.json` size, sized for the full menu: Herdr opens the `terminal_menu`
+at that size and a mod can't change it, so a short menu (a terminal outside
+a tab) leaves the rest of it empty.
 Closing is `closePane(pane)` from `close.js` (see `roundup-tabs`). It has no
 key command: `cmd-shift-w` goes to `roundup-tabs.close-pane`, since a command
 of this mod would reach every shown header. Commands: `pane.focus`, `pane.split`, `pane.zoom`,

@@ -5,7 +5,8 @@
 // file selects it, a double-click shows it in roundup-preview's floating window, a
 // Cmd-double-click (Ctrl off macOS) or Enter in a tab of its own; Space opens and closes the window.
 //
-// Modified from Herdr's shipped `files` mod 0.1.13 (Apache-2.0). Parts follow
+// Modified from Herdr's shipped `files` mod (Apache-2.0): adapted from 0.1.13; Herdr's mod was
+// unchanged in 0.1.14, the version mod.json's cloned_from names. Parts follow
 // cybertron288/herdr-mods `filetree` (MIT, (c) 2026 cybertron288), itself a port of
 // claude-code-filetree (MIT, (c) 2026 Kurt Buhler): rows from a virtual list, search tree,
 // keys, the context menu as a popup of this mod. See THIRD_PARTY_NOTICES.md.
