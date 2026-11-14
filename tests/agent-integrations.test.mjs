@@ -419,3 +419,81 @@ test("a config install created, moved into dotfiles and linked since, keeps its 
   }
   assert.deepEqual(json(join(dots, "settings.json")), {});
 });
+
+test("a config's mode is kept where stat is GNU's (Linux), whose -f prints a file system block before failing", { skip: !hasPython && "python3 is needed" }, () => {
+  // A stat that answers as GNU coreutils does: -c %a the mode; -f the file system's block on
+  // stdout, then exit 1 (it takes the format for a file name).
+  const bin = join(home, "bin");
+  mkdirSync(bin);
+  writeFileSync(join(bin, "stat"), [
+    "#!/bin/sh",
+    'case "$1" in',
+    "  -c) [ \"$2\" = %a ] || exit 1; exec python3 -c 'import os, sys; print(format(os.stat(sys.argv[1]).st_mode & 0o777, \"o\"))' \"$3\" ;;",
+    "  -f) printf '  File: \"%s\"\\n    ID: 1000000 Namelen: 255 Type: ext2/ext3\\n' \"$3\"; echo \"stat: cannot read file system information for '$2'\" >&2; exit 1 ;;",
+    "esac",
+    "exit 1",
+    "",
+  ].join("\n"));
+  chmodSync(join(bin, "stat"), 0o755);
+  env.PATH = `${bin}:${env.PATH}`;
+  assert.equal(spawnSync("stat", ["-f", "%Lp", tool], { env, encoding: "utf8" }).stdout.includes("File:"), true, "the fake prints the block");
+  put(settings, JSON.stringify({ model: "opus" }));
+  chmodSync(settings, 0o600);
+  put(codex, '[tui]\nterminal_title = ["model"]\n');
+  chmodSync(codex, 0o600);
+  for (const action of ["install", "uninstall"]) {
+    for (const agent of ["claude", "codex"]) {
+      const r = run(action, agent);
+      assert.equal(r.code, 0, r.err);
+      assert.equal(statSync(agent === "claude" ? settings : codex).mode & 0o777, 0o600, `${action} ${agent} keeps 0600`);
+    }
+  }
+  assert.equal(readdirSync(join(home, ".claude")).length, 1, "no temp file left");
+  assert.equal(readdirSync(join(home, ".codex")).length, 1);
+});
+
+test("a config whose mode can't be read is not changed, and no temp file is left", () => {
+  const bin = join(home, "bin");
+  mkdirSync(bin);
+  writeFileSync(join(bin, "stat"), "#!/bin/sh\nexit 1\n");
+  chmodSync(join(bin, "stat"), 0o755);
+  env.PATH = `${bin}:${env.PATH}`;
+  const before = '[tui]\nterminal_title = ["model"]\n';
+  put(codex, before);
+  const r = run("install", "codex");
+  assert.notEqual(r.code, 0);
+  assert.match(r.err, /mode of .* can't be read: not changed/);
+  assert.equal(readFileSync(codex, "utf8"), before);
+  assert.deepEqual(readdirSync(join(home, ".codex")), ["config.toml"]);
+});
+
+test("codex: tui assigned at the top (an inline table, bare or quoted) is refused, the file unchanged, status unknown", () => {
+  const forms = [
+    "tui = { notifications = true }\n",
+    'model = "o"\n"tui" = { notifications = true }\n',
+    "'tui'= { notifications = true }\n",
+    'tui = { terminal_title = ["activity", "thread-id"] }\n',
+  ];
+  for (const text of forms) {
+    put(codex, text);
+    const r = run("install", "codex");
+    assert.notEqual(r.code, 0, text);
+    assert.match(r.err, /tui in .* is an inline table: add "thread-id" to its terminal_title by hand/);
+    assert.equal(readFileSync(codex, "utf8"), text, "byte for byte");
+    assert.equal(existsSync(join(state, "codex.json")), false);
+    assert.equal(run("status", "codex").out, "codex: unknown (inline tui table; inspect by hand)");
+  }
+});
+
+test("codex: a key that only starts with tui, or tui inside another table, is no inline tui", { skip: !hasPython && "python3 with tomllib is needed" }, () => {
+  for (const text of ["tui_extra = 1\n", '[profiles.work]\ntui = { notifications = true }\n']) {
+    put(codex, text);
+    const r = run("install", "codex");
+    assert.equal(r.code, 0, r.err);
+    const parsed = toml(codex);
+    assert.equal(parsed.status, 0, parsed.stderr);
+    assert.deepEqual(JSON.parse(parsed.stdout).tui.terminal_title.at(-1), "thread-id");
+    assert.equal(run("uninstall", "codex").code, 0);
+    assert.equal(readFileSync(codex, "utf8"), text);
+  }
+});

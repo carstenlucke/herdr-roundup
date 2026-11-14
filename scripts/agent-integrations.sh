@@ -43,7 +43,15 @@ backup() { # file → a copy under $state/backup, named by the file and the time
   cp -p "$1" "$state/backup/$(echo "$1" | sed 's|^/||; s|/|_|g').$(date +%Y%m%d-%H%M%S)"
 }
 replace() { # tmp → file, atomically, keeping the file's mode (callers pass resolved paths: real())
-  [ -f "$2" ] && chmod "$(stat -f %Lp "$2" 2>/dev/null || stat -c %a "$2")" "$1" 2>/dev/null || true
+  if [ -f "$2" ]; then
+    # GNU's form first: macOS' stat refuses -c and prints nothing, while GNU's would take -f for
+    # "file system" and print that block before failing on the format given as a file name.
+    mode=$(stat -c %a "$2" 2>/dev/null) || mode=$(stat -f %Lp "$2" 2>/dev/null) || mode=
+    case "$mode" in
+      '' | *[!0-7]*) rm -f "$1"; die "the mode of $2 can't be read: not changed" ;;
+    esac
+    chmod "$mode" "$1" || { rm -f "$1"; die "the mode of $2 can't be kept: not changed"; }
+  fi
   mv -f "$1" "$2"
 }
 # The file a path names once its symlinks are followed (relative ones against their folder, at
@@ -165,11 +173,14 @@ claude_status() {
 
 # Where terminal_title stands: "table <n>" (inside [tui], line n), "dotted <n>" (tui.terminal_title
 # at the root), "tui <n>" (no key, [tui] header at line n), "dotted-tui" (no [tui] table, but
-# tui.* dotted keys at the root), or "none".
+# tui.* dotted keys at the root), "inline <n>" (tui itself assigned at the root, line n: an inline
+# table, refused), or "none".
 codex_where() {
   awk '
     /^[ \t]*\[/ { root = 0; tui = ($0 ~ /^[ \t]*\[[ \t]*tui[ \t]*\][ \t]*(#.*)?$/); if (tui && !hdr) hdr = NR; next }
     BEGIN { root = 1 }
+    # tui itself assigned at the top (an inline table `tui = { … }`, bare or quoted): not edited.
+    root && /^[ \t]*(tui|"tui"|\047tui\047)[ \t]*=/ { print "inline " NR; found = 1; exit }
     root && /^[ \t]*tui\.terminal_title[ \t]*=/ { print "dotted " NR; found = 1; exit }
     root && /^[ \t]*tui\./ { dotted = 1 }
     tui && /^[ \t]*terminal_title[ \t]*=/ { print "table " NR; found = 1; exit }
@@ -234,6 +245,7 @@ codex_install() {
   [ -f "$codex_config" ] || { existed=false; : >"$codex_config"; }
   set -- $(codex_where)
   case "$1" in
+    inline) die "codex: tui in $codex_config is an inline table: add \"thread-id\" to its terminal_title by hand" ;;
     table | dotted)
       line=$(line_at "$2")
       rc=0; title_array has "$line" || rc=$?
@@ -297,8 +309,10 @@ codex_status() {
     else echo "codex: broken (terminal_title was changed since install: $codex_config)"; fi
   elif [ -f "$codex_config" ]; then
     set -- $(codex_where)
-    case "$1" in table | dotted)
-      if title_array has "$(line_at "$2")"; then echo "codex: on (set by hand)"; return 0; fi ;;
+    case "$1" in
+      inline) echo "codex: unknown (inline tui table; inspect by hand)"; return 0 ;;
+      table | dotted)
+        if title_array has "$(line_at "$2")"; then echo "codex: on (set by hand)"; return 0; fi ;;
     esac
     echo "codex: off"
   else echo "codex: off"; fi
