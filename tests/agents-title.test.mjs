@@ -34,6 +34,10 @@ test("clean and noThreadId drop a title item that is only a thread id, whole or 
   assert.equal(clean(`Fix tests | ${WHOLE}`), "Fix tests");
   assert.equal(clean(`⠦ ${CUT}`), "", "only the id: nothing is left");
   assert.equal(clean(`Fix ${WHOLE} now | ok`), `Fix ${WHOLE} now | ok`, "an id inside other words stays");
+  assert.equal(clean(`Review | /${WHOLE}`), `Review | /${WHOLE}`, "a path item stays");
+  assert.equal(clean(`Review | #${WHOLE}`), `Review | #${WHOLE}`);
+  assert.equal(clean(`Review | -> ${CUT}`), `Review | -> ${CUT}`);
+  assert.equal(noThreadId(`⠦ Fix tests | ${CUT}`), "⠦ Fix tests", "the spinner is kept for the shipped cleanup");
   assert.equal(clean("✳ Claude Code"), "Claude Code", "the shipped cleanup as before");
   assert.equal(noThreadId(`zsh | ${CUT}`), "zsh");
   assert.equal(noThreadId(undefined), "");

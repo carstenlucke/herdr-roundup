@@ -267,7 +267,7 @@ Nothing may need a person: there is no pointer or key injection, so L2 calls han
 
 | ID | Behaviour (what must hold) | Source | Level | Covered | Needs | Prio |
 |---|---|---|---|---|---|---|
-| AGT-01 | The clone of Herdr's `agents` 0.1.15 (`cloned_from` kept), in the layout's `agents` block, keeps the shipped list but drops a title item that is only a Codex thread id, whole or cut (`…-7c804...`), spinner in front or not: in an unnamed tab's row, with two agents in a tab, and in the raw-title fallback of an agent whose tab isn't known (only the id: the program's name). A named tab shows its name; an id inside other words stays; `agents.sort` is Herdr's key. | PR #38 third review (finding 5; Codex: clone, not only a note) | L2 | agents-title: all four; layout: "every mod the layout places exists, …" | herdr stub | H |
+| AGT-01 | The clone of Herdr's `agents` 0.1.15 (`cloned_from` kept), in the layout's `agents` block, keeps the shipped list but drops a title item that is only a Codex thread id, whole or cut (`…-7c804...`), also right after a spinner at the title's start (kept); an item with anything else (`/<id>`, `#<id>`, `-> <id>`) stays: in an unnamed tab's row, with two agents in a tab, and in the raw-title fallback of an agent whose tab isn't known (only the id: the program's name). A named tab shows its name; an id inside other words stays; `agents.sort` is Herdr's key. | PR #38 third review (finding 5; Codex: clone, not only a note) | L2 | agents-title: all four; layout: "every mod the layout places exists, …" | herdr stub | H |
 
 ## roundup-menu (MEN)
 

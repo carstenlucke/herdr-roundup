@@ -28,10 +28,17 @@ function toggleSidebar() {
 }
 
 // Roundup: a title item that is only a Codex thread id, whole or as Codex cuts it
-// (`01a1d750-0653-7190-914d-7c804...`), with a spinner or mark in front or not, goes; an id inside
-// other words stays. (roundup-spaces' clean() drops the same items: mods can't import from each other.)
-const THREAD_ID = /^[^\p{L}\p{N}]*[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1,12}(?:\.\.\.)?$/iu;
-export const noThreadId = (s) => (s ?? "").split(" | ").filter((part) => !THREAD_ID.test(part.trim())).join(" | ");
+// (`01a1d750-0653-7190-914d-7c804...`), goes; an id with anything else in its item (`/<id>`,
+// `#<id>`, words) stays. The spinner or mark a program puts at the title's start (Braille
+// spinners, Claude Code's stars) is set aside for the test and kept; nothing left: "".
+// (The rule of roundup-spaces' clean(): mods can't import from each other.)
+const THREAD_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1,12}(?:\.\.\.)?$/i;
+const MARK = /^(?:[\u2800-\u28ff\u2733\u273b\u273d\u2736\u2722\u00b7][\uFE0E\uFE0F]?\s+)+/u;
+export function noThreadId(s) {
+  const title = s ?? "", mark = MARK.exec(title)?.[0] ?? "";
+  const kept = title.slice(mark.length).split(" | ").filter((part) => !THREAD_ID.test(part.trim())).join(" | ");
+  return kept ? mark + kept : "";
+}
 export const clean = (s) => noThreadId(s).replace(/^[^\p{L}\p{N}]+/u, "").trim();
 
 function leadPanes(all) {
