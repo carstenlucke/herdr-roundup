@@ -277,7 +277,7 @@ export class ContextReader {
 }
 
 // Integration files of ended terminals: removed when no live terminal here has that id and the
-// process that wrote it is gone, and the file is older than an hour. Another Herdr core (an
+// process that wrote it is gone, and the file is older than an hour; temp files older than an hour. Another Herdr core (an
 // isolated instance) has its own terminal ids, but its processes are alive: its files stay.
 export const SWEEP_AGE_MS = 60 * 60_000;
 export const AGENTS = ["claude", "codex", "pi", "opencode"];
@@ -289,9 +289,16 @@ export async function sweep(io, liveTerminals) {
     const names = await io.list(dir);
     if (!Array.isArray(names)) continue;
     for (const name of names) {
+      const path = `${dir}/${name}`;
+      // A temp file of the status line script (`.<terminal>.<pid>`), left by a run killed between
+      // printf and mv: no run needs one for an hour, whether its terminal lives or not.
+      if (/^\.[A-Za-z0-9_-]+\.\d+$/.test(name)) {
+        const st = await io.stat(path);
+        if (st && io.now() - st.mtime >= SWEEP_AGE_MS && (await io.remove(path))) removed++;
+        continue;
+      }
       const m = /^([A-Za-z0-9_-]+)\.json$/.exec(name);
       if (!m || live.has(m[1])) continue;
-      const path = `${dir}/${name}`;
       const st = await io.stat(path);
       if (!st || io.now() - st.mtime < SWEEP_AGE_MS) continue;
       let pid = null;

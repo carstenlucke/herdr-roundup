@@ -232,7 +232,7 @@ test("with the real Claude strategy, the usage line behind a huge line is found 
   assert.deepEqual(io.calls.filter((c) => c[0] === "tail").map((c) => c[2]), [FIRST, FIRST * 4]);
 });
 
-test("sweep removes the integration files of ended terminals whose process is gone, and nothing else", async () => {
+test("sweep removes the integration files of ended terminals whose process is gone, and temp files older than an hour, nothing else", async () => {
   const dir = "/Users/a/.cache/herdr-roundup/context/claude";
   const io = contextIo({
     files: {
@@ -240,16 +240,19 @@ test("sweep removes the integration files of ended terminals whose process is go
       [`${dir}/t2.json`]: JSON.stringify({ pid: 2 }), // ended, process gone, old
       [`${dir}/t3.json`]: JSON.stringify({ pid: 3 }), // ended here, but its process lives (another core)
       [`${dir}/t4.json`]: JSON.stringify({ pid: 4 }), // ended, but written a moment ago
-      [`${dir}/.t5.123`]: "", // a temp file of the status line script
+      [`${dir}/.t5.123`]: "", // a temp file of the status line script, left by a killed run
+      [`${dir}/.t1.456`]: "", // the same, of a live terminal
+      [`${dir}/.t1.789`]: "", // a temp file being written now
+      [`${dir}/notes.txt`]: "", // anything else
     },
-    mtimes: { [`${dir}/t4.json`]: 3 * 3600_000 },
+    mtimes: { [`${dir}/t4.json`]: 3 * 3600_000, [`${dir}/.t1.789`]: 3 * 3600_000 },
   });
   io.now = () => 3 * 3600_000;
   io.alive = async (pid) => pid === 3;
   const gone = [];
   io.remove = async (p) => { gone.push(p); delete io.files[p]; return true; };
-  assert.equal(await sweep(io, ["t1"]), 1);
-  assert.deepEqual(gone, [`${dir}/t2.json`]);
+  assert.equal(await sweep(io, ["t1"]), 3);
+  assert.deepEqual(gone.sort(), [`${dir}/.t1.456`, `${dir}/.t5.123`, `${dir}/t2.json`]);
 });
 
 // Two agents one after the other in the same terminal; A's read waits on a gate the test opens.
