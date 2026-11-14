@@ -273,7 +273,9 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
 - **Context meter:** each Claude Code and Codex pane shows how full its
   agent's context window is, without typing `/context` or `/status`. While
   the agent works it follows within about 15s (and 2s after each status
-  change); idle, within a minute. A narrow header drops the tokens first
+  change); idle, within a minute. A pane in a tab not shown reads once a
+  minute and again within 2s of its tab showing (a hidden header doesn't
+  render: a 2s timer, without reading files, tells the reader). A narrow header drops the tokens first
   (below 560px), then the bar (below 420px); the percent stays down to 300px.
   Hovering it for 400ms opens a card as in the mockup (260px, `popover`,
   rounded 8px, 12px text): on top the pane's icon, name (semibold) and id

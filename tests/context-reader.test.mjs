@@ -90,6 +90,21 @@ test("a pane not shown keeps to the idle schedule while working, and looks at on
   assert.equal(s.reads, 2);
 });
 
+test("a status change while not shown reads nothing; the tab shown again reads at once, though the status came back meanwhile", async () => {
+  const { io, s, reader, cx, pane } = world();
+  reader.see(pane("idle"), true, cx);
+  await clock.advance(2000);
+  reader.see(pane("idle"), false, cx); // the tab goes (main.js's look; a hidden header doesn't render)
+  reader.see(pane("working"), false, cx);
+  await clock.advance(0);
+  assert.equal(s.locates, 1, "hidden: a status change waits");
+  touch(io, FILE);
+  reader.see(pane("idle"), false, cx); // done again, still hidden
+  reader.see(pane("idle"), true, cx); // the tab back: same status as before it went
+  await clock.advance(0);
+  assert.equal(s.reads, 2, "read at once");
+});
+
 test("no source: no reading, tried again with a growing backoff", async () => {
   const { s, reader, cx, pane } = world();
   s.src = null;

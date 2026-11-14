@@ -3,7 +3,7 @@
 // card's rows (context/card.js), and the header showing it (main.js, through the herdr stub).
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { herdr, reset, mount, pane, agentProgram, program, findAll, texts, walk, element } from "./support/harness.mjs";
+import { herdr, reset, mount, pane, agentProgram, program, findAll, texts, walk, element, clock } from "./support/harness.mjs";
 
 const { cardModel } = await import("../mods/roundup-pane/context/card.js");
 const { meter, BAR_W, PILL_H } = await import("../mods/roundup-pane/context-view.js");
@@ -127,6 +127,26 @@ test("the header: a Claude pane with a reading shows the meter between the folde
   assert.ok(at > 0, `the card trigger is a child of the header: ${ids}`);
   assert.equal(root.kids[at - 1].has("flex_1"), true, "right after the folder");
   view.close();
+});
+
+test("the header tells its reader every 2 s whether its tab is shown, also while it doesn't render", async () => {
+  clock.reset();
+  herdr.set({ panes: [pane("p1", "tb1", { terminal: "t1", program: agentProgram("claude"), status: "idle", cwd: "/x" })], focused: { tab: "tb1" }, props: { pane: "p1", terminal: "t1" } });
+  const { view, render } = mount(Pane, { props: { pane: "p1", terminal: "t1" } });
+  render();
+  const seen = [];
+  const see = view.context.see.bind(view.context);
+  view.context.see = (p, shown, c) => { seen.push([p.status, shown]); see(p, shown, c); };
+  herdr.set({ focused: { tab: "tb2" } }); // another tab: this header no longer renders
+  await clock.advance(2000);
+  herdr.set({ panes: [pane("p1", "tb1", { terminal: "t1", program: agentProgram("claude"), status: "working", cwd: "/x" })] });
+  await clock.advance(2000);
+  herdr.set({ focused: { tab: "tb1" } });
+  await clock.advance(2000);
+  view.close();
+  view.context.cancel();
+  assert.deepEqual(seen.slice(0, 3), [["idle", false], ["working", false], ["working", true]]);
+  assert.equal(view.context.shown, true);
 });
 
 test("the header: under the pointer the buttons come before the meter, so the meter and the status stay put", () => {

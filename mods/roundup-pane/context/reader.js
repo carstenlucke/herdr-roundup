@@ -5,7 +5,7 @@
 // - Working and shown: every 15 s; on each status change at once and again 2 s later (writes that
 //   come after the status).
 // - Idle, or the pane not shown: every 60 s; plus one look shortly after an expected idle
-//   compaction. Shown again: at once.
+//   compaction. Shown again: at once. A status change while not shown waits for that.
 // - A source is read only when one of its files changed (size or modification time); finding it
 //   (hc get, the session file) is cheap and runs on each look. Nothing found: tried again with a
 //   backoff, not on every render.
@@ -103,17 +103,18 @@ export class ContextReader {
       return;
     }
     if (!strategy) return;
+    // A status change reads at once only where it shows; hidden, the idle schedule goes on and the
+    // tab shown again reads at once. (A hidden tab's header doesn't render: main.js calls see() from
+    // a timer as well, so the reader learns both.)
     const status = pane.status ?? null;
+    const back = shown && !this.shown;
+    this.shown = shown;
     if (status !== this.status) {
       this.status = status;
-      this.followUp = true;
       this.misses = 0;
-      this.arm(cx, 0);
+      if (shown) { this.followUp = true; this.arm(cx, 0); }
     }
-    if (shown !== this.shown) {
-      this.shown = shown;
-      if (shown) this.arm(cx, 0);
-    }
+    if (back) this.arm(cx, 0);
   }
 
   cancel() {

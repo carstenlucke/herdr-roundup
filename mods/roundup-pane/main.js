@@ -30,6 +30,7 @@ import { meter } from "./context-view.js";
 
 // Integration files of ended terminals go once an hour, by whichever header gets there first.
 let lastSweep = 0;
+const SEE_MS = 2000;
 
 function icon(p, size, color) {
   if (!p?.icon) return null;
@@ -83,6 +84,9 @@ export default class Pane extends View {
     }
     this.context = new ContextReader(makeIo());
     this.width = null;
+    // A header in a hidden tab doesn't render, so render's see() misses the tab going and coming
+    // back, and status changes there: this look tells the reader (no I/O, only panes() and focused()).
+    cx.timer.every(SEE_MS, (cx) => { const p = this.me(); if (p) this.context.see(p, focused()?.tab === p.tab, cx); });
     cx.timer.every(10 * 60_000, (cx) => {
       if (Date.now() - lastSweep < 3_600_000) return;
       lastSweep = Date.now();
