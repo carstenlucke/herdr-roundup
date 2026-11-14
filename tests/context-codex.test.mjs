@@ -47,6 +47,54 @@ test("the title's id prefix leads to the one rollout of its day; two matches or 
   assert.equal(rolloutId("other.jsonl"), null);
 });
 
+test("a found rollout is kept per home and prefix and checked with one stat; gone, a miss or two matches are searched again", async () => {
+  const H = "/Users/a/.codex", PRE = "01a1d750-0653-7190-914d-7c804";
+  const lists = (io) => io.calls.filter((c) => c[0] === "list").length;
+  let io = setup(), memo = {};
+  assert.equal(await rolloutByPrefix(io, H, PRE, memo), FILE);
+  const n = lists(io);
+  assert.equal(await rolloutByPrefix(io, H, PRE, memo), FILE);
+  assert.equal(lists(io), n, "the second look lists no folder");
+  assert.ok(io.calls.some((c) => c[0] === "stat" && c[1] === FILE), "it checks the kept file");
+  assert.equal(await rolloutByPrefix(io, "/Users/b/.codex", PRE, memo), null, "another home: its own search");
+  assert.ok(lists(io) > n);
+  // Gone: searched again at once, and a file now elsewhere found.
+  io = setup(); memo = {};
+  await rolloutByPrefix(io, H, PRE, memo);
+  const moved = FILE.replace("7c804d23545c", "7c804d23545d");
+  delete io.files[FILE]; io.files[moved] = rollout;
+  assert.equal(await rolloutByPrefix(io, H, PRE, memo), moved);
+  // A miss isn't kept: the file written after it counts on the next look.
+  io = setup({ files: {} }); memo = {};
+  assert.equal(await rolloutByPrefix(io, H, PRE, memo), null);
+  io.files[FILE] = rollout;
+  assert.equal(await rolloutByPrefix(io, H, PRE, memo), FILE);
+  // AMBIGUOUS isn't kept either: once one of the two goes, the other is the one.
+  const twin = FILE.replace("7c804d23545c", "7c804d999999");
+  io = setup({ files: { [FILE]: rollout, [twin]: rollout } }); memo = {};
+  assert.equal(await rolloutByPrefix(io, H, PRE, memo), AMBIGUOUS);
+  delete io.files[twin];
+  assert.equal(await rolloutByPrefix(io, H, PRE, memo), FILE);
+  // A longer prefix's hit says nothing for a shorter one: that one is searched (and here two match).
+  io.files[twin] = rollout;
+  assert.equal(await rolloutByPrefix(io, H, "01a1d750-0653-7190-914d-7c80", memo), AMBIGUOUS);
+});
+
+test("stillSame checks the title's id against the rollout's whole id: the same thread cut otherwise stands, another with the same start doesn't", async () => {
+  const src = await codex.locate({ terminal: "t8" }, setup());
+  assert.deepEqual([src.how, src.titlePrefix, src.thread], ["title", "01a1d750-0653-7190-914d-7c804", ID], "the thread is the rollout's whole id");
+  const same = (title) => codex.stillSame(src, { title });
+  assert.equal(same(`${ID} | ok`), true, "the whole id now");
+  assert.equal(same("01a1d750-0653-7190-914d-7c80... | ok"), true, "cut shorter");
+  assert.equal(same("01a1d750-0653-7190-914d-7c804d2... | ok"), true, "cut longer");
+  assert.equal(same("01a1d750-0653-7190-914d-7c804d9... | ok"), false, "a longer id with the same start: another thread");
+  assert.equal(same("01a1d751-9827-7f61-959e-cedf8... | ok"), false, "another thread");
+  assert.equal(same(`${ID} | 01a1d751-9827-7f61-959e-cedf8...`), false, "two ids");
+  assert.equal(same("Codex"), true, "no id says nothing");
+  const full = await codex.locate({ terminal: "t8" }, setup({ title: `${ID} | ok` }));
+  assert.equal(codex.stillSame(full, { title: TITLE }), true, "whole id at locate, cut after");
+});
+
 test("a title whose rollout isn't in CODEX_HOME falls back to the open files, but only to its own thread's one user rollout", async () => {
   // CODEX_HOME as read is wrong (cut at a space, or no ps -E on Linux): the rollout lies elsewhere.
   const elsewhere = { HC_TERMINAL_ID: "t8", CODEX_HOME: "/Users/a/My" };

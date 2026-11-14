@@ -135,15 +135,19 @@ export function makeIo({ after = null } = {}) {
       if (!pids) return null;
       // lsof exits 1 when one of the pids has gone meanwhile; what it printed still holds.
       try {
-        const r = await exec("lsof", ["-Fn", "-p", pids.join(",")], { timeout: 10_000 });
+        // -n -P: no host or port names (a lookup per socket can take seconds); -w: no warnings.
+        const r = await exec("lsof", ["-n", "-P", "-w", "-Fn", "-p", pids.join(",")], { timeout: 10_000 });
         return (r.code === 0 || r.code === 1) && r.stdout.length < LIMIT - 1024 ? parseLsof(r.stdout) : null;
       } catch {
         return null;
       }
     },
-    async lastLineWith(p, text, max) {
-      const out = await run("awk", ["-v", `max=${max}`, "-v", `t=${text}`, 'length($0) < max && index($0, t) { l = $0 } END { if (l != "") print l }', p], 10_000);
-      return out ? out.replace(/\n$/, "") : null;
+    // The last `n` lines shorter than max holding text and matching the ERE re, newest first (a
+    // ring of n in awk: the output stays n lines however many match). [] for none, null on failure.
+    async lastLinesWith(p, text, re, max, n) {
+      const prog = 'length($0) < max && index($0, t) && $0 ~ re { l[c++ % n] = $0 } END { for (i = 1; i <= n && i <= c; i++) print l[(c - i) % n] }';
+      const out = await run("awk", ["-v", `max=${max}`, "-v", `t=${text}`, "-v", `re=${re}`, "-v", `n=${n}`, prog, p], 10_000);
+      return out === null ? null : out.split("\n").filter(Boolean);
     },
     async alive(pid) {
       try { return (await exec("kill", ["-0", String(pid)], { timeout: T })).code === 0; } catch { return false; }

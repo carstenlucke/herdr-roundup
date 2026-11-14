@@ -30,11 +30,12 @@ export function contextIo({ home = "/Users/a", now = Date.parse("2026-11-14T00:0
       return names.length ? [...new Set(names)] : null;
     },
     async openFiles(pid) { calls.push(["openFiles", pid]); return open[pid] ?? null; },
-    async lastLineWith(p, text, max) {
-      calls.push(["lastLineWith", p]);
+    // As context-io.js's awk, with the ERE's [[:space:]] as \s.
+    async lastLinesWith(p, text, re, max, n) {
+      calls.push(["lastLinesWith", p]);
       if (!(p in files)) return null;
-      const hits = files[p].split("\n").filter((l) => l.length < max && l.includes(text));
-      return hits.length ? hits[hits.length - 1] : null;
+      const ere = new RegExp(re.replaceAll("[[:space:]]", "\\s"));
+      return files[p].split("\n").filter((l) => l.length < max && l.includes(text) && ere.test(l)).slice(-n).reverse();
     },
   };
   return io;

@@ -3,7 +3,7 @@
 // (Claude Code 2.1.325, 2026-11-14: two short answers, /context, /compact) and an io stub.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import claude, { usageTokens, fromStatus, findTranscript, parseSnapshot, displayTokens, slug, checkSession, IDLE_COMPACT_MS, FIND_AGAIN_MS } from "../mods/roundup-pane/context/strategies/claude.js";
+import claude, { usageTokens, fromStatus, findTranscript, parseSnapshot, displayTokens, slug, checkSession, IDLE_COMPACT_MS, FIND_AGAIN_MS, SNAPSHOT_CANDIDATES } from "../mods/roundup-pane/context/strategies/claude.js";
 import { integrationFile, NO_ANSWER } from "../mods/roundup-pane/context/locate.js";
 import { NO_READING } from "../mods/roundup-pane/context/tail.js";
 import { contextIo, fixture, jsonl } from "./support/context-io.mjs";
@@ -89,6 +89,36 @@ test("a snapshot of another model, from before this process, or only inside a lo
   const only = lines.filter((_, i) => i !== SNAP).slice(0, BOUNDARY - 1);
   r = await reading(setup({ transcript: jsonl(...only, blob), status: null }));
   assert.equal(r.window, null, "a copy inside an api-request-blob");
+});
+
+test("the snapshot search skips later lines that only mention /context: quoted copies, a nested isMeta, another session's; the newer of two valid wins", async () => {
+  const snap = JSON.parse(lines[SNAP]);
+  const later = (o) => JSON.stringify({ ...o, timestamp: "2026-11-13T23:46:30.000Z" });
+  // A Read result of claude.js, a pasted /context: the marker in plain text, no meta line.
+  const mention = (i) => JSON.stringify({ type: "user", timestamp: snap.timestamp, sessionId: SID, message: { role: "user", content: [{ type: "tool_result", content: `const SNAPSHOT = "## Context Usage"; // ${i}` }] } });
+  const quoted = JSON.stringify({ type: "user", timestamp: snap.timestamp, sessionId: SID, message: { role: "user", content: `pasted: ${lines[SNAP]}` } });
+  const nested = JSON.stringify({ type: "user", timestamp: snap.timestamp, sessionId: SID, message: { role: "user", content: "## Context Usage", extra: { isMeta: true } } });
+  const other = later({ ...snap, sessionId: "another-session" });
+  const base = lines.slice(0, BOUNDARY);
+  const at = (...extra) => jsonl(...base, ...extra);
+  let r = await reading(setup({ transcript: at(...Array.from({ length: 12 }, (_, i) => mention(i)), quoted), status: null }));
+  assert.equal(r.window, 1_000_000, "twelve plain mentions and a quoted copy after the snapshot: the filter drops them");
+  r = await reading(setup({ transcript: at(nested, other, nested), status: null }));
+  assert.equal(r.window, 1_000_000, "a nested isMeta and another session's snapshot pass the filter but not parseSnapshot / the session check");
+  const newer = later({ ...snap, message: { ...snap.message, content: snap.message.content.replace("48.1k / 1m", "48.1k / 500k") } });
+  r = await reading(setup({ transcript: at(newer, nested), status: null }));
+  assert.equal(r.window, 500_000, "the newer of two valid snapshots");
+});
+
+test("the snapshot search is bounded: SNAPSHOT_CANDIDATES rejected candidates after the snapshot leave the window unknown, tokens only", async () => {
+  const snap = JSON.parse(lines[SNAP]);
+  const nested = JSON.stringify({ type: "user", timestamp: snap.timestamp, sessionId: SID, message: { role: "user", content: "## Context Usage", extra: { isMeta: true } } });
+  const base = lines.slice(0, BOUNDARY);
+  let r = await reading(setup({ transcript: jsonl(...base, ...Array(SNAPSHOT_CANDIDATES - 1).fill(nested)), status: null }));
+  assert.equal(r.window, 1_000_000, "one place left: the snapshot is still among the candidates");
+  r = await reading(setup({ transcript: jsonl(...base, ...Array(SNAPSHOT_CANDIDATES).fill(nested)), status: null }));
+  assert.equal(r.window, null, "the bound used up: no window, the validation is never relaxed");
+  assert.equal(r.used, 48_321, "the tokens still stand");
 });
 
 test("parseSnapshot reads model, window and buffer from a snapshot in a string or a content array", () => {

@@ -31,7 +31,7 @@ test("parseStat reads macOS' and GNU's size and mtime in ms; parseLsof the open 
   assert.deepEqual(parseLsof("p123\nfcwd\nn/Users/a\nf9\nn/Users/a/rollout-x.jsonl\n"), ["/Users/a", "/Users/a/rollout-x.jsonl"]);
 });
 
-test("stat, tail, head, list and lastLineWith on a real file", async () => {
+test("stat, tail, head, list and lastLinesWith on a real file", async () => {
   const f = join(dir, "t.jsonl");
   writeFileSync(f, '{"a":1}\n{"b":"## mark"}\n{"c":3}\n');
   const io = makeIo();
@@ -42,8 +42,8 @@ test("stat, tail, head, list and lastLineWith on a real file", async () => {
   assert.equal((await io.tail(f, 1000)).whole, true);
   assert.equal(await io.head(f, 7), '{"a":1}');
   assert.ok((await io.list(dir)).includes("t.jsonl"));
-  assert.equal(await io.lastLineWith(f, "## mark", 100), '{"b":"## mark"}');
-  assert.equal(await io.lastLineWith(f, "## mark", 5), null, "longer than the limit");
+  assert.deepEqual(await io.lastLinesWith(f, "## mark", "b", 100, 8), ['{"b":"## mark"}']);
+  assert.deepEqual(await io.lastLinesWith(f, "## mark", "b", 5, 8), [], "longer than the limit");
   assert.equal(await io.stat(join(dir, "none")), null);
   assert.equal(await io.tail(join(dir, "none"), 8), null);
   assert.equal(await io.list(join(dir, "none")), null);
@@ -76,7 +76,7 @@ test("a platform without tail, lsof, ps or stat gives null everywhere, and no er
   assert.equal(await io.head(f, 10), null);
   assert.equal(await io.env(1), null);
   assert.equal(await io.openFiles(1), null);
-  assert.equal(await io.lastLineWith(f, "x", 10), null);
+  assert.equal(await io.lastLinesWith(f, "x", "x", 10, 8), null);
 });
 
 test("terminal: hc get's foreground pid, creation time and title; a failing hc gives null", async () => {
@@ -161,10 +161,25 @@ test("openFiles asks ps once, then lsof for the tree; a failed ps gives null, no
   const io = makeIo();
   assert.deepEqual(await io.openFiles(100), ["/a/rollout-1.jsonl", "/a/rollout-2.jsonl"]);
   assert.equal(herdr.calls("exec").filter((c) => c[0] === "ps").length, 1);
-  assert.deepEqual(herdr.calls("exec").find((c) => c[0] === "lsof")[1], ["-Fn", "-p", "100,101,102"]);
+  assert.deepEqual(herdr.calls("exec").find((c) => c[0] === "lsof")[1], ["-n", "-P", "-w", "-Fn", "-p", "100,101,102"], "no host or port lookups, no warnings");
   assert.equal(herdr.calls("exec").filter((c) => c[0] === "pgrep").length, 0);
   reset();
   herdr.onExec((c) => (c.command === "ps" ? { code: 1, stdout: "" } : c.command === "lsof" ? { code: 0, stdout: "n/a/x\n" } : undefined));
   assert.equal(await makeIo().openFiles(100), null);
   assert.equal(herdr.calls("exec").filter((c) => c[0] === "lsof").length, 0);
+});
+
+test("lastLinesWith through the real awk: the last n of the lines with the text that match the ERE, newest first; escaped copies and long lines don't count", async () => {
+  const { SNAPSHOT_META } = await import("../mods/roundup-pane/context/strategies/claude.js");
+  const f = join(dir, "snap.jsonl");
+  const meta = (i, space = "") => JSON.stringify({ type: "user", n: i, text: "## Context Usage" }).replace('"type"', `"isMeta"${space}:${space}true,"type"`);
+  const quoted = JSON.stringify({ type: "user", text: `copy: ${meta(99)} ## Context Usage` }); // the meta line inside a string: quotes escaped
+  const lines = [meta(1), "## Context Usage only", quoted, meta(2, " "), meta(3), meta(4) + "x".repeat(200), meta(5, "\t")];
+  writeFileSync(f, lines.join("\n") + "\n");
+  const io = makeIo();
+  const got = await io.lastLinesWith(f, "## Context Usage", SNAPSHOT_META, 150, 3);
+  assert.deepEqual(got.map((l) => JSON.parse(l).n), [5, 3, 2], "newest first, three at most; the long one (4) is over the limit");
+  const all = await io.lastLinesWith(f, "## Context Usage", SNAPSHOT_META, 150, 8);
+  assert.deepEqual(all.map((l) => JSON.parse(l).n), [5, 3, 2, 1], "the plain mention and the escaped copy never match");
+  assert.deepEqual(await io.lastLinesWith(f, "## nothing", SNAPSHOT_META, 150, 8), []);
 });

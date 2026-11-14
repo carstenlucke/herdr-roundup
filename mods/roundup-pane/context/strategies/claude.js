@@ -15,6 +15,13 @@ export const IDLE_COMPACT_FROM = 200_000;
 const SNAPSHOT = "## Context Usage";
 const SNAPSHOT_MAX_LINE = 64 * 1024; // the real line is ~2 KB; copies inside api-request-blob lines are far longer
 const SNAPSHOT_EVERY_MS = 5 * 60 * 1000;
+// A raw-line filter for snapshot candidates, not a proof (parseSnapshot decides): a line with an
+// unescaped `"isMeta": true` somewhere. A copy of one inside a JSON string (a Read result, a pasted
+// /context, a quoted reply) has its quotes escaped (\"isMeta\") and never matches.
+export const SNAPSHOT_META = '"isMeta"[[:space:]]*:[[:space:]]*true';
+// How many candidates, newest first, are checked: a bounded fallback. Should more than this many
+// filtered lines that are no snapshot follow the last one, the window stays unknown (tokens only).
+export const SNAPSHOT_CANDIDATES = 8;
 const COMPACT_ENV = ["CLAUDE_CODE_AUTO_COMPACT_WINDOW", "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE"];
 
 // A folder as Claude Code names its project folder: every character not a letter or digit is "-".
@@ -202,16 +209,20 @@ export default {
   },
 };
 
-// The newest valid `/context` snapshot of the session, searched for once and then again only when
-// the transcript has grown and a few minutes have passed.
+// The newest valid `/context` snapshot of the session among the last SNAPSHOT_CANDIDATES filtered
+// lines, searched for once and then again only when the transcript has grown and a few minutes
+// have passed.
 async function snapshot(source, io, memo) {
   const now = io.now();
   const size = (await io.stat(source.transcript))?.size ?? null;
   const m = memo.snapshot;
   if (m && m.session === source.session && (m.size === size || now - m.checked < SNAPSHOT_EVERY_MS)) return m.value;
-  const line = await io.lastLineWith(source.transcript, SNAPSHOT, SNAPSHOT_MAX_LINE);
-  const s = parseSnapshot(line);
-  const value = s && (s.session === null || s.session === source.session) ? s : null;
+  const lines = await io.lastLinesWith(source.transcript, SNAPSHOT, SNAPSHOT_META, SNAPSHOT_MAX_LINE, SNAPSHOT_CANDIDATES);
+  let value = null;
+  for (const line of lines ?? []) {
+    const s = parseSnapshot(line);
+    if (s && (s.session === null || s.session === source.session)) { value = s; break; }
+  }
   memo.snapshot = { session: source.session, size, checked: now, value };
   return value;
 }

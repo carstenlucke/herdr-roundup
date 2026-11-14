@@ -13,8 +13,9 @@
 //   io.head(path, bytes)          its first bytes as text, or null
 //   io.list(dir)                  the names in a folder, or null
 //   io.openFiles(pid)             paths the process and its descendants hold open (`lsof`), or null
-//   io.lastLineWith(path, text, maxLength)
-//                                 the file's last line shorter than maxLength containing text, or null
+//   io.lastLinesWith(path, text, re, maxLength, n)
+//                                 the file's last n lines shorter than maxLength containing text and
+//                                 matching the awk ERE re, newest first: [] for none, null on failure
 //
 // None of these throws for a missing file or a failed program: they give null, and a strategy
 // gives no reading. No guessing: a session found only by folder and recency is never a match.

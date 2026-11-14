@@ -677,6 +677,38 @@ test("Codex: a title that names another thread when the read ends drops the late
   assert.deepEqual(cx.errors, []);
 });
 
+test("Codex: the same thread's id shown longer when the read ends keeps the answer, and the source's key stays", async () => {
+  const { io, pane } = realAgent("codex");
+  io.now = () => clock.now;
+  const reader = new ContextReader(io, { queue: makeQueue(2) });
+  const cx = makeCx();
+  const tail = io.tail;
+  const orig = io.terminal;
+  let title = null, during = null;
+  io.terminal = async (t) => ({ ...(await orig(t)), ...(title === null ? {} : { title }) });
+  io.tail = async (...a) => { if (during !== null) title = during; return tail(...a); };
+  reader.see(pane, true, cx);
+  await clock.advance(2000);
+  const first = reader.reading, key = reader.key;
+  assert.ok(first?.used > 0);
+  assert.ok(key, "a source key was kept");
+  assert.equal(first.session, "01a1d750-0653-7190-914d-7c804d23545c", "the session is the whole id, not the title's cut");
+  // Other title items go: Codex shows the whole id during the next read.
+  during = "01a1d750-0653-7190-914d-7c804d23545c";
+  reader.key = reader.stats = null;
+  reader.see({ ...pane, status: "working" }, true, cx);
+  await clock.advance(10);
+  assert.deepEqual(reader.reading, first, "the same thread: the answer stands");
+  // The next look locates by the whole id: the same source.
+  during = null;
+  reader.see({ ...pane, status: "idle" }, true, cx);
+  await clock.advance(60_000);
+  assert.deepEqual(reader.reading, first);
+  assert.equal(reader.key, key, "the source's key doesn't change with the title's cut");
+  assert.deepEqual(cx.errors, []);
+  reader.close();
+});
+
 test("Codex fallback (CODEX_HOME not as read): the cut title id still matches its open rollout after the read", async () => {
   const { io, pane } = realAgent("codex");
   io.now = () => clock.now;
