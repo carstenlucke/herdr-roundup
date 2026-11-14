@@ -514,11 +514,13 @@ can be: `context/text.js` (words, severity, tiers), `context/card.js`
   UUIDv7 time names the rollout's folder and file, exactly one must match),
   else the one user rollout the process holds open (`pgrep`, `lsof`);
   `last_token_usage.total_tokens` of `model_context_window`.
-- **Integrations:** `claude` points `statusLine.command` at
-  `mods/roundup-pane/integrations/claude-statusline.sh` (the previous
-  command runs after it, kept in `~/.config/herdr-roundup/integrations/`);
+- **Integrations:** `claude` sets `statusLine.command` to `sh
+  '<…>/mods/roundup-pane/integrations/claude-statusline.sh'` (the previous
+  command runs after it under `/bin/sh`, kept in
+  `~/.config/herdr-roundup/integrations/`, guarded against leading back);
   the script writes `{v: 1, terminal, pid, at, claude: <stdin>}`
-  atomically. `codex` adds `"thread-id"` to `tui.terminal_title`.
+  atomically. `codex` adds `"thread-id"` last to `tui.terminal_title`. A
+  symlinked config stays a link.
 - **Adding an agent:** one strategy file and one line in the registry; an
   integration writes `~/.cache/herdr-roundup/context/<agent>/<t>.json`
   with `{v: 1, terminal, pid, at}`.

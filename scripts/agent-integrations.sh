@@ -6,17 +6,21 @@
 #   scripts/agent-integrations.sh status    [claude|codex]
 #
 # claude: Claude Code's status line (`statusLine` in ~/.claude/settings.json) becomes
-#         mods/roundup-pane/integrations/claude-statusline.sh in the Herdr App home, which keeps
+#         `sh '<Herdr App home>/mods/roundup-pane/integrations/claude-statusline.sh'`, which keeps
 #         Claude's own context numbers per terminal and then runs the status line the person had
-#         before (moved into a file of its own, so it keeps running).
-# codex:  "thread-id" joins `tui.terminal_title` in ~/.codex/config.toml (the person's other title
-#         items stay; without any, Codex's defaults stay too), so the pane header finds the thread's
-#         rollout file from the terminal's title.
+#         before (moved into a file of its own, so it keeps running). Through `sh`, so the script
+#         needs no executable bit.
+# codex:  "thread-id" joins `tui.terminal_title` in ~/.codex/config.toml, last (the person's other
+#         title items stay; without any, Codex's defaults stay too), so the pane header finds the
+#         thread's rollout file from the terminal's title. Everything that shows the title shows
+#         the id too.
 #
 # Each change edits the person's own agent config: run it only after they said yes. `install` is
 # idempotent and keeps a backup of the file it changes; `uninstall` restores exactly what `install`
 # changed and nothing else; `status` says per agent on, off or broken. Nothing else is touched.
-# Paths follow CLAUDE_CONFIG_DIR, CODEX_HOME, HERDR_APP_HOME and XDG_CONFIG_HOME when set.
+# A config that is a symlink (dotfiles) stays one: its target is changed. A link that leads
+# nowhere or in a circle is refused. Paths follow CLAUDE_CONFIG_DIR, CODEX_HOME, HERDR_APP_HOME
+# and XDG_CONFIG_HOME when set.
 set -eu
 
 app=${HERDR_APP_HOME:-$HOME/.config/herdr-app}
@@ -28,8 +32,8 @@ next="$state/claude-statusline.next"
 claude_prev="$state/claude.json"
 codex_prev="$state/codex.json"
 # Codex's own default when terminal_title is unset (DEFAULT_TERMINAL_TITLE_ITEMS, codex-rs 0.167),
-# with "thread-id" after "activity".
-codex_items='["activity", "thread-id", "thread-name", "project-name"]'
+# with "thread-id" last.
+codex_items='["activity", "thread-name", "project-name", "thread-id"]'
 
 die() { echo "$*" >&2; exit 1; }
 need_jq() { command -v jq >/dev/null 2>&1 || die "jq is needed (brew install jq)"; }
@@ -38,19 +42,76 @@ backup() { # file → a copy under $state/backup, named by the file and the time
   mkdir -p "$state/backup"
   cp -p "$1" "$state/backup/$(echo "$1" | sed 's|^/||; s|/|_|g').$(date +%Y%m%d-%H%M%S)"
 }
-replace() { # tmp → file, atomically, keeping the file's mode
+replace() { # tmp → file, atomically, keeping the file's mode (callers pass resolved paths: real())
   [ -f "$2" ] && chmod "$(stat -f %Lp "$2" 2>/dev/null || stat -c %a "$2")" "$1" 2>/dev/null || true
   mv -f "$1" "$2"
 }
+# The file a path names once its symlinks are followed (relative ones against their folder, at
+# most 40 hops). A path that isn't a link comes back as it is, existing or not; a link that leads
+# nowhere or in a circle fails.
+resolve() {
+  p=$1 hops=0
+  while [ -L "$p" ]; do
+    hops=$((hops + 1))
+    [ "$hops" -le 40 ] || return 1
+    l=$(readlink "$p") || return 1
+    case "$l" in /*) p=$l ;; *) p="$(dirname "$p")/$l" ;; esac
+  done
+  [ "$p" = "$1" ] || [ -e "$p" ] || return 1
+  printf '%s\n' "$p"
+}
+# Points the variable named $1 at its config's real file, so temp files sit beside it and the
+# link stays a link.
+real() {
+  eval "path=\$$1"
+  resolved=$(resolve "$path") || die "$path is a symlink that leads nowhere or in a circle: not changed"
+  eval "$1=\$resolved"
+}
+# A word for sh, in single quotes.
+quote() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
 
 # --- Claude Code -------------------------------------------------------------------------------
 
-claude_ours() { [ -f "$claude_settings" ] && [ "$(jq -r '.statusLine.command // empty' "$claude_settings")" = "$script" ]; }
+command_now="sh $(quote "$script")"
+# What the status line is now: "canonical" (command_now), "older" (another spelling this script
+# wrote or that names the script plainly: the bare path, with ~/ or $HOME/, `sh` or `/bin/sh`
+# before it), "mentions" (some other command that names claude-statusline.sh), or "other".
+claude_form() {
+  [ -f "$claude_settings" ] || { echo other; return 0; }
+  cmd=$(jq -r 'if (.statusLine | type) == "object" then .statusLine.command // "" else "" end' "$claude_settings" 2>/dev/null) || cmd=
+  [ "$cmd" = "$command_now" ] && { echo canonical; return 0; }
+  if spelled "$script" || spelled "$(quote "$script")" || spelled "\"$script\""; then echo older; return 0; fi
+  case "$script" in "$HOME"/*)
+    rel=${script#"$HOME"/}
+    if spelled "~/$rel" || spelled "\$HOME/$rel" || spelled "\${HOME}/$rel" || spelled "\"\$HOME/$rel\""; then echo older; return 0; fi ;;
+  esac
+  case "$cmd" in *claude-statusline.sh*) echo mentions ;; *) echo other ;; esac
+}
+spelled() { for c in "$1" "sh $1" "/bin/sh $1"; do [ "$cmd" = "$c" ] && return 0; done; return 1; }
+claude_ours() { case "$(claude_form)" in canonical | older) return 0 ;; *) return 1 ;; esac; }
+set_command() { # the status line's command → command_now, nothing else
+  tmp="$claude_settings.roundup-tmp"
+  jq --arg cmd "$command_now" '.statusLine = ((.statusLine // {}) + {type: "command", command: $cmd})' "$claude_settings" >"$tmp"
+  replace "$tmp" "$claude_settings"
+}
 
 claude_install() {
   need_jq
-  [ -x "$script" ] || die "$script is missing: install the layout first (scripts/sync.sh)"
-  if claude_ours; then echo "claude: already on"; return 0; fi
+  real claude_settings
+  [ -f "$script" ] || die "$script is missing: install the layout first (scripts/sync.sh)"
+  case "$(claude_form)" in
+    canonical) echo "claude: already on"; return 0 ;;
+    older)
+      # An earlier install (or the same script spelled otherwise): only the command changes; what
+      # uninstall restores and the status line that runs after it stay as they are.
+      [ -f "$claude_prev" ] || die "claude: broken ($claude_prev is missing, so the previous status line is unknown): not changed"
+      backup "$claude_settings"
+      set_command
+      echo "claude: on (the status line now runs through sh: $command_now)"
+      return 0 ;;
+    mentions)
+      die "claude: your status line appears to reference Roundup's script ($(jq -r '.statusLine.command' "$claude_settings")): not changed. Remove that first, then install again." ;;
+  esac
   mkdir -p "$state" "$(dirname "$claude_settings")"
   existed=true
   [ -f "$claude_settings" ] || { existed=false; echo '{}' >"$claude_settings"; }
@@ -60,14 +121,13 @@ claude_install() {
   jq --argjson existed "$existed" '{existed: $existed, statusLine: (.statusLine // null)}' "$claude_settings" >"$claude_prev"
   prev_type=$(jq -r '.statusLine.type // empty' "$claude_settings")
   if [ "$prev_type" = command ]; then jq -r '.statusLine.command // empty' "$claude_settings" >"$next"; else : >"$next"; fi
-  tmp="$claude_settings.roundup-tmp"
-  jq --arg cmd "$script" '.statusLine = ((.statusLine // {}) + {type: "command", command: $cmd})' "$claude_settings" >"$tmp"
-  replace "$tmp" "$claude_settings"
+  set_command
   if [ -s "$next" ]; then echo "claude: on (your status line keeps running after it: $(cat "$next"))"; else echo "claude: on"; fi
 }
 
 claude_uninstall() {
   need_jq
+  real claude_settings
   if ! claude_ours; then
     [ -f "$claude_prev" ] && die "claude: the status line is no longer Roundup's ($claude_settings): left as it is"
     echo "claude: already off"; return 0
@@ -87,9 +147,11 @@ claude_uninstall() {
 
 claude_status() {
   if ! command -v jq >/dev/null 2>&1; then echo "claude: unknown (jq is needed)"; return 0; fi
-  if claude_ours; then
-    if [ ! -x "$script" ]; then echo "claude: broken ($script is missing: run scripts/sync.sh)"
+  form=$(claude_form)
+  if [ "$form" = canonical ] || [ "$form" = older ]; then
+    if [ ! -f "$script" ]; then echo "claude: broken ($script is missing: run scripts/sync.sh)"
     elif [ ! -f "$claude_prev" ]; then echo "claude: broken ($claude_prev is missing: uninstall can't restore the previous status line)"
+    elif [ "$form" = older ]; then echo "claude: on (an older form: run install claude again, so it runs through sh)"
     elif [ -s "$next" ]; then echo "claude: on (then: $(cat "$next"))"
     else echo "claude: on"; fi
   elif [ -f "$claude_prev" ]; then echo "claude: broken (the status line was changed since install: $claude_settings)"
@@ -115,7 +177,9 @@ line_at() { sed -n "${1}p" "$codex_config"; }
 # Inserts after line n (0: at the top); or replaces line n with text (mode r).
 edit_line() { # mode n text
   tmp="$codex_config.roundup-tmp"
-  awk -v mode="$1" -v n="$2" -v text="$3" '
+  # The text goes through the environment: awk's -v would turn its backslashes into escapes.
+  ROUNDUP_LINE_TEXT=$3 awk -v mode="$1" -v n="$2" '
+    BEGIN { text = ENVIRON["ROUNDUP_LINE_TEXT"] }
     mode == "a" && n == 0 && NR == 1 { print text }
     mode == "r" && NR == n { print text; next }
     { print }
@@ -125,10 +189,16 @@ edit_line() { # mode n text
   replace "$tmp" "$codex_config"
 }
 # The first line that is exactly `text`, or nothing.
-find_line() { awk -v text="$1" '$0 == text { print NR; exit }' "$codex_config"; }
+find_line() { ROUNDUP_LINE_TEXT=$1 awk 'BEGIN { text = ENVIRON["ROUNDUP_LINE_TEXT"] } $0 == text { print NR; exit }' "$codex_config"; }
+# Whether a title line ends its array with the thread id.
+id_last() { printf '%s\n' "$1" | grep -Eq "[\"'](thread|session)-id[\"'][[:space:]]*,?[[:space:]]*\]"; }
+# Whether Roundup's line is still in the config, as install wrote it.
+codex_ours() { [ -f "$codex_prev" ] && [ -f "$codex_config" ] && [ -n "$(find_line "$(jq -r .to "$codex_prev")")" ]; }
+not_last='thread id not last: run uninstall, then install, to move it'
 
 codex_install() {
   need_jq
+  real codex_config
   mkdir -p "$state" "$(dirname "$codex_config")"
   existed=true
   [ -f "$codex_config" ] || { existed=false; : >"$codex_config"; }
@@ -137,15 +207,24 @@ codex_install() {
     table | dotted)
       line=$(line_at "$2")
       case "$line" in *'"thread-id"'* | *"'thread-id'"* | *'"session-id"'* | *"'session-id'"*)
-        echo "codex: already on (terminal_title has the thread id)"; return 0 ;;
+        # An install before the id went last (0.11.0 before release) put it after "activity".
+        if codex_ours && ! id_last "$line"; then echo "codex: already on ($not_last)"
+        else echo "codex: already on (terminal_title has the thread id)"; fi
+        return 0 ;;
       esac
-      case "$line" in *\]*) ;; *) die "codex: terminal_title in $codex_config spans several lines: add \"thread-id\" to it by hand" ;; esac
-      # "thread-id" after "activity" when the person has it, else first.
+      # "thread-id" last: before the array's own `]`, not one in a string or a trailing comment.
       new=$(printf '%s\n' "$line" | awk '{
-        if (match($0, /"activity"[ \t]*,?/)) { a = substr($0, 1, RSTART + 9); r = substr($0, RSTART + 10)
-          sub(/^[ \t]*,?[ \t]*/, "", r); print a ", \"thread-id\"" (r ~ /^\]/ ? "" : ", ") r }
-        else { i = index($0, "["); r = substr($0, i + 1); print substr($0, 1, i) "\"thread-id\"" (r ~ /^[ \t]*\]/ ? "" : ", ") r }
-      }')
+        i = index($0, "["); q = ""; j = 0
+        for (k = i + 1; k <= length($0); k++) {
+          c = substr($0, k, 1)
+          if (q != "") { if (c == "\\" && q == "\"") k++; else if (c == q) q = ""; continue }
+          if (c == "\"" || c == "\047") { q = c; continue }
+          if (c == "]") { j = k; break }
+        }
+        if (!i || !j) exit 1
+        body = substr($0, i + 1, j - i - 1); sub(/[ \t]*,?[ \t]*$/, "", body)
+        print substr($0, 1, i) body (body ~ /[^ \t]/ ? ", " : "") "\"thread-id\"" substr($0, j)
+      }') || die "codex: terminal_title in $codex_config spans several lines: add \"thread-id\" to it by hand"
       backup "$codex_config"
       jq -n --arg from "$line" --arg to "$new" --argjson existed "$existed" '{mode: "replace", from: $from, to: $to, existed: $existed}' >"$codex_prev"
       edit_line r "$2" "$new"
@@ -169,6 +248,7 @@ codex_install() {
 
 codex_uninstall() {
   need_jq
+  real codex_config
   if [ ! -f "$codex_prev" ]; then echo "codex: already off"; return 0; fi
   to=$(jq -r .to "$codex_prev")
   n=$( [ -f "$codex_config" ] && find_line "$to" || true)
@@ -192,7 +272,7 @@ codex_status() {
   if ! command -v jq >/dev/null 2>&1; then echo "codex: unknown (jq is needed)"; return 0; fi
   if [ -f "$codex_prev" ]; then
     to=$(jq -r .to "$codex_prev")
-    if [ -f "$codex_config" ] && [ -n "$(find_line "$to")" ]; then echo "codex: on"
+    if codex_ours; then if id_last "$to"; then echo "codex: on"; else echo "codex: on ($not_last)"; fi
     else echo "codex: broken (terminal_title was changed since install: $codex_config)"; fi
   elif [ -f "$codex_config" ]; then
     set -- $(codex_where)

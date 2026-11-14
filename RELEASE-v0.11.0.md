@@ -17,7 +17,7 @@ Every Claude Code and Codex pane now shows in its header how full its agent's co
 Without anything installed, Claude Code shows its tokens (and its window only after `/context` in that session), Codex its numbers when Herdr started it. For exact numbers everywhere, each agent gets an integration:
 
 - `scripts/agent-integrations.sh install claude`: Claude Code's status line passes on its own numbers. Your own status line, if you have one, keeps running after it.
-- `scripts/agent-integrations.sh install codex`: Codex puts its thread id into its terminal title (`tui.terminal_title` gets `"thread-id"`; your other title items stay).
+- `scripts/agent-integrations.sh install codex`: Codex puts its thread id into its terminal title (`tui.terminal_title` gets `"thread-id"` at its end; your other title items stay). Herdr's lists show that id in the title too; without the integration Codex still gets its numbers when Herdr started it.
 - `scripts/agent-integrations.sh status` says on, off or broken; `uninstall claude|codex` puts back exactly what `install` changed.
 
 ## Before you update
