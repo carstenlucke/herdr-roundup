@@ -8,8 +8,8 @@ import { makeCx } from "./support/cx.mjs";
 import { contextIo, fixture } from "./support/context-io.mjs";
 import { ContextReader, makeQueue, valid, idleHint, sweep, WORKING_MS, IDLE_MS, AFTER_STATUS_MS, RETRY_MS, HINT_FOR_MS } from "../mods/roundup-pane/context/reader.js";
 import claude from "../mods/roundup-pane/context/strategies/claude.js";
-import { FIRST } from "../mods/roundup-pane/context/tail.js";
-import { localParts } from "../mods/roundup-pane/context/locate.js";
+import { FIRST, NO_READING } from "../mods/roundup-pane/context/tail.js";
+import { localParts, integrationFile } from "../mods/roundup-pane/context/locate.js";
 
 beforeEach(() => clock.reset());
 
@@ -545,5 +545,77 @@ test("headers that close while their looks hang free the shared queue: a third h
   readers.t3.see(pane("t3"), true, cx);
   await clock.advance(2000);
   assert.equal(readers.t3.reading?.used, 100);
+  assert.deepEqual(cx.errors, []);
+});
+
+// Looks of the stub strategy within `ms`, counted from now.
+async function looksWithin(s, ms) {
+  const before = s.locates;
+  await clock.advance(ms);
+  return s.locates - before;
+}
+
+test("read without a number, where the file alone decides: the meter goes, no backoff, the unchanged file isn't read again, a later count comes in the cadence", async () => {
+  const { io, s, reader, cx, pane } = world();
+  reader.strategies[0].keepsNoReading = true;
+  const good = s.reading;
+  s.reading = NO_READING; // Codex after a compaction mid-turn, until its next token_count
+  reader.see(pane("working"), true, cx);
+  await clock.advance(2000 + AFTER_STATUS_MS);
+  assert.equal(reader.reading, null);
+  assert.equal(reader.misses, 0);
+  const reads = s.reads;
+  assert.ok((await looksWithin(s, WORKING_MS * 6)) >= 6, "every 15 s while working and shown, no backoff");
+  assert.equal(s.reads, reads, "unchanged: looked at, not read");
+  reader.see(pane("working"), false, cx); // hidden: the idle schedule
+  const hidden = await looksWithin(s, IDLE_MS * 2);
+  assert.ok(hidden >= 2 && hidden <= 3, `every 60 s hidden (${hidden})`);
+  reader.see(pane("working"), true, cx);
+  await clock.advance(10);
+  touch(io, FILE);
+  s.reading = good;
+  await clock.advance(WORKING_MS);
+  assert.equal(reader.reading?.used, 100, "the next count within 15 s");
+  assert.deepEqual(cx.errors, []);
+});
+
+test("read without a number, where the strategy can't tell it from a failed read: read again on every look, without a backoff", async () => {
+  const { s, reader, cx, pane } = world();
+  reader.strategies[0].keepsNoReading = false; // Claude
+  s.reading = NO_READING;
+  reader.see(pane("working"), true, cx);
+  await clock.advance(2000 + AFTER_STATUS_MS);
+  const reads = s.reads;
+  await clock.advance(WORKING_MS * 4);
+  assert.ok(s.reads - reads >= 4, "read on each look, every 15 s");
+  assert.equal(reader.misses, 0);
+});
+
+test("Claude: a status line file that can't be read a few times is read again every 15 s while working, not after a growing backoff", async () => {
+  const sid = "0fbf3e48-42ea-40d5-b3ed-40730f7e7b44";
+  const transcript = `/Users/a/.claude/projects/-Users-a-src-demo/${sid}.jsonl`;
+  const io = contextIo({
+    files: {
+      [transcript]: JSON.stringify({ type: "user", sessionId: sid, message: { role: "user", content: "hi" }, timestamp: "2026-11-13T23:45:00Z" }) + "\n",
+      "/Users/a/.claude/sessions/52896.json": JSON.stringify({ pid: 52896, sessionId: sid, cwd: "/Users/a/src/demo", startedAt: 1794613515093, kind: "interactive" }),
+    },
+    terminals: { t7: { pid: 52896, created: 1794613511000, title: "Claude Code" } },
+    envs: { 52896: { HC_TERMINAL_ID: "t7" } },
+  });
+  const status = integrationFile(io, "claude", "t7");
+  io.files[status] = JSON.stringify({ v: 1, terminal: "t7", pid: 52896, at: 1794613600000, claude: { session_id: sid, transcript_path: transcript, model: { id: "claude-x" }, context_window: { context_window_size: 1_000_000, current_usage: { input_tokens: 5000 } } } });
+  io.now = () => clock.now;
+  let fails = 3;
+  const readText = io.readText;
+  io.readText = async (p) => (p === status && fails-- > 0 ? null : readText(p)); // there, but not read this time
+  const reader = new ContextReader(io, { queue: makeQueue(2) });
+  const cx = makeCx();
+  reader.see({ terminal: "t7", program: { key: "claude" }, app: "claude", status: "working" }, true, cx);
+  await clock.advance(2000 + AFTER_STATUS_MS);
+  assert.equal(reader.reading, null);
+  // With a backoff the fourth look would come at 15 + 30 + 60 s; every 15 s it comes at 45 s.
+  await clock.advance(WORKING_MS * 3);
+  assert.equal(reader.reading?.used, 5000);
+  assert.equal(reader.reading?.window, 1_000_000);
   assert.deepEqual(cx.errors, []);
 });

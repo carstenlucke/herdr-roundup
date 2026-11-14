@@ -8,7 +8,7 @@
 //   → transcript: the status line's transcript_path, else projects/<cwd slug>/<sessionId>.jsonl
 
 import { NO_ANSWER, foreground, byPidFile, byTerminalFile, integrationFile, parseJson } from "../locate.js";
-import { scanTail, fromEnd } from "../tail.js";
+import { scanTail, fromEnd, NO_READING } from "../tail.js";
 
 export const IDLE_COMPACT_MS = 55 * 60 * 1000; // observed on this machine, see RECIPE
 export const IDLE_COMPACT_FROM = 200_000;
@@ -115,6 +115,9 @@ export function parseSnapshot(line) {
 export default {
   id: "claude",
   matches: ["claude", "claude-code"],
+  // No number may also mean the status line file couldn't be read this time (readText gives null
+  // for both): the reader reads again on every look then, without a backoff, but keeps no stats.
+  keepsNoReading: false,
 
   // `memo`: the reader's per-terminal store (empty again for another terminal or program).
   async locate(agent, io, memo = {}) {
@@ -156,7 +159,9 @@ export default {
     const statusFile = await byTerminalFile(io, "claude", source.terminal, source.pid);
     const st = fromStatus(statusFile, source.session);
     const stAt = st ? Math.max(statusFile.at, (await io.stat(source.statusFile))?.mtime ?? 0) : null;
-    const tr = source.transcript ? await scanTail(io, source.transcript, findTranscript) : null;
+    const scan = source.transcript ? await scanTail(io, source.transcript, findTranscript) : null;
+    const tr = scan && scan !== NO_READING ? scan : null;
+    const failed = Boolean(source.transcript) && scan === null; // the tail failed: an error
 
     let window = st?.window ?? null, windowFrom = window ? "status-line" : null;
     if (!window && source.transcript) {
@@ -173,7 +178,8 @@ export default {
     if (st?.used != null) cands.push({ used: st.used, at: stAt, source: "status-line" });
     if (tr?.usage) cands.push({ used: tr.usage.used, at: tr.usage.at, source: "transcript" });
     if (tr?.compaction && (!tr.usage || tr.compaction.at > tr.usage.at)) cands.push({ used: tr.compaction.post, at: tr.compaction.at, source: "compaction" });
-    if (!cands.length) return null;
+    // Nothing to show: read, no number (no answer yet, no transcript yet), unless the tail failed.
+    if (!cands.length) return failed ? null : NO_READING;
     const best = cands.reduce((a, b) => (b.at > a.at ? b : a));
 
     const reading = {

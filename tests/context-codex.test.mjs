@@ -5,6 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import codex, { rolloutId, rolloutByPrefix, findRollout, threadSource } from "../mods/roundup-pane/context/strategies/codex.js";
 import { localParts } from "../mods/roundup-pane/context/locate.js";
+import { NO_READING } from "../mods/roundup-pane/context/tail.js";
 import { contextIo, fixture, jsonl } from "./support/context-io.mjs";
 
 const ID = "01a1d750-0653-7190-914d-7c804d23545c";
@@ -70,9 +71,9 @@ test("token_count with info null is no new reading; a compaction or a model chan
   let r = await reading(setup({ files: { [FILE]: rollout + jsonl({ timestamp: ts, type: "event_msg", payload: { type: "token_count", info: null } }) } }));
   assert.equal(r.used, 18_298);
   r = await reading(setup({ files: { [FILE]: rollout + jsonl({ timestamp: ts, type: "compacted", payload: { message: "" } }) } }));
-  assert.equal(r, null);
+  assert.equal(r, NO_READING, "read, no number: not an error");
   r = await reading(setup({ files: { [FILE]: rollout + jsonl({ timestamp: ts, type: "turn_context", payload: { model: "gpt-6.1-mini" } }) } }));
-  assert.equal(r, null);
+  assert.equal(r, NO_READING);
   // A new token_count after the change counts again, with the new model.
   r = await reading(setup({ files: { [FILE]: rollout + jsonl(
     { timestamp: ts, type: "turn_context", payload: { model: "gpt-6.1-mini" } },

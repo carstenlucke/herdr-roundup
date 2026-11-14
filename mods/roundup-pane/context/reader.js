@@ -8,11 +8,14 @@
 //   compaction. Shown again: at once. A status change while not shown waits for that.
 // - A source is read only when one of its files changed (size or modification time) or its last
 //   read gave no reading; finding it (hc get, the session file) is cheap and runs on each look.
-//   Nothing found: tried again with a backoff, not on every render.
+//   Nothing found, or a failed read: tried again with a backoff, not on every render. Read without
+//   a number (NO_READING): no backoff, the schedule above; read again when a file changed, or on
+//   every look where the strategy can't tell that from a failed read (keepsNoReading false).
 // - Module code is shared by the copies: one queue lets two reads run at once, not all panes'.
 
 import { STRATEGIES, strategyFor } from "./registry.js";
 import { NO_ANSWER } from "./locate.js";
+import { NO_READING } from "./tail.js";
 
 export const WORKING_MS = 15_000;
 export const IDLE_MS = 60_000;
@@ -209,12 +212,12 @@ export class ContextReader {
     });
   }
 
-  // How long until the next look.
+  // How long until the next look: a backoff only after misses (nothing found, a failed read).
   delay() {
     if (this.followUp) { this.followUp = false; return AFTER_STATUS_MS; }
-    if (!this.reading) return RETRY_MS[Math.min(this.misses - 1, RETRY_MS.length - 1)] ?? RETRY_MS[0];
+    if (!this.reading && this.misses > 0) return RETRY_MS[Math.min(this.misses - 1, RETRY_MS.length - 1)];
     let ms = this.status === "working" && this.shown ? WORKING_MS : IDLE_MS;
-    const at = this.reading.idleCompactAt;
+    const at = this.reading?.idleCompactAt;
     if (Number.isFinite(at)) {
       const now = this.io.now();
       for (const t of [at + COMPACT_CHECK_MS, at + HINT_FOR_MS + 1000]) if (t > now) ms = Math.min(ms, t - now);
@@ -222,10 +225,11 @@ export class ContextReader {
     return ms;
   }
 
-  set(reading, gen) {
+  // `settled`: read, and no number (NO_READING): no reading, but no miss either.
+  set(reading, gen, settled = false) {
     if (gen !== this.gen) return false;
     const r = valid(reading);
-    this.misses = r ? 0 : this.misses + 1;
+    this.misses = r || settled ? 0 : this.misses + 1;
     const changed = JSON.stringify(r) !== JSON.stringify(this.reading);
     this.reading = r;
     return changed;
@@ -244,7 +248,8 @@ export class ContextReader {
     const key = sourceKey(src);
     const stats = await Promise.all(src.files.map((f) => io.stat(f)));
     if (gen !== this.gen) return false;
-    // Nothing new: the reading stands. (key is kept only beside a reading, so there is one.)
+    // Nothing new: the reading stands (key is kept only beside a reading, or after NO_READING of
+    // a strategy that keeps it: then the meter stays empty).
     if (key === this.key && sameStats(stats, this.stats)) return false;
     let r = await strategy.read(src, io, this.memo);
     if (gen !== this.gen) return false;
@@ -254,6 +259,12 @@ export class ContextReader {
     // No answer from hc (slow, failed) proves nothing: the reading stands, the next look checks again.
     if (!fg) { this.key = this.stats = null; return false; }
     if (fg.pid !== src.pid) { this.key = this.stats = null; return this.set(null, gen); }
+    // Read without a number: the meter goes, with no backoff; its stats are kept only where the
+    // strategy says the file alone decides (then read again only when a file changes).
+    if (r === NO_READING) {
+      if (strategy.keepsNoReading === true) { this.key = key; this.stats = stats; } else this.key = this.stats = null;
+      return this.set(null, gen, true);
+    }
     // Only a reading counts as read: no reading (a failed tail, a file being written) is tried
     // again on the next look, not taken as "unchanged" until a file of it changes.
     if (valid(r)) { this.key = key; this.stats = stats; } else this.key = this.stats = null;

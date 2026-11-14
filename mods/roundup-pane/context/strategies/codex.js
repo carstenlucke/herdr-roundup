@@ -10,7 +10,7 @@
 //   one in the same process. A shared daemon's files lie outside the process tree.
 
 import { NO_ANSWER, foreground, byTitle, byOpenFile, uuid7Time, localParts, parseJson } from "../locate.js";
-import { scanTail, fromEnd } from "../tail.js";
+import { scanTail, fromEnd, NO_READING } from "../tail.js";
 
 const ROLLOUT = /\/rollout-[^/]*\.jsonl$/;
 const DAY = 24 * 60 * 60 * 1000;
@@ -74,6 +74,9 @@ export function findRollout(lines, whole) {
 export default {
   id: "codex",
   matches: ["codex"],
+  // A rollout read without a number (a compaction or model change after the last count) stays
+  // so until the file changes: the reader keeps its stats then, and reads it again only then.
+  keepsNoReading: true,
 
   // `memo`: the reader's per-terminal store (empty again for another terminal or program).
   async locate(agent, io, memo = {}) {
@@ -114,6 +117,7 @@ export default {
 
   async read(source, io) {
     const r = await scanTail(io, source.file, findRollout);
+    if (r === NO_READING) return NO_READING;
     if (!r) return null;
     return {
       used: r.used,

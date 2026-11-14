@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { tokens, share, percentText, severity, tier, TIERS, usedText } from "../mods/roundup-pane/context/text.js";
-import { completeLines, fromEnd, scanTail, FIRST } from "../mods/roundup-pane/context/tail.js";
+import { completeLines, fromEnd, scanTail, FIRST, NO_READING } from "../mods/roundup-pane/context/tail.js";
 import { byTitle, uuid7Time, byTerminalFile, integrationFile, localParts } from "../mods/roundup-pane/context/locate.js";
 import { strategyFor, STRATEGIES } from "../mods/roundup-pane/context/registry.js";
 import { contextIo } from "./support/context-io.mjs";
@@ -74,9 +74,10 @@ test("scanTail reads 256 KiB, then four times more while nothing is found, and s
   };
   assert.equal(await scanTail(io, "/f", find), 1);
   assert.deepEqual(io.calls.filter((c) => c[0] === "tail").map((c) => c[2]), [FIRST, FIRST * 4]);
-  assert.equal(await scanTail(io, "/missing", find), null);
+  assert.equal(await scanTail(io, "/missing", find), null, "no file: an error");
   const none = contextIo({ files: { "/g": '{"other":1}\n' } });
-  assert.equal(await scanTail(none, "/g", find), null);
+  assert.equal(await scanTail(none, "/g", find), NO_READING, "find said null: read, no number");
+  assert.equal(await scanTail(none, "/g", () => undefined), NO_READING, "the whole file read, nothing found");
 });
 
 test("byTitle: the thread id whole or as Codex cuts it; none, two or a shorter one is null", () => {

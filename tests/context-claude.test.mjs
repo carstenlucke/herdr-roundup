@@ -5,6 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import claude, { usageTokens, fromStatus, findTranscript, parseSnapshot, displayTokens, slug, checkSession, IDLE_COMPACT_MS, FIND_AGAIN_MS } from "../mods/roundup-pane/context/strategies/claude.js";
 import { integrationFile, NO_ANSWER } from "../mods/roundup-pane/context/locate.js";
+import { NO_READING } from "../mods/roundup-pane/context/tail.js";
 import { contextIo, fixture, jsonl } from "./support/context-io.mjs";
 
 const SID = "0fbf3e48-42ea-40d5-b3ed-40730f7e7b44";
@@ -175,8 +176,8 @@ test("a changed compaction setting in the agent's environment goes with the read
 
 test("a session just started (no answer yet, status line with usage null) shows nothing", async () => {
   const fresh = { ...stdin, context_window: { ...stdin.context_window, current_usage: null, used_percentage: null } };
-  assert.equal(await reading(setup({ transcript: upTo(5), status: fresh })), null);
-  assert.equal(await reading(setup({ transcript: null, status: fresh })), null);
+  assert.equal(await reading(setup({ transcript: upTo(5), status: fresh })), NO_READING, "read, no number: not an error");
+  assert.equal(await reading(setup({ transcript: null, status: fresh })), NO_READING, "no transcript yet: not an error either");
 });
 
 test("fromStatus: whole-number used_percentage is not used, the window must be a positive number", () => {
