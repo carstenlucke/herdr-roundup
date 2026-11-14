@@ -88,8 +88,8 @@ export function makeIo() {
       let level = [String(pid)];
       for (let depth = 0; depth < 4 && level.length; depth++) {
         const next = [];
-        for (const p of level) {
-          const out = await run("pgrep", ["-P", p]);
+        // One level at once: its children depend only on the level before.
+        for (const out of await Promise.all(level.map((p) => run("pgrep", ["-P", p])))) {
           if (out) next.push(...out.split("\n").filter((x) => /^\d+$/.test(x)));
         }
         pids.push(...next);

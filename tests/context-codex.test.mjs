@@ -95,3 +95,51 @@ test("another terminal's process gives nothing; CODEX_HOME replaces ~/.codex", a
   const r = await reading(setup({ files: { [moved]: rollout }, env: { HC_TERMINAL_ID: "t8", CODEX_HOME: "/Users/a/.codex-alt" } }));
   assert.equal(r.used, 18_298);
 });
+
+// Direct mode on repeated looks with the reader's memo (PR #38 review, finding 9).
+const OTHER = `${DIR}/rollout-2026-11-14T00-50-00-01a1d750-bbbb-7190-914d-111111111111.jsonl`;
+const heads = (io) => io.calls.filter((c) => c[0] === "head").map((c) => c[1]);
+const look = async (io, memo) => {
+  const src = await codex.locate({ terminal: "t8" }, io, memo);
+  return src && codex.read(src, io);
+};
+
+test("direct mode: whose thread a rollout is, is read once per path while it stays open", async () => {
+  const guardian = rollout.replace('"thread_source":"user"', '"thread_source":"guardian_review"');
+  const g = `${DIR}/rollout-2026-11-14T00-49-00-01a1d750-aaaa-7190-914d-000000000000.jsonl`;
+  const open = { [PID]: [FILE, g] };
+  const io = setup({ title: "Codex", files: { [FILE]: rollout, [g]: guardian }, open });
+  const memo = {};
+  for (let i = 0; i < 3; i++) assert.equal((await look(io, memo)).used, 18_298);
+  assert.deepEqual(heads(io), [FILE, g], "each head once");
+  assert.equal(io.calls.filter((c) => c[0] === "openFiles").length, 3, "the open files are asked on every look");
+  open[PID] = [FILE];
+  await look(io, memo);
+  assert.deepEqual([...memo.threadSources.keys()], [FILE], "a path no longer open is forgotten");
+});
+
+test("direct mode: a failed head or a first line still being written is asked again on the next look", async () => {
+  const open = { [PID]: [FILE] };
+  const io = setup({ title: "Codex", files: {}, open });
+  const memo = {};
+  assert.equal(await look(io, memo), null, "head failed (no file yet)");
+  io.files[FILE] = rollout.slice(0, 300); // the first line, cut
+  assert.equal(await look(io, memo), null);
+  io.files[FILE] = rollout;
+  assert.equal((await look(io, memo)).used, 18_298);
+  assert.equal(heads(io).length, 3);
+});
+
+test("direct mode: the same process on another thread (`/new`) reads the new rollout; two user threads open give nothing", async () => {
+  const other = rollout.replace(/"total_tokens":18298/g, '"total_tokens":777');
+  const open = { [PID]: [FILE] };
+  const io = setup({ title: "Codex", files: { [FILE]: rollout, [OTHER]: other }, open });
+  const memo = {};
+  assert.equal((await look(io, memo)).used, 18_298);
+  open[PID] = [OTHER]; // the old file is still on disk, no longer open
+  const r = await look(io, memo);
+  assert.equal(r.used, 777);
+  assert.equal(r.session, "01a1d750-bbbb-7190-914d-111111111111");
+  open[PID] = [FILE, OTHER];
+  assert.equal(await look(io, memo), null, "ambiguous");
+});

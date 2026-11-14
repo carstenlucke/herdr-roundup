@@ -6,7 +6,8 @@
 //   digits are the thread's creation time, which is the local time in the rollout's folder and name
 //   (sessions/YYYY/MM/DD/rollout-YYYY-MM-DDTHH-MM-SS-<id>.jsonl). Exactly one file must match.
 // - Direct mode (`codex --no-daemon`, as Herdr starts it): the one user rollout the process or one
-//   of its descendants holds open (lsof). A shared daemon's files lie outside the process tree.
+//   of its descendants holds open (lsof), asked on every look: `/new` or a resume opens another
+//   one in the same process. A shared daemon's files lie outside the process tree.
 
 import { foreground, byTitle, byOpenFile, uuid7Time, localParts, parseJson } from "../locate.js";
 import { scanTail, fromEnd } from "../tail.js";
@@ -74,7 +75,8 @@ export default {
   id: "codex",
   matches: ["codex"],
 
-  async locate(agent, io) {
+  // `memo`: the reader's per-terminal store (empty again for another terminal or program).
+  async locate(agent, io, memo = {}) {
     const fg = await foreground(io, agent.terminal);
     if (!fg) return null;
     const env = await io.env(fg.pid);
@@ -89,8 +91,20 @@ export default {
     }
     const open = await byOpenFile(io, fg.pid, ROLLOUT);
     if (!open?.length) return null;
+    // Whose thread a rollout is never changes (its first line): kept per path while the process
+    // holds it open, so a look doesn't read 256 KiB of each again. Only an answer is kept: a failed
+    // head or a first line still being written is asked again next time.
+    const known = memo.threadSources instanceof Map ? memo.threadSources : (memo.threadSources = new Map());
+    for (const f of [...known.keys()]) if (!open.includes(f)) known.delete(f);
     const users = [];
-    for (const f of open) if (threadSource(await io.head(f, 256 * 1024)) === "user") users.push(f);
+    for (const f of open) {
+      let source = known.get(f);
+      if (source === undefined) {
+        source = threadSource(await io.head(f, 256 * 1024));
+        if (source !== null) known.set(f, source);
+      }
+      if (source === "user") users.push(f);
+    }
     if (users.length !== 1) return null; // none, or two user threads in one process: ambiguous
     const thread = rolloutId(users[0].slice(users[0].lastIndexOf("/") + 1));
     return { ...base, file: users[0], thread, how: "open-file", files: [users[0]] };
