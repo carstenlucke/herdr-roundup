@@ -147,7 +147,8 @@ export default class Pane extends View {
     const st = p.status;
     const pane = p.pane;
     this.context?.see(p, focused()?.tab === p.tab, cx);
-    const ctx = this.context && meter(t, { pane, reading: this.context.reading, tier: tier(this.width), agent: this.context.strategy?.id, hint: this.context.hint, covered: Boolean(shared("roundup-menu.open")) });
+    const ctx = this.context && meter(t, { pane, reading: this.context.reading, tier: tier(this.width), agent: this.context.strategy?.id, hint: this.context.hint, covered: Boolean(shared("roundup-menu.open")),
+      head: { pic: icon(p.program, 14, t.dim), name, id: id.shown, font: settings().font_family ?? "JetBrains Mono" } });
     return h_flex()
       .id(`pane-head-${pane}`)
       .size_full()
@@ -189,16 +190,18 @@ export default class Pane extends View {
         .on_click((e, cx) => { if (e.click_count === 2) { cx.stop_propagation(); this.copyId(cx, id); } })
         .child(this.copied ? "copied" : id.shown))
       .child(div().flex_1().truncate().text_color(t.dim).child(folder(p.cwd, home())))
-      .when(Boolean(ctx), (el) => el.child(ctx))
-      .when(st === "working", el => el.child(svg("mods/workspace-chrome/spinner.svg").size(12).flex_none().text_color(t.working).spin(900)))
-      .when(st === "blocked", el => el.child(div().flex_none().px(6).h(18).flex().items_center().rounded(5).bg(t.blocked + "26").text_size(10.5).font_semibold().text_color(t.blocked).child("Needs you")))
-      .when(st === "done", el => el.child(div().size(7).flex_none().rounded(4).bg(t.done)))
+      // Roundup: the hover buttons come before the meter and the status (Herdr: after the status),
+      // so those two stay where they are when the pointer enters the header.
       .when(this.hovered, el => el
         .child(this.button(t, `ph-n-${pane}`, "rename", "Rename", () => this.openRename(p, given, fallback)))
         .child(this.button(t, `ph-r-${pane}`, "split-right", "Split right", () => run("pane.split", { direction: "right", pane })))
         .child(this.button(t, `ph-d-${pane}`, "split-down", "Split down", () => run("pane.split", { direction: "down", pane })))
         .child(this.button(t, `ph-z-${pane}`, p.zoomed ? "unzoom" : "zoom", p.zoomed ? "Unzoom" : "Zoom", () => run("pane.zoom", { pane })))
-        .child(this.button(t, `ph-x-${pane}`, "close", "Close", () => closePane(pane))));
+        .child(this.button(t, `ph-x-${pane}`, "close", "Close", () => closePane(pane))))
+      .when(Boolean(ctx), (el) => el.child(ctx))
+      .when(st === "working", el => el.child(svg("mods/workspace-chrome/spinner.svg").size(12).flex_none().text_color(t.working).spin(900)))
+      .when(st === "blocked", el => el.child(div().flex_none().px(6).h(18).flex().items_center().rounded(5).bg(t.blocked + "26").text_size(10.5).font_semibold().text_color(t.blocked).child("Needs you")))
+      .when(st === "done", el => el.child(div().size(7).flex_none().rounded(4).bg(t.done)));
   }
 
   // --- the rename dialog (this mod as an overlay), shaped like Herdr's `prompt` ---

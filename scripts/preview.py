@@ -78,6 +78,7 @@ ICON = {
 }
 # roundup-pane's and roundup-preview's own icons, drawn on a 16px grid.
 ICON16 = {
+    "alert": '<path d="M8 2.2 14.2 13H1.8Z"/><path d="M8 6.4v3"/><path d="M8 11.4v.1"/>',
     "rename": '<path d="M10.5 3.2l2.3 2.3L6 12.3l-2.9.6.6-2.9z"/><path d="M9.2 4.5l2.3 2.3"/>',
     "split-right": '<rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M8 3v10"/>',
     "split-down": '<rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 8h12"/>',
@@ -470,29 +471,39 @@ def pane(x, w, prog, name, address, status, focus, lines, bottom, hover=False, y
     hx += chip + 8
     text(hx, PY + 19.5, "~/code/atlas-search-filters", 12, "dim")
     right = x + w - 10
-    if hover:
-        # 20px buttons (3px padding round a 14px icon), 8px apart, as the header's gap.
-        right -= 5 * 20 + 4 * 8
-        for i, glyph in enumerate(["rename", "split-right", "split-down", "zoom", "x"]):
-            bx_ = right + i * 28
-            if i == 0:
-                rect(bx_, PY + 5, 20, 20, "hover", rx=4)
-            icon(glyph, bx_ + 3, PY + 8, 14, "foreground" if i == 0 else "dim", sw=1.3)
-        right -= 8
+    # Right to left: the status, the meter, then (on hover) the buttons, which roundup-pane puts
+    # before the meter so the meter and the status don't move.
+    mx = right - (12 + 8 if status in ("working", "done") else 0)
     if meter:
+        # The pill of the mockup: 20px high, framed in border, rounded 5, 7px padding, 6px gap,
+        # 11.5px text; the percent at least 26px wide.
         used, window = meter
         pct = used * 100 / window
         sev = "blocked" if round(pct) >= 80 else "working" if round(pct) >= 65 else "accent"
-        mx = right - (12 + 8 if status in ("working", "done") else 0)
-        METERS[address] = (mx, PY)
-        words = f"{tokens(used)} / {tokens(window)}"
-        text(mx, PY + 19, words, 11, "dim", anchor="end")
-        mx -= tw(words, 11) + 5
         loud = sev != "accent"
-        text(mx, PY + 19, f"{round(pct)}%", 11, "foreground" if loud else "muted", 500 if loud else 400, anchor="end")
-        mx -= tw(f"{round(pct)}%", 11, 500 if loud else 400) + 5
-        rect(mx - 30, PY + 13, 30, 4, sev, rx=2, op=0.25)
-        rect(mx - 30, PY + 13, max(1, 30 * min(pct, 100) / 100), 4, sev, rx=2)
+        words = f"{tokens(used)} / {tokens(window)}"
+        ptxt, pw_ = f"{round(pct)}%", max(26, tw(f"{round(pct)}%", 11.5, 500 if loud else 400) + (13 if loud else 0))
+        pill = 7 + 30 + 6 + pw_ + 6 + tw(words, 11.5) + 7
+        px_ = mx - pill
+        METERS[address] = (mx, PY)
+        frame(px_, PY + 5, pill, 20, "border", rx=5)
+        rect(px_ + 7, PY + 13, 30, 4, sev, rx=2, op=0.25)
+        rect(px_ + 7, PY + 13, max(1, 30 * min(pct, 100) / 100), 4, sev, rx=2)
+        nx = px_ + 7 + 30 + 6
+        if loud:
+            icon("alert", nx, PY + 10, 10, sev, sw=1.8)
+            nx += 13
+        text(nx, PY + 19, ptxt, 11.5, "foreground" if loud else "muted", 500 if loud else 400)
+        text(px_ + 7 + 30 + 6 + pw_ + 6, PY + 19, words, 11.5, "dim")
+        mx = px_ - 8
+    if hover:
+        # 20px buttons (3px padding round a 14px icon), 8px apart, as the header's gap.
+        bx0 = mx - (5 * 20 + 4 * 8)
+        for i, glyph in enumerate(["rename", "split-right", "split-down", "zoom", "x"]):
+            bx_ = bx0 + i * 28
+            if i == 0:
+                rect(bx_, PY + 5, 20, 20, "hover", rx=4)
+            icon(glyph, bx_ + 3, PY + 8, 14, "foreground" if i == 0 else "dim", sw=1.3)
     if status == "working":
         spinner(right - 6, PY + 15, "working", 5)
     elif status == "done":
@@ -1160,21 +1171,34 @@ if SCENE == "quicklook" or POSTER:
     add('</g>')
 
 # The context scene: the pointer rests on Claude Code's meter, its hover card hangs below it, its
-# top right at the meter's right (anchor top_right), 4px down; 280px wide, 10px padding, rows 4px apart.
-CARD_W = 280
+# top right at the meter's right (anchor top_right), 4px down. The card as context-view.js draws it
+# (the mockup's): 260px, 9 x 11px padding, rounded 8; the pane's icon, name and id chip; the tokens
+# in use big with the window and the percent; rows of label, value and a dim extra, 20px each.
+CARD_W = 260
 if SCENE == "context":
     mr, mt = METERS["t4"]
-    rows_ = [("Context window", 10.5, "dim", 600), ("412k of 1M in use · 41%", 13, "foreground", 500),
-             ("588k free", 11.5, "muted", 400), ("Model claude-opus-5-5", 11.5, "muted", 400),
-             ("Read 14:02, from Claude Code's status line", 11.5, "muted", 400)]
-    heights = [round(sz * 1.35) for _, sz, _, _ in rows_]
-    CARD_H = 20 + sum(heights) + 4 * (len(rows_) - 1)
+    rows_ = [("Free", "588k", "59%"), ("Model", "claude-opus-5-5", ""), ("Read", "14:02", "status line")]
+    CARD_H = 9 + 16 + 6 + 20 + 5 + 20 * len(rows_) + 9
     CARD_X, CARD_Y = mr - CARD_W, mt + 30 + 4
-    overlay(CARD_X, CARD_Y, CARD_W, CARD_H)
-    ty = CARD_Y + 10
-    for (label, sz, col, wt), hh in zip(rows_, heights):
-        text(CARD_X + 10, ty + hh * 0.78, label, sz, col, wt)
-        ty += hh + 4
+    overlay(CARD_X, CARD_Y, CARD_W, CARD_H, rx=8)
+    x0, y_ = CARD_X + 11, CARD_Y + 9
+    program("claude", x0, y_ + 1, 14, "dim")
+    text(x0 + 14 + 7, y_ + 12, "Claude Code", 12, "foreground", 600)
+    cx_ = x0 + 14 + 7 + tw("Claude Code", 12, 600) + 7
+    chip = mw("t4", 10.5) + 10
+    rect(cx_, y_ - 1, chip, 18, "hover", rx=4)
+    text(cx_ + 5, y_ + 11.5, "t4", 10.5, "dim", family=MONO)
+    y_ += 16 + 6
+    text(x0, y_ + 15, "412k", 15, "foreground", 600)
+    text(x0 + tw("412k", 15, 600) + 5, y_ + 15, "of 1M", 12, "muted")
+    text(CARD_X + CARD_W - 11, y_ + 15, "41%", 12, "foreground", 600, anchor="end")
+    y_ += 20 + 5
+    for label, value, extra in rows_:
+        text(x0, y_ + 14, label, 12, "muted")
+        text(x0 + 84 + 8, y_ + 14, value, 12, "foreground", 600)
+        if extra:
+            text(x0 + 84 + 8 + 50 + 8, y_ + 14, extra, 12, "dim")
+        y_ += 20
 
 # What each scene is cropped to: x, y, width, height. A fourth argument "full" keeps the window.
 CROPS = {

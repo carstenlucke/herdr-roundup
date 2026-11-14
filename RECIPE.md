@@ -118,14 +118,18 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   icon, the pane's name (`foreground`, medium), its id in a small mono chip
   (10.5px, `dim` on `hover`: the terminal's address such as `t5j`, or a mod
   pane's id shortened to `p` and 6 hex digits), the folder in `dim`, the
-  agent's context meter, the agent's status, and on hover rename, split
-  right, split down, zoom and close. The context meter (Claude Code and
-  Codex panes, 11px): a bar 30 × 4px (the fill on a track of the same
-  color at 25% alpha), the percent of the context window in use and the
-  tokens (`4% 18.3k / 475k`); `accent` and a `muted` number below 65%,
-  `working` from 65% and `blocked` from 80%, then with an alert triangle
-  before a `foreground` number. Without a known window only the tokens
-  (`340k`, `muted`). Terminal padding 14 × 12px. Right-clicking a terminal shows Herdr's
+  agent's context meter and the agent's status; on hover rename, split
+  right, split down, zoom and close come in after the folder, before the
+  meter, so the meter and the status don't move (Herdr's own header puts
+  them last). The context meter (Claude Code and Codex panes) is a pill
+  20px high, framed 1px in `border`, rounded 5px, 7px padding, 11.5px
+  text, `hover` under the pointer: a bar 30 × 4px (the fill on a track of
+  the same color at 25% alpha), the percent of the context window in use
+  (at least 26px wide) and the tokens in `dim` (`4% 18.3k / 475k`);
+  `accent` and a `muted` number below 65%, `working` from 65% and
+  `blocked` from 80%, then with an alert triangle before a `foreground`
+  number. Without a known window only the tokens (`340k`, `muted`) in the
+  same pill. Terminal padding 14 × 12px. Right-clicking a terminal shows Herdr's
   pane menu (Split right, Split down, Zoom, where right-clicks go, Close
   pane), then "Ask before closing a pane" with the same three choices, for
   panes only. A terminal outside a tab (a layout terminal block, a window)
@@ -271,14 +275,19 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   the agent works it follows within about 15s (and 2s after each status
   change); idle, within a minute. A narrow header drops the tokens first
   (below 560px), then the bar (below 420px); the percent stays down to 300px.
-  Hovering it for 400ms opens a card (280px, `popover`): the tokens of the
-  window in use and the percent, the tokens free, the model, when and from
-  what it was read, and as it applies: "Idle compaction expected around
-  14:32 (about 55 min after the last answer; observed on this machine)"
-  (`working`) for an idle Claude Code session above 200k, gone 5 min after
-  that time; "Compacted 14:02: 267k → 20.7k"; "~" on a window from
-  `/context`; how to switch on the integration when no window is known;
-  for Codex that `/status` takes a 12k baseline off. The card is empty while
+  Hovering it for 400ms opens a card as in the mockup (260px, `popover`,
+  rounded 8px, 12px text): on top the pane's icon, name (semibold) and id
+  chip as the header shows them; then the tokens in use big (15px,
+  semibold), "of 200k" in `muted` and the percent on the right (with the
+  alert mark from 65%); then rows of label (`muted`), value (semibold) and
+  a `dim` extra: Free (or Over) with its percent, Model, Read with its time
+  and source, Compacted `14:02 267k → 20.7k`, and for an idle Claude Code
+  session above 200k Idle compact `~14:32 estimate` in `working`, gone
+  5 min after that time. Notes below in `dim` 11px: that the idle
+  compaction comes about 55 min after the last answer (observed on this
+  machine), a window from `/context` that rounds it, how to switch on the
+  integration when no window is known, for Codex that `/status` takes a
+  12k baseline off. The card is empty while
   the logo menu (`roundup-menu`) is open. No click. No meter for a shell, a
   mod pane, an agent just started or of another machine, an unknown program,
   or when the source isn't proven (two Codex threads in one process, a file

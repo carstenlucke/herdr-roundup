@@ -3,10 +3,10 @@
 // card's rows (context/card.js), and the header showing it (main.js, through the herdr stub).
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { herdr, reset, mount, pane, agentProgram, program, findAll, texts, walk } from "./support/harness.mjs";
+import { herdr, reset, mount, pane, agentProgram, program, findAll, texts, walk, element } from "./support/harness.mjs";
 
-const { cardRows } = await import("../mods/roundup-pane/context/card.js");
-const { meter, BAR_W } = await import("../mods/roundup-pane/context-view.js");
+const { cardModel } = await import("../mods/roundup-pane/context/card.js");
+const { meter, BAR_W, PILL_H } = await import("../mods/roundup-pane/context-view.js");
 const Pane = (await import("../mods/roundup-pane/main.js")).default;
 
 beforeEach(reset);
@@ -19,6 +19,9 @@ const trigger = (card) => card.style("trigger")[0];
 test("the meter: bar, percent and tokens at full width; the tokens go, then the bar; the percent stays", () => {
   const full = trigger(meter(t, { pane: "p1", reading: R, tier: "full", agent: "claude" }));
   assert.match(words(full), /49%.*97\.6k \/ 200k/);
+  assert.equal(full.style("h")[0], PILL_H, "the pill of the mockup: 20 px high");
+  assert.equal(full.has("border_1"), true, "framed");
+  assert.equal(full.style("border_color")[0], "border");
   const bars = all(full).filter((e) => e.style("w")?.[0] === BAR_W);
   assert.equal(bars.length, 1);
   assert.equal(bars[0].style("bg")[0], "accent40", "the track: the bar's color at low alpha");
@@ -54,33 +57,50 @@ test("Claude without a window: its tokens alone, no bar and no percent; a rounde
   assert.equal(words(rounded), "~5%");
 });
 
-test("the card: tokens of the window, free, model, when and where it was read; empty under an open menu", () => {
-  const rows = cardRows(R, { agent: "claude" }).map((r) => r.text);
-  assert.equal(rows[0], "Context window");
-  assert.equal(rows[1], "97.6k of 200k in use · 49%");
-  assert.equal(rows[2], "102k free");
-  assert.equal(rows[3], "Model claude-opus-5-5");
-  assert.match(rows[4], /^Read \d\d:\d\d, from Claude Code's status line$/);
+const line = (r) => [r.label, r.value, r.extra].filter(Boolean).join(" | ");
+
+test("the card: the tokens in use big with the window and percent; free, model, when and where it was read; empty under an open menu", () => {
+  const m = cardModel(R, { agent: "claude" });
+  assert.deepEqual(m.big, { used: "97.6k", of: "of 200k", percent: "49%", sev: "ok" });
+  const rows = m.rows.map(line);
+  assert.equal(rows[0], "Free | 102k | 51%");
+  assert.equal(rows[1], "Model | claude-opus-5-5");
+  assert.match(rows[2], /^Read \| \d\d:\d\d \| status line$/);
+  assert.deepEqual(m.notes, []);
   const card = meter(t, { pane: "p1", reading: R, tier: "full", covered: true });
   assert.equal(card.style("content")[0].kids.length, 0, "an overlay above it: the card is empty");
 });
 
+test("the card's head as in the mockup: the pane's icon, name and id chip; the percent with its mark from 65 %", () => {
+  const pic = element("image", "icons/claude.svg");
+  const head = { pic, name: "Claude Code", id: "t119", font: "JetBrains Mono" };
+  const content = meter(t, { pane: "p1", reading: R, tier: "full", agent: "claude", head }).style("content")[0];
+  assert.match(words(content), /^Claude Code t119 97\.6k of 200k 49% Free 102k 51%/);
+  assert.ok(all(content).includes(pic), "the header's icon heads the card");
+  const tight = meter(t, { pane: "p1", reading: { ...R, used: 130_000 }, tier: "full", head }).style("content")[0];
+  assert.ok(all(tight).some((e) => e.type === "svg" && e.arg === "mods/roundup-pane/alert.svg"), "an alert mark before 65%");
+  const plain = meter(t, { pane: "p1", reading: R, tier: "full" }).style("content")[0];
+  assert.match(words(plain), /^Context 97\.6k/, "without a head: a plain title");
+});
+
 test("the card names the idle compaction as an estimate, the last compaction, a rounded window and how to get one", () => {
   const hint = Date.UTC(2026, 10, 14, 14, 32);
-  let rows = cardRows({ ...R, compaction: { pre: 267_421, post: 20_693, at: R.at } }, { agent: "claude", hint }).map((r) => r.text);
-  assert.ok(rows.some((r) => /^Idle compaction expected around \d\d:\d\d \(about 55 min after the last answer; observed on this machine\)$/.test(r)));
-  assert.ok(rows.some((r) => /^Compacted \d\d:\d\d: 267k → 20.7k$/.test(r)));
-  rows = cardRows({ ...R, window: 1_000_000, windowRounded: true }, { agent: "claude" }).map((r) => r.text);
-  assert.ok(rows.includes("97.6k of ~1M in use · 10%"));
-  assert.ok(rows.includes("Window from this session's /context, which rounds it"));
-  rows = cardRows({ ...R, window: null }, { agent: "claude" }).map((r) => r.text);
-  assert.equal(rows[1], "97.6k in use · window unknown");
-  assert.ok(rows.some((r) => r.includes("scripts/agent-integrations.sh install claude")));
-  rows = cardRows({ ...R, source: "rollout", model: "gpt-6.1-sol" }, { agent: "codex" }).map((r) => r.text);
-  assert.ok(rows.some((r) => r.includes("12k baseline")));
-  rows = cardRows({ ...R, used: 210_000 }, {}).map((r) => r.text);
-  assert.equal(rows[2], "10k over the window");
-  assert.deepEqual(cardRows(null), []);
+  let m = cardModel({ ...R, compaction: { pre: 267_421, post: 20_693, at: R.at } }, { agent: "claude", hint });
+  assert.ok(m.rows.map(line).some((r) => /^Idle compact \| ~\d\d:\d\d \| estimate$/.test(r)));
+  assert.equal(m.rows.find((r) => r.label === "Idle compact").kind, "warn");
+  assert.ok(m.notes.includes("Expected about 55 min after the last answer, as observed on this machine"));
+  assert.ok(m.rows.map(line).some((r) => /^Compacted \| \d\d:\d\d \| 267k → 20.7k$/.test(r)));
+  m = cardModel({ ...R, window: 1_000_000, windowRounded: true }, { agent: "claude" });
+  assert.deepEqual([m.big.of, m.big.percent], ["of ~1M", "~10%"]);
+  assert.ok(m.notes.includes("Window from this session's /context, which rounds it"));
+  m = cardModel({ ...R, window: null }, { agent: "claude" });
+  assert.deepEqual(m.big, { used: "97.6k", of: "in use · window unknown", percent: "", sev: "ok" });
+  assert.ok(m.notes.some((r) => r.includes("scripts/agent-integrations.sh install claude")));
+  m = cardModel({ ...R, source: "rollout", model: "gpt-6.1-sol" }, { agent: "codex" });
+  assert.ok(m.notes.some((r) => r.includes("12k baseline")));
+  m = cardModel({ ...R, used: 210_000 }, {});
+  assert.equal(line(m.rows[0]), "Over | 10k | beyond the window");
+  assert.equal(cardModel(null), null);
 });
 
 test("the header: no meter for a shell, nor in the rename dialog or the terminal menu (no reader there)", () => {
@@ -106,5 +126,21 @@ test("the header: a Claude pane with a reading shows the meter between the folde
   const at = ids.indexOf("ph-ctx-card-p1");
   assert.ok(at > 0, `the card trigger is a child of the header: ${ids}`);
   assert.equal(root.kids[at - 1].has("flex_1"), true, "right after the folder");
+  view.close();
+});
+
+test("the header: under the pointer the buttons come before the meter, so the meter and the status stay put", () => {
+  herdr.set({ panes: [pane("p1", "tb1", { terminal: "t1", program: agentProgram("claude"), status: "working", cwd: "/x" })], focused: { tab: "tb1" } });
+  const { view, render } = mount(Pane, { props: { pane: "p1", terminal: "t1" } });
+  render();
+  view.context.reading = R;
+  const tail = (root) => root.kids.slice(-2).map((k) => (k.type === "HoverCard" ? k.arg : k.type));
+  const before = tail(render());
+  view.hovered = true;
+  const root = render();
+  assert.deepEqual(tail(root), before, "the last two children, meter and spinner, are the same with and without hover");
+  const ids = root.kids.map((k) => (k.type === "HoverCard" ? k.arg : k.elementId ?? k.type));
+  assert.ok(ids.indexOf("ph-x-p1") < ids.indexOf("ph-ctx-card-p1"), `close before the meter: ${ids}`);
+  assert.equal(root.kids[ids.indexOf("ph-n-p1") - 1].has("flex_1"), true, "the buttons right after the folder");
   view.close();
 });
