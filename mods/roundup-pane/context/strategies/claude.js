@@ -116,7 +116,8 @@ export default {
   id: "claude",
   matches: ["claude", "claude-code"],
 
-  async locate(agent, io) {
+  // `memo`: the reader's per-terminal store (empty again for another terminal or program).
+  async locate(agent, io, memo = {}) {
     const fg = await foreground(io, agent.terminal);
     if (!fg || fg === NO_ANSWER) return fg;
     const env = await io.env(fg.pid);
@@ -129,7 +130,7 @@ export default {
     const path = status?.claude?.session_id === session.sessionId ? status.claude.transcript_path : null;
     let transcript = typeof path === "string" && path.endsWith(`${session.sessionId}.jsonl`) ? path : null;
     if (!transcript && typeof session.cwd === "string") transcript = `${home}/projects/${slug(session.cwd)}/${session.sessionId}.jsonl`;
-    if (transcript && !(await io.stat(transcript))) transcript = await findBySession(io, home, session.sessionId);
+    if (transcript && !(await io.stat(transcript))) transcript = await findBySession(io, home, session.sessionId, memo);
     const setting = COMPACT_ENV.filter((k) => env?.[k]).map((k) => `${k}=${env[k]}`);
     return {
       id: "claude",
@@ -205,13 +206,30 @@ async function snapshot(source, io, memo) {
 }
 
 // Should the slug ever not match: each session id is in exactly one project folder.
-async function findBySession(io, home, id) {
+// How long a search that found nothing holds before the next: a fresh session has no transcript
+// yet, and the folders are many (one stat each).
+export const FIND_AGAIN_MS = 2 * 60_000;
+// The transcript by its session id in any project folder, when it isn't where the cwd's slug puts
+// it. Only one match counts. Kept per Claude home and session in `memo`: a hit while its file is
+// there (gone: searched again at once), a miss for FIND_AGAIN_MS. The slug path and the status
+// line's path are still asked on every look, before this, so a transcript written there is found
+// at once; one written elsewhere can wait that long.
+async function findBySession(io, home, id, memo = {}) {
+  const found = memo.transcripts instanceof Map ? memo.transcripts : (memo.transcripts = new Map());
+  const key = `${home}\n${id}`;
+  const last = found.get(key);
+  if (last?.path) {
+    if (await io.stat(last.path)) return last.path;
+    found.delete(key);
+  } else if (last && io.now() - last.at < FIND_AGAIN_MS) return null;
   const dirs = await io.list(`${home}/projects`);
-  if (!Array.isArray(dirs)) return null;
   const hits = [];
-  for (const d of dirs) {
-    const p = `${home}/projects/${d}/${id}.jsonl`;
-    if (await io.stat(p)) hits.push(p);
+  for (let i = 0; Array.isArray(dirs) && i < dirs.length; i += 8) {
+    const paths = dirs.slice(i, i + 8).map((d) => `${home}/projects/${d}/${id}.jsonl`);
+    const stats = await Promise.all(paths.map((p) => io.stat(p)));
+    paths.forEach((p, k) => { if (stats[k]) hits.push(p); });
   }
-  return hits.length === 1 ? hits[0] : null;
+  const path = hits.length === 1 ? hits[0] : null;
+  found.set(key, { path, at: io.now() });
+  return path;
 }

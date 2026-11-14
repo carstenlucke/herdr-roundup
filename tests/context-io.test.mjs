@@ -11,7 +11,7 @@ import { clock, flush } from "./support/clock.mjs";
 import { makeCx } from "./support/cx.mjs";
 import { makeQueue } from "../mods/roundup-pane/context/reader.js";
 
-const { makeIo, parseEnv, parseStat, parseLsof, HC_MS } = await import("../mods/roundup-pane/context-io.js");
+const { makeIo, parseEnv, parseStat, parseLsof, descendants, HC_MS } = await import("../mods/roundup-pane/context-io.js");
 
 const dir = mkdtempSync(join(realpathSync(tmpdir()), "context-io-"));
 after(() => rmSync(dir, { recursive: true, force: true }));
@@ -101,4 +101,38 @@ test("output cut off at exec's limit gives no reading", async () => {
   const f = join(dir, "v.jsonl");
   writeFileSync(f, "{}\n");
   assert.equal(await makeIo().tail(f, 10), null);
+});
+
+test("descendants: the process and four levels below it from one ps, each once; bad lines skipped", () => {
+  const ps = [
+    "    1     0", // launchd
+    "  100     1", // the agent
+    "  101   100", "  102   100", // two children
+    "  103   101", "  104   103", "  105   104", // down to the fourth level below
+    "  106   105", // the fifth: not taken
+    "  200     1", // someone else's
+    "  x   100", "  0   100", "", "  107   abc",
+  ].join("\n");
+  assert.deepEqual(descendants(ps, 100).sort(), ["100", "101", "102", "103", "104", "105"]);
+  assert.deepEqual(descendants(ps, 100, 1).sort(), ["100", "101", "102"]);
+  assert.deepEqual(descendants("  5 4\n  4 5\n", 4), ["4", "5"], "a cycle doesn't repeat");
+  assert.deepEqual(descendants("", 9), ["9"]);
+  assert.equal(descendants(null, 9), null);
+});
+
+test("openFiles asks ps once, then lsof for the tree; a failed ps gives null, not the root's files alone", async () => {
+  herdr.onExec((c) => {
+    if (c.command === "ps") return { code: 0, stdout: "  100     1\n  101   100\n  102   101\n" };
+    if (c.command === "lsof") return { code: 1, stdout: "p100\nn/a/rollout-1.jsonl\np102\nn/a/rollout-2.jsonl\n" }; // exit 1: a pid gone meanwhile
+    return undefined;
+  });
+  const io = makeIo();
+  assert.deepEqual(await io.openFiles(100), ["/a/rollout-1.jsonl", "/a/rollout-2.jsonl"]);
+  assert.equal(herdr.calls("exec").filter((c) => c[0] === "ps").length, 1);
+  assert.deepEqual(herdr.calls("exec").find((c) => c[0] === "lsof")[1], ["-Fn", "-p", "100,101,102"]);
+  assert.equal(herdr.calls("exec").filter((c) => c[0] === "pgrep").length, 0);
+  reset();
+  herdr.onExec((c) => (c.command === "ps" ? { code: 1, stdout: "" } : c.command === "lsof" ? { code: 0, stdout: "n/a/x\n" } : undefined));
+  assert.equal(await makeIo().openFiles(100), null);
+  assert.equal(herdr.calls("exec").filter((c) => c[0] === "lsof").length, 0);
 });

@@ -149,11 +149,13 @@ export default class Pane extends View {
     const name = given || fallback;
     const id = paneId(p);
     const pic = icon(p.program, 14, t.dim);
+    const font = settings().font_family ?? "JetBrains Mono";
     const st = p.status;
     const pane = p.pane;
     this.context?.see(p, focused()?.tab === p.tab, cx);
     const ctx = this.context && meter(t, { pane, reading: this.context.reading, tier: tier(this.width), agent: this.context.strategy?.id, hint: this.context.hint, covered: Boolean(shared("roundup-menu.open")),
-      head: { pic: icon(p.program, 14, t.dim), name, id: id.shown, font: settings().font_family ?? "JetBrains Mono" } });
+      // An icon of its own: an element belongs to the one parent it's given (gpui-kit.d.ts).
+      head: { pic: icon(p.program, 14, t.dim), name, id: id.shown, font } });
     return h_flex()
       .id(`pane-head-${pane}`)
       .size_full()
@@ -187,7 +189,7 @@ export default class Pane extends View {
         .items_center()
         .rounded(4)
         .bg(this.copied ? t.accent + "26" : t.hover)
-        .font_family(settings().font_family ?? "JetBrains Mono")
+        .font_family(font)
         .text_size(10.5)
         .text_color(this.copied ? t.accent : t.dim)
         .hover((s) => s.text_color(t.foreground))

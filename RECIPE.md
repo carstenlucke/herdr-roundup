@@ -512,7 +512,7 @@ can be: `context/text.js` (words, severity, tiers), `context/card.js`
   `context_window_size` or a `/context` line of the same session and
   model. Codex: the thread id in its title (cut to 29 characters; its
   UUIDv7 time names the rollout's folder and file, exactly one must match),
-  else the one user rollout the process holds open (`pgrep`, `lsof`);
+  else the one user rollout the process holds open (`ps`, `lsof`);
   `last_token_usage.total_tokens` of `model_context_window`.
 - **Integrations:** `claude` sets `statusLine.command` to `sh
   '<…>/mods/roundup-pane/integrations/claude-statusline.sh'` (the previous

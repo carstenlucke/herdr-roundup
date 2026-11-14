@@ -39,6 +39,28 @@ export function parseStat(text) {
 // `lsof -Fn`: one "n<path>" line per open file.
 export const parseLsof = (text) => (typeof text === "string" ? text.split("\n").filter((l) => l.startsWith("n/")).map((l) => l.slice(1)) : null);
 
+// `ps -Ao pid=,ppid=`: the process and its descendants down to `depth` levels below it, the
+// root first, each once. Lines that aren't two positive whole numbers are skipped; no text: null.
+export function descendants(text, pid, depth = 4) {
+  if (typeof text !== "string") return null;
+  const kids = new Map();
+  for (const line of text.split("\n")) {
+    const m = /^\s*(\d+)\s+(\d+)\s*$/.exec(line);
+    if (!m || m[1] === "0" || m[2] === "0") continue;
+    if (!kids.has(m[2])) kids.set(m[2], []);
+    kids.get(m[2]).push(m[1]);
+  }
+  const root = String(pid);
+  const seen = new Set([root]);
+  let level = [root];
+  for (let d = 0; d < depth && level.length; d++) {
+    const next = [];
+    for (const p of level) for (const c of kids.get(p) ?? []) if (!seen.has(c)) { seen.add(c); next.push(c); }
+    level = next;
+  }
+  return [...seen];
+}
+
 let statForm = null; // "mac" or "gnu", found on the first call
 
 // `after(ms, f)` → a handle with cancel(): a timer that outlives the call (init's cx.timer.after).
@@ -94,19 +116,12 @@ export function makeIo({ after = null } = {}) {
         return null;
       }
     },
-    // The process and its descendants (pgrep -P, a few levels), then their open files.
+    // The process and its descendants (four levels, from one `ps` of all processes), then their
+    // open files. A failed or cut ps gives null, not the root's files alone: a descendant not seen
+    // could hold another thread's rollout. (A child born after the ps is missed until the next look.)
     async openFiles(pid) {
-      const pids = [String(pid)];
-      let level = [String(pid)];
-      for (let depth = 0; depth < 4 && level.length; depth++) {
-        const next = [];
-        // One level at once: its children depend only on the level before.
-        for (const out of await Promise.all(level.map((p) => run("pgrep", ["-P", p])))) {
-          if (out) next.push(...out.split("\n").filter((x) => /^\d+$/.test(x)));
-        }
-        pids.push(...next);
-        level = next;
-      }
+      const pids = descendants(await run("ps", ["-Ao", "pid=,ppid="]), pid);
+      if (!pids) return null;
       // lsof exits 1 when one of the pids has gone meanwhile; what it printed still holds.
       try {
         const r = await exec("lsof", ["-Fn", "-p", pids.join(",")], { timeout: 10_000 });

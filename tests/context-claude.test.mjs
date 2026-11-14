@@ -3,7 +3,7 @@
 // (Claude Code 2.1.325, 2026-11-14: two short answers, /context, /compact) and an io stub.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import claude, { usageTokens, fromStatus, findTranscript, parseSnapshot, displayTokens, slug, checkSession, IDLE_COMPACT_MS } from "../mods/roundup-pane/context/strategies/claude.js";
+import claude, { usageTokens, fromStatus, findTranscript, parseSnapshot, displayTokens, slug, checkSession, IDLE_COMPACT_MS, FIND_AGAIN_MS } from "../mods/roundup-pane/context/strategies/claude.js";
 import { integrationFile, NO_ANSWER } from "../mods/roundup-pane/context/locate.js";
 import { contextIo, fixture, jsonl } from "./support/context-io.mjs";
 
@@ -184,4 +184,71 @@ test("fromStatus: whole-number used_percentage is not used, the window must be a
   assert.equal(fromStatus(f, SID).window, null);
   assert.equal(fromStatus(f, "other"), null);
   assert.equal(fromStatus({ claude: stdin }, SID).used, 48_321);
+});
+
+// A fresh session: its transcript isn't written yet, where the slug puts it or anywhere. The
+// folder search (one stat per project folder) runs again only after FIND_AGAIN_MS.
+function fresh({ dirs = 30 } = {}) {
+  const io = setup({ transcript: null, status: null });
+  for (let i = 0; i < dirs; i++) io.files[`/Users/a/.claude/projects/-p${i}/other.jsonl`] = "{}\n";
+  io.clock = 0;
+  const memo = {};
+  const look = () => claude.locate({ terminal: "t7" }, io, memo);
+  const lists = () => io.calls.filter((c) => c[0] === "list").length;
+  return { io, memo, look, lists };
+}
+
+test("a fresh session's transcript search runs once per FIND_AGAIN_MS, while the slug path is asked every look", async () => {
+  const { io, look, lists } = fresh();
+  assert.equal((await look()).transcript, null);
+  assert.equal((await look()).transcript, null);
+  assert.equal(lists(), 1, "one search within the interval");
+  const slugStats = io.calls.filter((c) => c[0] === "stat" && c[1] === TRANSCRIPT).length;
+  assert.equal(slugStats, 2, "the slug path on every look");
+  io.files[TRANSCRIPT] = full; // written where expected: found at once
+  assert.equal((await look()).transcript, TRANSCRIPT);
+  assert.equal(lists(), 1);
+});
+
+test("a transcript written off its slug is found after FIND_AGAIN_MS, not before; one in two folders is none", async () => {
+  const { io, look, lists } = fresh();
+  await look();
+  const off = `/Users/a/.claude/projects/-elsewhere/${SID}.jsonl`;
+  io.files[off] = full;
+  assert.equal((await look()).transcript, null, "the miss holds");
+  io.clock += FIND_AGAIN_MS;
+  assert.equal((await look()).transcript, off);
+  assert.equal(lists(), 2);
+  assert.equal((await look()).transcript, off, "the hit is kept");
+  assert.equal(lists(), 2, "and not searched for again");
+  // Ambiguous: a second copy elsewhere. The kept hit is still there, so it stands; a new search
+  // (the kept one gone) finds two and gives none.
+  io.files[`/Users/a/.claude/projects/-third/${SID}.jsonl`] = full;
+  delete io.files[off];
+  io.files[`/Users/a/.claude/projects/-fourth/${SID}.jsonl`] = full;
+  assert.equal((await look()).transcript, null, "two matches: none");
+});
+
+test("a kept hit that is gone is searched for again at once; another home or session doesn't use the memo", async () => {
+  const { io, memo, look, lists } = fresh();
+  const off = `/Users/a/.claude/projects/-elsewhere/${SID}.jsonl`;
+  io.files[off] = full;
+  assert.equal((await look()).transcript, off);
+  delete io.files[off];
+  const moved = `/Users/a/.claude/projects/-moved/${SID}.jsonl`;
+  io.files[moved] = full;
+  assert.equal((await look()).transcript, moved, "found again at once");
+  assert.equal(lists(), 2);
+  // Another session in the same terminal (a new process): its own search, not the old memo.
+  const sid2 = "1fbf3e48-42ea-40d5-b3ed-40730f7e7b44";
+  io.files[`/Users/a/.claude/sessions/${PID}.json`] = JSON.stringify({ pid: PID, sessionId: sid2, cwd: "/Users/a/src/demo", startedAt: STARTED, kind: "interactive" });
+  assert.equal((await look()).transcript, null);
+  assert.equal(lists(), 3);
+  // Another Claude home (CLAUDE_CONFIG_DIR) for the first session: its own search too.
+  io.files[`/Users/a/.cw/sessions/${PID}.json`] = JSON.stringify({ pid: PID, sessionId: SID, cwd: "/Users/a/src/demo", startedAt: STARTED, kind: "interactive" });
+  io.files[`/Users/a/.cw/projects/-x/${SID}.jsonl`] = full;
+  const envs = { HC_TERMINAL_ID: "t7", CLAUDE_CONFIG_DIR: "/Users/a/.cw" };
+  io.env = async () => envs;
+  assert.equal((await look()).transcript, `/Users/a/.cw/projects/-x/${SID}.jsonl`);
+  assert.equal(memo.transcripts.size, 3);
 });
