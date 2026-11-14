@@ -21,17 +21,49 @@ export const RETRY_MS = [15_000, 30_000, 60_000, 120_000, 300_000];
 export const COMPACT_CHECK_MS = 30_000; // after the expected idle compaction
 export const HINT_FOR_MS = 5 * 60_000; // the hint goes 5 min after its time when nothing compacted
 
+// `enter(fn)` → { promise, release }. A job frees its place when fn settles, or at `release()`,
+// whichever comes first, and only once: a header that closes releases its job, as a look hanging
+// on hc or exec in a closed copy may never settle (its deadline was that copy's timer). Released,
+// a waiting job never runs and its promise gives false; a running one gives false at once, and
+// its late answer counts for nothing (the reader's gen drops it anyway).
 export function makeQueue(limit) {
   let running = 0;
   const waiting = [];
   const next = () => {
-    if (running >= limit || !waiting.length) return;
-    running++;
-    const { fn, resolve, reject } = waiting.shift();
-    Promise.resolve().then(fn).then(resolve, reject).finally(() => { running--; next(); });
+    while (running < limit && waiting.length) {
+      const job = waiting.shift();
+      job.state = "running";
+      running++;
+      Promise.resolve().then(job.fn).then(job.resolve, job.reject).finally(job.free);
+    }
+  };
+  const enter = (fn) => {
+    let resolve, reject;
+    const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
+    const job = { fn, resolve, reject, state: "waiting" };
+    job.free = () => {
+      if (job.state !== "running") return;
+      job.state = "done";
+      running--;
+      next();
+    };
+    const release = () => {
+      if (job.state === "waiting") {
+        waiting.splice(waiting.indexOf(job), 1);
+        job.state = "done";
+        resolve(false);
+      } else if (job.state === "running") {
+        job.free();
+        resolve(false);
+      }
+    };
+    waiting.push(job);
+    next();
+    return { promise, release };
   };
   return {
-    run(fn) { return new Promise((resolve, reject) => { waiting.push({ fn, resolve, reject }); next(); }); },
+    enter,
+    run: (fn) => enter(fn).promise,
     get running() { return running; },
     get waiting() { return waiting.length; },
   };
@@ -82,6 +114,7 @@ export class ContextReader {
     this.memo = {};
     this.hint = null;
     this.closed = false;
+    this.job = null; // the look in the queue: released at close()
   }
 
   // From the header's render: its pane as panes() has it, and whether its tab is on screen.
@@ -126,14 +159,17 @@ export class ContextReader {
     this.timer = null;
   }
 
-  // The header goes: no look starts after this, a pending one's answer is dropped (gen), and
-  // nothing arms again. (Herdr cancels the copy's tasks soon after close() as well.)
+  // The header goes: no look starts after this, a pending one's answer is dropped (gen), its place
+  // in the shared queue is freed, and nothing arms again. (Herdr cancels the copy's tasks soon
+  // after close() as well.)
   close() {
     this.closed = true;
     this.gen++;
     this.strategy = null;
     this.again = false;
     this.cancel();
+    this.job?.release();
+    this.job = null;
   }
 
   arm(cx, ms) {
@@ -148,13 +184,16 @@ export class ContextReader {
     const gen = this.gen;
     cx.spawn(async (cx) => {
       let changed = false;
+      const job = this.queue.enter(() => this.look(gen));
+      this.job = job;
       try {
-        changed = await this.queue.run(() => this.look(gen));
+        changed = await job.promise;
       } catch {
         if (gen === this.gen) this.key = this.stats = null; // the next look tries again
         changed = this.set(null, gen);
       } finally {
         this.busy = false;
+        if (this.job === job) this.job = null;
       }
       if (gen !== this.gen) {
         // Another terminal or program meanwhile: its first wake found this read busy and only noted

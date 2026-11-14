@@ -480,3 +480,70 @@ test("a closed reader starts no look and arms nothing, a pending one's answer is
   assert.ok(looks[other] >= 2, "the other reader goes on");
   assert.deepEqual(cx.errors, []);
 });
+
+test("the queue: a released job frees its place once, a waiting one never runs, and late answers free nothing", async () => {
+  const q = makeQueue(2);
+  const gates = [];
+  let started = 0;
+  const hang = () => new Promise((resolve, reject) => { started++; gates.push({ resolve, reject }); });
+  const a = q.enter(hang), b = q.enter(hang), c = q.enter(hang), d = q.enter(hang);
+  await flush();
+  assert.equal(started, 2);
+  assert.equal(q.running, 2);
+  assert.equal(q.waiting, 2);
+  c.release(); // waiting: taken out, never runs, its caller gets false
+  assert.equal(await c.promise, false);
+  assert.equal(q.waiting, 1);
+  a.release(); // running and hanging for good: its place goes to d
+  a.release(); // twice: nothing more
+  assert.equal(await a.promise, false);
+  await flush();
+  assert.equal(started, 3, "d runs in a's place");
+  assert.equal(q.running, 2);
+  assert.equal(q.waiting, 0);
+  gates[0].resolve("late"); // a's late answer
+  await flush();
+  assert.equal(q.running, 2, "a's late answer frees no other job's place");
+  gates[1].reject(new Error("b failed")); // b settles on its own
+  await assert.rejects(b.promise);
+  await flush();
+  assert.equal(q.running, 1);
+  b.release(); // after it settled: nothing
+  assert.equal(q.running, 1);
+  gates[2].resolve(true);
+  assert.equal(await d.promise, true);
+  await flush();
+  assert.equal(q.running, 0, "never below zero");
+  assert.equal(started, 3, "c never ran");
+});
+
+test("headers that close while their looks hang free the shared queue: a third header still reads", async () => {
+  const io = contextIo({ files: { [FILE]: "x" }, terminals: { t1: { pid: 10, created: 0, title: "" }, t2: { pid: 10, created: 0, title: "" }, t3: { pid: 10, created: 0, title: "" } } });
+  io.now = () => clock.now;
+  const looks = { t1: 0, t2: 0, t3: 0 };
+  const strategy = {
+    id: "fake",
+    matches: ["fake"],
+    async locate({ terminal }) {
+      looks[terminal]++;
+      if (terminal !== "t3") await new Promise(() => {}); // hc get or exec of a closed copy: never settles
+      return { id: "fake", pid: 10, session: terminal, files: [FILE] };
+    },
+    async read() { return { used: 100, window: 1000, at: 1, source: "fake", exact: true }; },
+  };
+  const queue = makeQueue(2);
+  const readers = Object.fromEntries(["t1", "t2", "t3"].map((t) => [t, new ContextReader(io, { strategies: [strategy], queue })]));
+  const cx = makeCx();
+  const pane = (t) => ({ terminal: t, program: { key: "fake" }, app: null, status: "idle" });
+  readers.t1.see(pane("t1"), true, cx);
+  readers.t2.see(pane("t2"), true, cx);
+  await clock.advance(2000);
+  assert.equal(queue.running, 2, "both hang in the queue");
+  readers.t1.close();
+  readers.t2.close();
+  assert.equal(queue.running, 0, "closing freed both places");
+  readers.t3.see(pane("t3"), true, cx);
+  await clock.advance(2000);
+  assert.equal(readers.t3.reading?.used, 100);
+  assert.deepEqual(cx.errors, []);
+});
