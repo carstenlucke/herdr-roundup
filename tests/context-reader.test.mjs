@@ -250,3 +250,127 @@ test("sweep removes the integration files of ended terminals whose process is go
   assert.equal(await sweep(io, ["t1"]), 1);
   assert.deepEqual(gone, [`${dir}/t2.json`]);
 });
+
+// Two agents one after the other in the same terminal; A's read waits on a gate the test opens.
+function switching() {
+  const { io, cx } = world();
+  const gate = {};
+  const reads = { a: 0, b: 0 };
+  const mk = (id, value) => ({
+    id,
+    matches: [id],
+    async locate() { return { id, pid: 10, session: id, files: [FILE] }; },
+    async read() {
+      reads[id]++;
+      if (id === "a" && gate.hold) await new Promise((r) => { gate.open = r; });
+      return { used: value, window: 1000, at: 1, source: id, exact: true };
+    },
+  });
+  const reader = new ContextReader(io, { strategies: [mk("a", 111), mk("b", 222)], queue: makeQueue(2) });
+  const pane = (key) => ({ terminal: "t1", program: { key }, app: null, status: "idle" });
+  return { io, cx, gate, reads, reader, pane };
+}
+
+test("the program changes while a read is pending, the new one's first look coming first: it is handed over and reads", async () => {
+  const { cx, gate, reads, reader, pane } = switching();
+  gate.hold = true;
+  reader.see(pane("a"), true, cx);
+  await clock.advance(2000); // A's read now waits
+  assert.equal(reads.a, 1);
+  reader.see(pane("b"), true, cx);
+  await clock.advance(2000); // B's first look fires while A is busy
+  assert.equal(reads.b, 0);
+  gate.open();
+  await clock.advance(10);
+  assert.equal(reads.b, 1, "B read once A was done");
+  assert.equal(reader.reading.used, 222, "A's late answer never replaces B's");
+  await clock.advance(IDLE_MS * 3);
+  assert.ok(reader.timer, "B keeps its schedule");
+  assert.deepEqual(cx.errors, []);
+});
+
+test("the program changes while a read is pending, the old read ending first: the new one reads on its own timer", async () => {
+  const { cx, gate, reads, reader, pane } = switching();
+  gate.hold = true;
+  reader.see(pane("a"), true, cx);
+  await clock.advance(2000);
+  reader.see(pane("b"), true, cx);
+  gate.open(); // A ends before B's first timer
+  await clock.advance(2000);
+  assert.equal(reads.b, 1);
+  assert.equal(reader.reading.used, 222);
+});
+
+test("an agent that becomes a shell while its read is pending reads nothing after it", async () => {
+  const { cx, gate, reads, reader, pane } = switching();
+  gate.hold = true;
+  reader.see(pane("a"), true, cx);
+  await clock.advance(2000);
+  reader.see(pane("b"), true, cx);
+  await clock.advance(2000); // B's look noted as `again`
+  reader.see(pane("shell"), true, cx);
+  gate.open();
+  await clock.advance(IDLE_MS * 2);
+  assert.deepEqual(reads, { a: 1, b: 0 });
+  assert.equal(reader.reading, null);
+  assert.equal(reader.timer, null);
+});
+
+test("no reading once (a failed tail): read again on the next look although no file changed", async () => {
+  const { s, reader, cx, pane } = world();
+  const good = s.reading;
+  s.reading = null;
+  reader.see(pane(), true, cx);
+  await clock.advance(2000);
+  assert.equal(s.reads, 1);
+  s.reading = good;
+  await clock.advance(RETRY_MS[0]);
+  assert.equal(s.reads, 2, "retried without a file change");
+  assert.equal(reader.reading.used, 100);
+});
+
+test("a strategy that threw once is read again on the next look, though its files didn't change", async () => {
+  const { io, s, reader, cx, pane } = world();
+  reader.see(pane(), true, cx);
+  await clock.advance(2000);
+  assert.equal(reader.reading.used, 100);
+  touch(io, FILE);
+  reader.see(pane("working"), true, cx); // a status change: a look at once
+  s.throws = true;
+  await clock.advance(10);
+  assert.equal(reader.reading, null);
+  s.throws = false;
+  await clock.advance(RETRY_MS[0] + 10);
+  assert.equal(reader.reading?.used, 100);
+});
+
+test("a deliberate no-reading (a compaction) still clears the meter", async () => {
+  const { io, s, reader, cx, pane } = world();
+  reader.see(pane(), true, cx);
+  await clock.advance(2000);
+  assert.equal(reader.reading.used, 100);
+  touch(io, FILE);
+  s.reading = null;
+  await clock.advance(IDLE_MS);
+  assert.equal(reader.reading, null);
+});
+
+test("hc get gives no answer after a read: the reading stands, and the next look checks again", async () => {
+  const { io, s, reader, cx, pane } = world();
+  reader.see(pane(), true, cx);
+  await clock.advance(2000);
+  assert.equal(reader.reading.used, 100);
+  const orig = io.terminal;
+  io.terminal = async () => null; // hc slow or failed (the stub strategy's locate doesn't ask it)
+  touch(io, FILE);
+  s.reading = { ...s.reading, used: 150 };
+  await clock.advance(IDLE_MS);
+  assert.equal(reader.reading.used, 100, "unverified: not taken, the old one stays");
+  io.terminal = orig;
+  await clock.advance(IDLE_MS);
+  assert.equal(reader.reading.used, 150, "checked again without a file change");
+  io.terminal = async (t) => ({ ...(await orig(t)), pid: null }); // an answer: no such process
+  touch(io, FILE);
+  await clock.advance(IDLE_MS);
+  assert.equal(reader.reading, null);
+});

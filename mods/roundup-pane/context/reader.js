@@ -6,9 +6,9 @@
 //   come after the status).
 // - Idle, or the pane not shown: every 60 s; plus one look shortly after an expected idle
 //   compaction. Shown again: at once. A status change while not shown waits for that.
-// - A source is read only when one of its files changed (size or modification time); finding it
-//   (hc get, the session file) is cheap and runs on each look. Nothing found: tried again with a
-//   backoff, not on every render.
+// - A source is read only when one of its files changed (size or modification time) or its last
+//   read gave no reading; finding it (hc get, the session file) is cheap and runs on each look.
+//   Nothing found: tried again with a backoff, not on every render.
 // - Module code is shared by the copies: one queue lets two reads run at once, not all panes'.
 
 import { STRATEGIES, strategyFor } from "./registry.js";
@@ -96,6 +96,7 @@ export class ContextReader {
       this.memo = {};
       this.misses = 0;
       this.followUp = false;
+      this.again = false;
       this.status = pane?.status ?? null;
       this.shown = shown;
       this.cancel();
@@ -137,11 +138,18 @@ export class ContextReader {
       try {
         changed = await this.queue.run(() => this.look(gen));
       } catch {
+        if (gen === this.gen) this.key = this.stats = null; // the next look tries again
         changed = this.set(null, gen);
       } finally {
         this.busy = false;
       }
-      if (gen !== this.gen) return;
+      if (gen !== this.gen) {
+        // Another terminal or program meanwhile: its first wake found this read busy and only noted
+        // `again`. Hand it over, or nothing reads for the new one (a timer of its own not yet run
+        // leaves `again` false and goes on as it is).
+        if (this.again) { this.again = false; if (this.strategy) this.arm(cx, 0); }
+        return;
+      }
       const hint = idleHint(this.reading, this.status, this.io.now());
       if (hint !== this.hint) { this.hint = hint; changed = true; }
       if (changed) cx.notify();
@@ -189,9 +197,12 @@ export class ContextReader {
     // A late answer can't overwrite a newer session: the terminal still runs the same process.
     const fg = await io.terminal(terminal);
     if (gen !== this.gen) return false;
-    if (fg?.pid !== src.pid) { this.key = this.stats = null; return this.set(null, gen); }
-    this.key = key;
-    this.stats = stats;
+    // No answer from hc (slow, failed) proves nothing: the reading stands, the next look checks again.
+    if (!fg) { this.key = this.stats = null; return false; }
+    if (fg.pid !== src.pid) { this.key = this.stats = null; return this.set(null, gen); }
+    // Only a reading counts as read: no reading (a failed tail, a file being written) is tried
+    // again on the next look, not taken as "unchanged" until a file of it changes.
+    if (valid(r)) { this.key = key; this.stats = stats; } else this.key = this.stats = null;
     return this.set(r, gen);
   }
 }
