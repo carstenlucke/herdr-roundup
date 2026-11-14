@@ -9,6 +9,7 @@ import { contextIo, fixture } from "./support/context-io.mjs";
 import { ContextReader, makeQueue, valid, idleHint, sweep, WORKING_MS, IDLE_MS, AFTER_STATUS_MS, RETRY_MS, HINT_FOR_MS } from "../mods/roundup-pane/context/reader.js";
 import claude from "../mods/roundup-pane/context/strategies/claude.js";
 import { FIRST } from "../mods/roundup-pane/context/tail.js";
+import { localParts } from "../mods/roundup-pane/context/locate.js";
 
 beforeEach(() => clock.reset());
 
@@ -373,4 +374,109 @@ test("hc get gives no answer after a read: the reading stands, and the next look
   touch(io, FILE);
   await clock.advance(IDLE_MS);
   assert.equal(reader.reading, null);
+});
+
+// The real strategies, each over its fixture: a reading, then hc without an answer during locate.
+function realAgent(kind) {
+  if (kind === "claude") {
+    const sid = "0fbf3e48-42ea-40d5-b3ed-40730f7e7b44";
+    const lines = fixture("claude-transcript.jsonl").trimEnd().split("\n");
+    const usage = lines.filter((l) => l.includes('"type":"assistant"')).pop();
+    const io = contextIo({
+      files: {
+        [`/Users/a/.claude/projects/-Users-a-src-demo/${sid}.jsonl`]: usage + "\n",
+        "/Users/a/.claude/sessions/52896.json": JSON.stringify({ pid: 52896, sessionId: sid, cwd: "/Users/a/src/demo", startedAt: 1794613515093, kind: "interactive" }),
+        "/Users/a/.claude/sessions/52897.json": JSON.stringify({ pid: 52897, sessionId: "1fbf3e48-42ea-40d5-b3ed-40730f7e7b44", cwd: "/Users/a/src/demo", startedAt: 1794613515093, kind: "interactive" }),
+      },
+      terminals: { t7: { pid: 52896, created: 1794613511000, title: "Claude Code" } },
+      envs: { 52896: { HC_TERMINAL_ID: "t7" }, 52897: { HC_TERMINAL_ID: "t7" } },
+    });
+    return { io, pane: { terminal: "t7", program: { key: "claude" }, app: "claude", status: "idle" }, otherPid: 52897 };
+  }
+  const id = "01a1d750-0653-7190-914d-7c804d23545c";
+  const p = localParts(1794613708371);
+  const file = `/Users/a/.codex/sessions/${p.y}/${p.mo}/${p.d}/rollout-${p.y}-${p.mo}-${p.d}T${p.h}-${p.mi}-${p.s}-${id}.jsonl`;
+  const io = contextIo({
+    files: { [file]: fixture("codex-rollout.jsonl") },
+    terminals: { t8: { pid: 55080, created: 1, title: "01a1d750-0653-7190-914d-7c804... | ok" } },
+    envs: { 55080: { HC_TERMINAL_ID: "t8" }, 55081: { HC_TERMINAL_ID: "t8" } },
+  });
+  return { io, pane: { terminal: "t8", program: { key: "codex" }, app: "codex", status: "idle" }, otherPid: 55081 };
+}
+
+for (const kind of ["claude", "codex"]) {
+  test(`${kind}: hc gives no answer while locating: the reading stands; an answer without the process, or another process, drops it`, async () => {
+    const { io, pane, otherPid } = realAgent(kind);
+    io.now = () => clock.now;
+    const reader = new ContextReader(io, { queue: makeQueue(2) });
+    const cx = makeCx();
+    reader.see(pane, true, cx);
+    await clock.advance(2000);
+    const first = reader.reading;
+    assert.ok(first?.used > 0, "a reading to begin with");
+    const orig = io.terminal;
+    io.terminal = async () => null; // hc slow or failed
+    await clock.advance(IDLE_MS);
+    assert.deepEqual(reader.reading, first, "no answer proves nothing");
+    io.terminal = orig;
+    const reads = () => io.calls.filter((c) => c[0] === "tail").length;
+    const before = reads();
+    await clock.advance(IDLE_MS);
+    assert.ok(reads() > before, "read again after no answer, though no file changed");
+    assert.deepEqual(reader.reading, first);
+    // Another process now (for Codex also without the id in its title, which would name the same
+    // rollout and rightly read it): the old reading goes, as its new source has none.
+    io.terminal = async (t) => ({ ...(await orig(t)), pid: otherPid, ...(kind === "codex" ? { title: "Codex" } : {}) });
+    await clock.advance(IDLE_MS);
+    assert.equal(reader.reading, null, "another process: the old reading goes");
+    io.terminal = async (t) => ({ ...(await orig(t)), pid: null }); // an answer: no process
+    reader.reading = first;
+    await clock.advance(RETRY_MS.at(-1));
+    assert.equal(reader.reading, null, "hc answered without a process");
+    assert.deepEqual(cx.errors, []);
+  });
+}
+
+test("a closed reader starts no look and arms nothing, a pending one's answer is dropped, and another reader on the queue still reads", async () => {
+  const io = contextIo({ files: { [FILE]: "x" }, terminals: { t1: { pid: 10, created: 0, title: "" }, t2: { pid: 10, created: 0, title: "" }, t3: { pid: 10, created: 0, title: "" } } });
+  io.now = () => clock.now;
+  const gates = [];
+  const looks = { t1: 0, t2: 0, t3: 0 };
+  const strategy = {
+    id: "fake",
+    matches: ["fake"],
+    async locate({ terminal }) {
+      looks[terminal]++;
+      if (gates.hold) await new Promise((r) => gates.push(r));
+      return { id: "fake", pid: 10, session: terminal, files: [FILE] };
+    },
+    async read() { return { used: 100, window: 1000, at: 1, source: "fake", exact: true }; },
+  };
+  const queue = makeQueue(2);
+  const readers = Object.fromEntries(["t1", "t2", "t3"].map((t) => [t, new ContextReader(io, { strategies: [strategy], queue })]));
+  const cx = makeCx();
+  const pane = (t) => ({ terminal: t, program: { key: "fake" }, app: null, status: "idle" });
+  gates.hold = true;
+  for (const t of ["t1", "t2", "t3"]) readers[t].see(pane(t), true, cx);
+  await clock.advance(2000);
+  // Two hold the queue (which two goes by each terminal's jitter), the third waits.
+  const [running, other] = ["t1", "t2", "t3"].filter((t) => looks[t] === 1);
+  const queued = ["t1", "t2", "t3"].find((t) => looks[t] === 0);
+  assert.ok(running && other && queued);
+  assert.equal(queue.waiting, 1);
+  readers[running].close(); // in flight
+  readers[queued].close(); // queued, not started
+  gates.hold = false;
+  while (gates.length) gates.shift()();
+  await clock.advance(10);
+  assert.equal(looks[queued], 0, "the queued look of a closed reader does no I/O");
+  assert.equal(readers[running].reading, null, "the pending answer is dropped");
+  assert.equal(readers[running].timer, null);
+  assert.equal(readers[queued].timer, null);
+  assert.equal(readers[other].reading?.used, 100);
+  readers[running].see(pane(running), true, cx);
+  await clock.advance(IDLE_MS * 2);
+  assert.equal(looks[running], 1, "nothing arms again after close, not even from see()");
+  assert.ok(looks[other] >= 2, "the other reader goes on");
+  assert.deepEqual(cx.errors, []);
 });

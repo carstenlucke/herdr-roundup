@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import claude, { usageTokens, fromStatus, findTranscript, parseSnapshot, displayTokens, slug, checkSession, IDLE_COMPACT_MS } from "../mods/roundup-pane/context/strategies/claude.js";
-import { integrationFile } from "../mods/roundup-pane/context/locate.js";
+import { integrationFile, NO_ANSWER } from "../mods/roundup-pane/context/locate.js";
 import { contextIo, fixture, jsonl } from "./support/context-io.mjs";
 
 const SID = "0fbf3e48-42ea-40d5-b3ed-40730f7e7b44";
@@ -152,8 +152,9 @@ test("locate: another terminal's process, no session file or no foreground proce
   const io = setup();
   delete io.files[`/Users/a/.claude/sessions/${PID}.json`];
   assert.equal(await reading(io), null);
-  const none = contextIo();
-  assert.equal(await claude.locate({ terminal: "t7" }, none), null);
+  const none = contextIo({ terminals: { t7: { pid: null, created: 0, title: "" } } });
+  assert.equal(await claude.locate({ terminal: "t7" }, none), null, "hc answers: no foreground process");
+  assert.equal(await claude.locate({ terminal: "t7" }, contextIo()), NO_ANSWER, "hc gives no answer: passed on, not null");
 });
 
 test("locate: CLAUDE_CONFIG_DIR replaces ~/.claude; a transcript not under its slug is found by its session id", async () => {

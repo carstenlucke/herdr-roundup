@@ -82,7 +82,8 @@ export default class Pane extends View {
       this.handle.focus();
       return;
     }
-    this.context = new ContextReader(makeIo());
+    // init's cx outlives this call (an AsyncContext): its timer gives hc get a deadline.
+    this.context = new ContextReader(makeIo({ after: (ms, f) => cx.timer.after(ms, f) }));
     this.width = null;
     // A header in a hidden tab doesn't render, so render's see() misses the tab going and coming
     // back, and status changes there: this look tells the reader (no I/O, only panes() and focused()).
@@ -95,7 +96,7 @@ export default class Pane extends View {
   }
 
   async close() {
-    this.context?.cancel();
+    this.context?.close();
   }
 
   me() {

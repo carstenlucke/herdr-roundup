@@ -9,7 +9,7 @@
 //   of its descendants holds open (lsof), asked on every look: `/new` or a resume opens another
 //   one in the same process. A shared daemon's files lie outside the process tree.
 
-import { foreground, byTitle, byOpenFile, uuid7Time, localParts, parseJson } from "../locate.js";
+import { NO_ANSWER, foreground, byTitle, byOpenFile, uuid7Time, localParts, parseJson } from "../locate.js";
 import { scanTail, fromEnd } from "../tail.js";
 
 const ROLLOUT = /\/rollout-[^/]*\.jsonl$/;
@@ -78,7 +78,7 @@ export default {
   // `memo`: the reader's per-terminal store (empty again for another terminal or program).
   async locate(agent, io, memo = {}) {
     const fg = await foreground(io, agent.terminal);
-    if (!fg) return null;
+    if (!fg || fg === NO_ANSWER) return fg;
     const env = await io.env(fg.pid);
     if (env?.HC_TERMINAL_ID && env.HC_TERMINAL_ID !== agent.terminal) return null;
     const home = env?.CODEX_HOME || `${io.home}/.codex`;

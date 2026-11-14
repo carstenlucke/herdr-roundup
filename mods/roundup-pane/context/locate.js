@@ -4,7 +4,7 @@
 //   io.home                       the person's home folder
 //   io.now()                      ms since the epoch
 //   io.terminal(address)          `hc get <t> --json`, cut to { pid, created, title, cwd } (pid: the
-//                                 foreground process, the agent's own), or null
+//                                 foreground process, the agent's own), or null: no answer
 //   io.env(pid)                   that process's environment (`ps -wwE`), or null
 //   io.readText(path)             a small file (up to 1 MiB) as text, or null
 //   io.stat(path)                 { size, mtime } or null
@@ -17,6 +17,9 @@
 //
 // None of these throws for a missing file or a failed program: they give null, and a strategy
 // gives no reading. No guessing: a session found only by folder and recency is never a match.
+//
+// A strategy's locate() gives a source, null (no source: the meter goes), or NO_ANSWER: hc gave no
+// answer, so nothing is known about the terminal and the reading stands until the next look.
 
 // Where integrations write, one file per terminal: ~/.cache/herdr-roundup/context/<agent>/<t>.json.
 export const integrationFile = (io, agent, terminal) => `${io.home}/.cache/herdr-roundup/context/${agent}/${terminal}.json`;
@@ -31,10 +34,14 @@ export function parseJson(text) {
   }
 }
 
-// The terminal's foreground process: { pid, created, title, cwd }, or null without a live pid.
+export const NO_ANSWER = Object.freeze({ noAnswer: true });
+
+// The terminal's foreground process: { pid, created, title, cwd }; null when hc answered without a
+// live pid; NO_ANSWER when hc gave no answer (slow, failed), which a locate() passes on.
 export async function foreground(io, terminal) {
   const t = await io.terminal(terminal);
-  return t && Number.isInteger(t.pid) && t.pid > 0 ? t : null;
+  if (!t) return NO_ANSWER;
+  return Number.isInteger(t.pid) && t.pid > 0 ? t : null;
 }
 
 // A file named after the pid (Claude Code's ~/.claude/sessions/<pid>.json), parsed.

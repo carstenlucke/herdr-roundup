@@ -12,6 +12,7 @@
 // - Module code is shared by the copies: one queue lets two reads run at once, not all panes'.
 
 import { STRATEGIES, strategyFor } from "./registry.js";
+import { NO_ANSWER } from "./locate.js";
 
 export const WORKING_MS = 15_000;
 export const IDLE_MS = 60_000;
@@ -80,10 +81,12 @@ export class ContextReader {
     this.stats = null;
     this.memo = {};
     this.hint = null;
+    this.closed = false;
   }
 
   // From the header's render: its pane as panes() has it, and whether its tab is on screen.
   see(pane, shown, cx) {
+    if (this.closed) return;
     const strategy = pane?.terminal ? strategyFor(pane, this.strategies) : null;
     const terminal = pane?.terminal ?? null;
     if (terminal !== this.terminal || strategy !== this.strategy) {
@@ -123,13 +126,23 @@ export class ContextReader {
     this.timer = null;
   }
 
+  // The header goes: no look starts after this, a pending one's answer is dropped (gen), and
+  // nothing arms again. (Herdr cancels the copy's tasks soon after close() as well.)
+  close() {
+    this.closed = true;
+    this.gen++;
+    this.strategy = null;
+    this.again = false;
+    this.cancel();
+  }
+
   arm(cx, ms) {
     this.cancel();
     this.timer = cx.timer.after(Math.max(0, ms), (cx) => { this.timer = null; this.wake(cx); });
   }
 
   wake(cx) {
-    if (!this.strategy) return;
+    if (this.closed || !this.strategy) return;
     if (this.busy) { this.again = true; return; }
     this.busy = true;
     const gen = this.gen;
@@ -147,7 +160,7 @@ export class ContextReader {
         // Another terminal or program meanwhile: its first wake found this read busy and only noted
         // `again`. Hand it over, or nothing reads for the new one (a timer of its own not yet run
         // leaves `again` false and goes on as it is).
-        if (this.again) { this.again = false; if (this.strategy) this.arm(cx, 0); }
+        if (this.again) { this.again = false; if (this.strategy && !this.closed) this.arm(cx, 0); }
         return;
       }
       const hint = idleHint(this.reading, this.status, this.io.now());
@@ -181,17 +194,19 @@ export class ContextReader {
 
   // One look: find the source, and read it if a file of it changed. True when the reading changed.
   async look(gen) {
+    if (gen !== this.gen) return false; // queued, and closed or switched meanwhile: no I/O
     const { io, strategy, terminal } = this;
     const src = await strategy.locate({ terminal }, io, this.memo);
     if (gen !== this.gen) return false;
+    // No answer from hc proves nothing (as after a read, below): the reading stands, the next look
+    // checks again.
+    if (src === NO_ANSWER) { this.key = this.stats = null; return false; }
     if (!src) { this.key = this.stats = null; return this.set(null, gen); }
     const key = sourceKey(src);
     const stats = await Promise.all(src.files.map((f) => io.stat(f)));
     if (gen !== this.gen) return false;
-    if (key === this.key && sameStats(stats, this.stats)) { // nothing new: the reading stands
-      if (!this.reading) this.misses++;
-      return false;
-    }
+    // Nothing new: the reading stands. (key is kept only beside a reading, so there is one.)
+    if (key === this.key && sameStats(stats, this.stats)) return false;
     let r = await strategy.read(src, io, this.memo);
     if (gen !== this.gen) return false;
     // A late answer can't overwrite a newer session: the terminal still runs the same process.

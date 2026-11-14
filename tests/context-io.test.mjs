@@ -7,12 +7,15 @@ import { mkdtempSync, writeFileSync, rmSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { herdr, reset } from "./support/harness.mjs";
+import { clock, flush } from "./support/clock.mjs";
+import { makeCx } from "./support/cx.mjs";
+import { makeQueue } from "../mods/roundup-pane/context/reader.js";
 
-const { makeIo, parseEnv, parseStat, parseLsof } = await import("../mods/roundup-pane/context-io.js");
+const { makeIo, parseEnv, parseStat, parseLsof, HC_MS } = await import("../mods/roundup-pane/context-io.js");
 
 const dir = mkdtempSync(join(realpathSync(tmpdir()), "context-io-"));
 after(() => rmSync(dir, { recursive: true, force: true }));
-beforeEach(reset);
+beforeEach(() => { reset(); clock.reset(); });
 
 test("parseEnv takes the environment's value, the last of a key (arguments come first), and only the keys the strategies read", () => {
   const ps = "claude --name HC_TERMINAL_ID=t9 PATH=/bin HC_TERMINAL_ID=t7 CLAUDE_CONFIG_DIR=/Users/a/.cw SECRET=x\n";
@@ -67,6 +70,30 @@ test("terminal: hc get's foreground pid, creation time and title; a failing hc g
   assert.equal(await makeIo().terminal("t9"), null);
   herdr.onHc(() => ({ code: 0, stdout: "not json" }));
   assert.equal(await makeIo().terminal("t9"), null);
+});
+
+test("hc get that doesn't answer gives null after its deadline and frees the queue: two stalled, a third still runs", async () => {
+  const cx = makeCx();
+  const io = makeIo({ after: (ms, f) => cx.timer.after(ms, f) });
+  let late = null;
+  herdr.onHc(() => new Promise((resolve) => { late = resolve; })); // hc never answers (until late)
+  const queue = makeQueue(2);
+  const got = [];
+  for (const t of ["t1", "t2", "t3"]) queue.run(() => io.terminal(t)).then((r) => got.push([t, r]));
+  await flush();
+  assert.equal(herdr.calls("hc").length, 2, "the third waits for a place");
+  await clock.advance(HC_MS);
+  await flush();
+  assert.deepEqual(got.slice(0, 2).map((g) => g[1]), [null, null], "no answer within the deadline: null");
+  assert.equal(herdr.calls("hc").length, 3, "the third runs once a place is free");
+  herdr.onHc(() => ({ code: 0, stdout: JSON.stringify({ created_ms: 5, title: "x", foreground: { pid: 42 } }) }));
+  late({ code: 0, stdout: "{}" }); // a late answer of a stalled call is dropped, no error
+  await clock.advance(HC_MS);
+  await flush();
+  assert.equal(got.length, 3);
+  assert.deepEqual((await io.terminal("t4")).pid, 42, "an answer in time wins, its deadline cancelled");
+  assert.equal(clock.timers.filter((t) => !t.cancelled && !t.done).length, 0, "no deadline left behind");
+  assert.deepEqual(cx.errors, []);
 });
 
 test("output cut off at exec's limit gives no reading", async () => {

@@ -1,13 +1,15 @@
 // The Herdr side of the context meter: the `io` its strategies and reader get (context/locate.js
 // names each part), built on exec, hc and readTextFile. Paths go to programs as argv, never into
-// shell code; every call has a timeout; output cut off at exec's limit gives no reading; a failed
-// program gives null, never an error in `herdr-app status`. Windows has no tail, lsof or ps -E:
+// shell code; every call has a timeout (hc get's own, from `after`: Herdr's hc() takes none); output
+// cut off at exec's limit gives no reading; a failed program gives null, never an error in
+// `herdr-app status`. Windows has no tail, lsof or ps -E:
 // there every part gives null, so there is no reading.
 
 import { exec, hc, home, readTextFile } from "herdr";
 import * as fs from "fs/promises";
 
 const T = 5_000;
+export const HC_MS = 5_000;
 const LIMIT = 8 * 1024 * 1024;
 const run = async (cmd, args, timeout = T) => {
   try {
@@ -39,18 +41,28 @@ export const parseLsof = (text) => (typeof text === "string" ? text.split("\n").
 
 let statForm = null; // "mac" or "gnu", found on the first call
 
-export function makeIo() {
+// `after(ms, f)` → a handle with cancel(): a timer that outlives the call (init's cx.timer.after).
+// It gives hc get a deadline: a slow hc frees its place in the reader's queue after HC_MS and
+// counts as no answer. The race doesn't stop hc itself, whose late answer is dropped. Without
+// `after` (the sweeper, which never asks hc) there is no deadline.
+export function makeIo({ after = null } = {}) {
   const io = {
     home: home(),
     now: () => Date.now(),
     async terminal(t) {
-      try {
-        const r = await hc(["get", t, "--json"]);
+      const ask = hc(["get", t, "--json"]).then((r) => {
         if (r.code !== 0) return null;
         const j = JSON.parse(r.stdout);
         return { pid: j.foreground?.pid ?? null, created: j.created_ms ?? null, title: j.title ?? "", cwd: j.foreground?.cwd ?? j.cwd ?? null };
-      } catch {
-        return null;
+      }).catch(() => null);
+      let timer = null, deadline = null;
+      if (after) {
+        try { deadline = new Promise((resolve) => { timer = after(HC_MS, () => resolve(null)); }); } catch { deadline = null; } // a closed cx: no deadline
+      }
+      try {
+        return await (deadline ? Promise.race([ask, deadline]) : ask);
+      } finally {
+        try { timer?.cancel(); } catch {}
       }
     },
     async env(pid) { return parseEnv(await run("ps", ["-wwE", "-p", String(pid), "-o", "command="])); },
