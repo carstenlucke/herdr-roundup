@@ -72,17 +72,20 @@ export function makeIo({ after = null } = {}) {
     home: home(),
     now: () => Date.now(),
     async terminal(t) {
-      const ask = hc(["get", t, "--json"]).then((r) => {
-        if (r.code !== 0) return null;
-        const j = JSON.parse(r.stdout);
-        return { pid: j.foreground?.pid ?? null, created: j.created_ms ?? null, title: j.title ?? "", cwd: j.foreground?.cwd ?? j.cwd ?? null };
-      }).catch(() => null);
-      let timer = null, deadline = null;
-      if (after) {
-        try { deadline = new Promise((resolve) => { timer = after(HC_MS, () => resolve(null)); }); } catch { deadline = null; } // a closed cx: no deadline
-      }
+      let timer = null;
       try {
-        return await (deadline ? Promise.race([ask, deadline]) : ask);
+        const ask = hc(["get", t, "--json"]).then((r) => {
+          if (r.code !== 0) return null;
+          const j = JSON.parse(r.stdout);
+          return { pid: j.foreground?.pid ?? null, created: j.created_ms ?? null, title: j.title ?? "", cwd: j.foreground?.cwd ?? j.cwd ?? null };
+        }).catch(() => null);
+        if (!after) return await ask;
+        let expire;
+        const deadline = new Promise((resolve) => { expire = resolve; });
+        timer = after(HC_MS, () => expire(null)); // a closed cx throws here: no answer
+        return await Promise.race([ask, deadline]);
+      } catch {
+        return null; // hc failing as it is called, or no timer to bound it: no answer
       } finally {
         try { timer?.cancel(); } catch {}
       }

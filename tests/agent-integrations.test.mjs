@@ -467,6 +467,21 @@ test("a config whose mode can't be read is not changed, and no temp file is left
   assert.deepEqual(readdirSync(join(home, ".codex")), ["config.toml"]);
 });
 
+test("a config whose mode can't be kept (chmod fails) is not changed, and no temp file is left", () => {
+  const bin = join(home, "bin");
+  mkdirSync(bin);
+  writeFileSync(join(bin, "chmod"), "#!/bin/sh\nexit 1\n");
+  chmodSync(join(bin, "chmod"), 0o755);
+  env.PATH = `${bin}:${env.PATH}`;
+  const before = JSON.stringify({ model: "opus" });
+  put(settings, before);
+  const r = run("install", "claude");
+  assert.notEqual(r.code, 0);
+  assert.match(r.err, /mode of .* can't be kept: not changed/);
+  assert.equal(readFileSync(settings, "utf8"), before);
+  assert.deepEqual(readdirSync(join(home, ".claude")), ["settings.json"]);
+});
+
 test("codex: tui assigned at the top (an inline table, bare or quoted) is refused, the file unchanged, status unknown", () => {
   const forms = [
     "tui = { notifications = true }\n",

@@ -128,9 +128,14 @@ export default {
     if (!session) return null;
     const status = await byTerminalFile(io, "claude", agent.terminal, fg.pid);
     const path = status?.claude?.session_id === session.sessionId ? status.claude.transcript_path : null;
-    let transcript = typeof path === "string" && path.endsWith(`${session.sessionId}.jsonl`) ? path : null;
-    if (!transcript && typeof session.cwd === "string") transcript = `${home}/projects/${slug(session.cwd)}/${session.sessionId}.jsonl`;
-    if (transcript && !(await io.stat(transcript))) transcript = await findBySession(io, home, session.sessionId, memo);
+    // The status line's path first, then the slug's: both asked on every look, the folder search
+    // (held after a miss) only when neither is there.
+    const given = typeof path === "string" && path.endsWith(`${session.sessionId}.jsonl`) ? path : null;
+    const bySlug = typeof session.cwd === "string" ? `${home}/projects/${slug(session.cwd)}/${session.sessionId}.jsonl` : null;
+    const candidates = [...new Set([given, bySlug].filter(Boolean))];
+    let transcript = null;
+    for (const c of candidates) if (await io.stat(c)) { transcript = c; break; }
+    if (!transcript && candidates.length) transcript = await findBySession(io, home, session.sessionId, memo);
     const setting = COMPACT_ENV.filter((k) => env?.[k]).map((k) => `${k}=${env[k]}`);
     return {
       id: "claude",

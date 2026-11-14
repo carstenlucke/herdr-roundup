@@ -75,25 +75,40 @@ test("terminal: hc get's foreground pid, creation time and title; a failing hc g
 test("hc get that doesn't answer gives null after its deadline and frees the queue: two stalled, a third still runs", async () => {
   const cx = makeCx();
   const io = makeIo({ after: (ms, f) => cx.timer.after(ms, f) });
-  let late = null;
-  herdr.onHc(() => new Promise((resolve) => { late = resolve; })); // hc never answers (until late)
+  const gates = {}; // hc's answer for each terminal, settled when the test says
+  herdr.onHc((call) => new Promise((resolve, reject) => { gates[call.args[1]] = { resolve, reject }; }));
   const queue = makeQueue(2);
-  const got = [];
-  for (const t of ["t1", "t2", "t3"]) queue.run(() => io.terminal(t)).then((r) => got.push([t, r]));
+  const got = {};
+  for (const t of ["t1", "t2", "t3"]) queue.run(() => io.terminal(t)).then((r) => { got[t] = r; });
   await flush();
-  assert.equal(herdr.calls("hc").length, 2, "the third waits for a place");
+  assert.deepEqual(Object.keys(gates), ["t1", "t2"], "the third waits for a place");
   await clock.advance(HC_MS);
   await flush();
-  assert.deepEqual(got.slice(0, 2).map((g) => g[1]), [null, null], "no answer within the deadline: null");
-  assert.equal(herdr.calls("hc").length, 3, "the third runs once a place is free");
-  herdr.onHc(() => ({ code: 0, stdout: JSON.stringify({ created_ms: 5, title: "x", foreground: { pid: 42 } }) }));
-  late({ code: 0, stdout: "{}" }); // a late answer of a stalled call is dropped, no error
-  await clock.advance(HC_MS);
+  assert.deepEqual(got, { t1: null, t2: null }, "no answer within the deadline: null");
+  assert.ok(gates.t3, "the third runs once a place is free");
+  // The stalled calls answer late, one with a result, one failing: dropped, no error.
+  gates.t1.resolve({ code: 0, stdout: JSON.stringify({ foreground: { pid: 7 } }) });
+  gates.t2.reject(new Error("late failure"));
   await flush();
-  assert.equal(got.length, 3);
-  assert.deepEqual((await io.terminal("t4")).pid, 42, "an answer in time wins, its deadline cancelled");
+  assert.deepEqual(got, { t1: null, t2: null });
+  // The third answers in time: its answer, and its deadline cancelled.
+  gates.t3.resolve({ code: 0, stdout: JSON.stringify({ created_ms: 5, title: "x", foreground: { pid: 42 } }) });
+  await flush();
+  assert.equal(got.t3?.pid, 42);
   assert.equal(clock.timers.filter((t) => !t.cancelled && !t.done).length, 0, "no deadline left behind");
   assert.deepEqual(cx.errors, []);
+});
+
+test("hc get gives null, never throws: hc failing as it is called or later, or no timer for its deadline (a closed cx)", async () => {
+  herdr.onHc(() => { throw new Error("hc dispatch failed"); });
+  assert.equal(await makeIo().terminal("t1"), null);
+  reset();
+  herdr.onHc(() => new Error("hc failed later"));
+  assert.equal(await makeIo().terminal("t1"), null);
+  reset();
+  herdr.onHc(() => ({ code: 0, stdout: JSON.stringify({ foreground: { pid: 42 } }) }));
+  assert.equal(await makeIo({ after() { throw new Error("closed cx"); } }).terminal("t1"), null);
+  assert.equal((await makeIo().terminal("t1")).pid, 42, "without a timer: no deadline, the answer");
 });
 
 test("output cut off at exec's limit gives no reading", async () => {

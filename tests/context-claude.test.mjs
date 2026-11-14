@@ -252,3 +252,25 @@ test("a kept hit that is gone is searched for again at once; another home or ses
   assert.equal((await look()).transcript, `/Users/a/.cw/projects/-x/${SID}.jsonl`);
   assert.equal(memo.transcripts.size, 3);
 });
+
+test("while a miss is held, the status line's path and the slug path are still asked: either found at once", async () => {
+  const given = `/Users/a/elsewhere/${SID}.jsonl`;
+  const withStatus = () => {
+    const { io, look, lists } = fresh();
+    io.files[integrationFile(io, "claude", "t7")] = JSON.stringify({ v: 1, terminal: "t7", pid: PID, at: Date.parse("2026-11-13T23:46:03Z"), claude: { ...stdin, session_id: SID, transcript_path: given } });
+    return { io, look, lists };
+  };
+  // The status line names a path not written yet: the slug's, written meanwhile, is found.
+  let w = withStatus();
+  assert.equal((await w.look()).transcript, null);
+  assert.equal(w.lists(), 1, "a miss held");
+  w.io.files[TRANSCRIPT] = full;
+  assert.equal((await w.look()).transcript, TRANSCRIPT);
+  // The status line's own path, written meanwhile: found, and first.
+  w = withStatus();
+  await w.look();
+  w.io.files[given] = full;
+  w.io.files[TRANSCRIPT] = full;
+  assert.equal((await w.look()).transcript, given);
+  assert.equal(w.lists(), 1);
+});
