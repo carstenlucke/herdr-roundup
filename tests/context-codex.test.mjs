@@ -143,3 +143,24 @@ test("direct mode: the same process on another thread (`/new`) reads the new rol
   open[PID] = [FILE, OTHER];
   assert.equal(await look(io, memo), null, "ambiguous");
 });
+
+test("direct mode: an empty open list forgets what was known, and a file gone is classified again once back", async () => {
+  const open = { [PID]: [FILE] };
+  const io = setup({ title: "Codex", files: { [FILE]: rollout }, open });
+  const memo = {};
+  assert.equal((await look(io, memo)).used, 18_298);
+  open[PID] = [];
+  assert.equal(await look(io, memo), null);
+  assert.equal(memo.threadSources.size, 0, "an empty list forgets");
+  open[PID] = [FILE];
+  await look(io, memo);
+  open[PID] = null; // lsof failed: proves nothing
+  await look(io, memo);
+  assert.equal(memo.threadSources.size, 1);
+  open[PID] = [FILE];
+  delete io.files[FILE]; // gone (replaced) while still listed
+  assert.equal(await look(io, memo), null);
+  assert.equal(memo.threadSources.size, 0);
+  io.files[FILE] = rollout.replace('"thread_source":"user"', '"thread_source":"guardian_review"');
+  assert.equal(await look(io, memo), null, "classified again: now a guardian's");
+});

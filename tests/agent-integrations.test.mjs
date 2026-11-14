@@ -371,3 +371,51 @@ test("codex: an install with the thread id not last says so, while its line is s
   assert.equal(run("install", "codex").out, "codex: already on (terminal_title has the thread id)");
   assert.equal(run("uninstall", "codex").code, 1);
 });
+
+// --- Codex's review of the fixes ------------------------------------------------------------------
+
+test("codex: an array whose first line has a comment with a bracket spans lines: refused, nothing changed", () => {
+  const before = '[tui]\nterminal_title = [ # a closing bracket in this comment: ]\n  "model",\n]\n';
+  put(codex, before);
+  const r = run("install", "codex");
+  assert.notEqual(r.code, 0);
+  assert.match(r.err, /several lines/);
+  assert.equal(readFileSync(codex, "utf8"), before);
+  assert.equal(existsSync(join(state, "codex.json")), false);
+});
+
+test("codex: an id only in a comment is no id: install adds it to the array", { skip: !hasPython && "python3 with tomllib is needed" }, () => {
+  put(codex, '[tui]\nterminal_title = ["model"] # add "thread-id" later\n');
+  assert.equal(run("status", "codex").out, "codex: off");
+  assert.equal(run("install", "codex").code, 0);
+  assert.deepEqual(JSON.parse(toml(codex).stdout).tui.terminal_title, ["model", "thread-id"]);
+});
+
+test("codex: an id-last example in a comment doesn't hide that the real id isn't last", () => {
+  const from = 'terminal_title = ["model"]';
+  const to = 'terminal_title = ["thread-id", "model"] # old example ["thread-id"]';
+  put(codex, `[tui]\n${to}\n`);
+  mkdirSync(state, { recursive: true });
+  writeFileSync(join(state, "codex.json"), JSON.stringify({ mode: "replace", from, to, existed: true }));
+  assert.match(run("status", "codex").out, /thread id not last/);
+  assert.match(run("install", "codex").out, /thread id not last/);
+});
+
+test("a config install created, moved into dotfiles and linked since, keeps its target on uninstall", () => {
+  const dots = join(home, "dotfiles");
+  mkdirSync(dots);
+  for (const [agent, path, name] of [["claude", settings, "settings.json"], ["codex", codex, "config.toml"]]) {
+    assert.equal(run("install", agent).code, 0); // no config before: existed false
+    const target = join(dots, name);
+    cpSync(path, target);
+    rmSync(path);
+    symlinkSync(target, path);
+    const r = run("uninstall", agent);
+    assert.equal(r.code, 0, r.err);
+    assert.ok(lstatSync(path).isSymbolicLink(), `${agent}: still a link`);
+    assert.ok(existsSync(target), `${agent}: its target stays`);
+    const text = readFileSync(target, "utf8");
+    assert.ok(!text.includes("claude-statusline") && !text.includes("thread-id"), `${agent}: nothing of Roundup's left: ${text}`);
+  }
+  assert.deepEqual(json(join(dots, "settings.json")), {});
+});

@@ -64,6 +64,7 @@ resolve() {
 # link stays a link.
 real() {
   eval "path=\$$1"
+  if [ -L "$path" ]; then eval "${1}_linked=true"; else eval "${1}_linked=false"; fi
   resolved=$(resolve "$path") || die "$path is a symlink that leads nowhere or in a circle: not changed"
   eval "$1=\$resolved"
 }
@@ -136,7 +137,9 @@ claude_uninstall() {
   backup "$claude_settings"
   tmp="$claude_settings.roundup-tmp"
   jq --slurpfile p "$claude_prev" 'if $p[0].statusLine == null then del(.statusLine) else .statusLine = $p[0].statusLine end' "$claude_settings" >"$tmp"
-  if [ "$(jq -r .existed "$claude_prev")" = false ] && [ "$(jq -c . "$tmp")" = "{}" ]; then
+  # A file install created for the status line alone goes again; not one reached through a link
+  # (moved into dotfiles since): the link would point nowhere.
+  if [ "$(jq -r .existed "$claude_prev")" = false ] && [ "$claude_settings_linked" = false ] && [ "$(jq -c . "$tmp")" = "{}" ]; then
     rm -f "$tmp" "$claude_settings"
   else
     replace "$tmp" "$claude_settings"
@@ -190,8 +193,35 @@ edit_line() { # mode n text
 }
 # The first line that is exactly `text`, or nothing.
 find_line() { ROUNDUP_LINE_TEXT=$1 awk 'BEGIN { text = ENVIRON["ROUNDUP_LINE_TEXT"] } $0 == text { print NR; exit }' "$codex_config"; }
-# Whether a title line ends its array with the thread id.
-id_last() { printf '%s\n' "$1" | grep -Eq "[\"'](thread|session)-id[\"'][[:space:]]*,?[[:space:]]*\]"; }
+# One title line's array, read with its strings and comments in mind (TOML: "…" with escapes,
+# '…' without, # to the end of the line outside a string). Its own `]` must come on that line,
+# before any comment, else the array spans several lines: exit 2. mode "has": exit 0 when the
+# array holds the thread id (or the session id); "last": when it is the last item; "add": prints
+# the line with "thread-id" added last.
+title_array() { # mode line
+  printf '%s\n' "$2" | awk -v mode="$1" '
+    function scan(   k, c, q) {
+      i = index($0, "["); j = 0; q = ""
+      if (!i) return 0
+      for (k = i + 1; k <= length($0); k++) {
+        c = substr($0, k, 1)
+        if (q != "") { if (c == "\\" && q == "\"") k++; else if (c == q) q = ""; continue }
+        if (c == "\"" || c == "\047") { q = c; continue }
+        if (c == "#") return 0
+        if (c == "]") { j = k; return 1 }
+      }
+      return 0
+    }
+    {
+      if (!scan()) exit 2
+      body = substr($0, i + 1, j - i - 1); sub(/[ \t]*,?[ \t]*$/, "", body)
+      id = "[\"\047](thread|session)-id[\"\047]"
+      if (mode == "has") exit (body ~ ("(^|[[ \t,])" id "([ \t,]|$)") ? 0 : 1)
+      if (mode == "last") exit (body ~ ("(^|[ \t,])" id "$") ? 0 : 1)
+      print substr($0, 1, i) body (body ~ /[^ \t]/ ? ", " : "") "\"thread-id\"" substr($0, j)
+    }'
+}
+id_last() { title_array last "$1"; }
 # Whether Roundup's line is still in the config, as install wrote it.
 codex_ours() { [ -f "$codex_prev" ] && [ -f "$codex_config" ] && [ -n "$(find_line "$(jq -r .to "$codex_prev")")" ]; }
 not_last='thread id not last: run uninstall, then install, to move it'
@@ -206,25 +236,16 @@ codex_install() {
   case "$1" in
     table | dotted)
       line=$(line_at "$2")
-      case "$line" in *'"thread-id"'* | *"'thread-id'"* | *'"session-id"'* | *"'session-id'"*)
+      rc=0; title_array has "$line" || rc=$?
+      [ "$rc" = 2 ] && die "codex: terminal_title in $codex_config spans several lines: add \"thread-id\" to it by hand"
+      if [ "$rc" = 0 ]; then
         # An install before the id went last (0.11.0 before release) put it after "activity".
         if codex_ours && ! id_last "$line"; then echo "codex: already on ($not_last)"
         else echo "codex: already on (terminal_title has the thread id)"; fi
-        return 0 ;;
-      esac
+        return 0
+      fi
       # "thread-id" last: before the array's own `]`, not one in a string or a trailing comment.
-      new=$(printf '%s\n' "$line" | awk '{
-        i = index($0, "["); q = ""; j = 0
-        for (k = i + 1; k <= length($0); k++) {
-          c = substr($0, k, 1)
-          if (q != "") { if (c == "\\" && q == "\"") k++; else if (c == q) q = ""; continue }
-          if (c == "\"" || c == "\047") { q = c; continue }
-          if (c == "]") { j = k; break }
-        }
-        if (!i || !j) exit 1
-        body = substr($0, i + 1, j - i - 1); sub(/[ \t]*,?[ \t]*$/, "", body)
-        print substr($0, 1, i) body (body ~ /[^ \t]/ ? ", " : "") "\"thread-id\"" substr($0, j)
-      }') || die "codex: terminal_title in $codex_config spans several lines: add \"thread-id\" to it by hand"
+      new=$(title_array add "$line")
       backup "$codex_config"
       jq -n --arg from "$line" --arg to "$new" --argjson existed "$existed" '{mode: "replace", from: $from, to: $to, existed: $existed}' >"$codex_prev"
       edit_line r "$2" "$new"
@@ -261,9 +282,9 @@ codex_uninstall() {
     awk -v n="$n" 'NR != n' "$codex_config" >"$tmp"
     replace "$tmp" "$codex_config"
   fi
-  # A file install made for the line alone goes again.
+  # A file install made for the line alone goes again, unless reached through a link (as claude).
   # (`.existed`, not `.existed // true`: jq's // takes false for missing.)
-  if [ "$(jq -r .existed "$codex_prev")" = false ] && [ ! -s "$codex_config" ]; then rm -f "$codex_config"; fi
+  if [ "$(jq -r .existed "$codex_prev")" = false ] && [ "$codex_config_linked" = false ] && [ ! -s "$codex_config" ]; then rm -f "$codex_config"; fi
   rm -f "$codex_prev"
   echo "codex: off"
 }
@@ -277,7 +298,7 @@ codex_status() {
   elif [ -f "$codex_config" ]; then
     set -- $(codex_where)
     case "$1" in table | dotted)
-      case "$(line_at "$2")" in *thread-id* | *session-id*) echo "codex: on (set by hand)"; return 0 ;; esac ;;
+      if title_array has "$(line_at "$2")"; then echo "codex: on (set by hand)"; return 0; fi ;;
     esac
     echo "codex: off"
   else echo "codex: off"; fi

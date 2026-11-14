@@ -90,15 +90,17 @@ export default {
       return file ? { ...base, file, thread: prefix, how: "title", files: [file] } : null;
     }
     const open = await byOpenFile(io, fg.pid, ROLLOUT);
-    if (!open?.length) return null;
     // Whose thread a rollout is never changes (its first line): kept per path while the process
-    // holds it open, so a look doesn't read 256 KiB of each again. Only an answer is kept: a failed
-    // head or a first line still being written is asked again next time.
+    // holds it open and the file is there, so a look doesn't read 256 KiB of each again. Only an
+    // answer is kept: a failed head or a first line still being written is asked again next time.
+    // A failed lsof (null) proves nothing and forgets nothing; an empty list forgets all.
     const known = memo.threadSources instanceof Map ? memo.threadSources : (memo.threadSources = new Map());
-    for (const f of [...known.keys()]) if (!open.includes(f)) known.delete(f);
+    if (Array.isArray(open)) for (const f of [...known.keys()]) if (!open.includes(f)) known.delete(f);
+    if (!open?.length) return null;
     const users = [];
     for (const f of open) {
       let source = known.get(f);
+      if (source !== undefined && !(await io.stat(f))) { known.delete(f); source = undefined; }
       if (source === undefined) {
         source = threadSource(await io.head(f, 256 * 1024));
         if (source !== null) known.set(f, source);
