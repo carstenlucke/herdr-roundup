@@ -186,6 +186,9 @@ export class ContextReader {
     this.busy = true;
     const gen = this.gen;
     cx.spawn(async (cx) => {
+      // Closed between wake() and this task's start (GPUI starts it on the next tick): no place
+      // in the queue, which close() could no longer release.
+      if (this.closed) { this.busy = false; return; }
       let changed = false;
       const job = this.queue.enter(() => this.look(gen));
       this.job = job;

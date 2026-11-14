@@ -11,7 +11,7 @@
 //   of its descendants holds open (lsof), asked on every look: `/new` or a resume opens another
 //   one in the same process. A shared daemon's files lie outside the process tree.
 
-import { NO_ANSWER, foreground, processEnv, byTitle, byOpenFile, uuid7Time, localParts, parseJson } from "../locate.js";
+import { NO_ANSWER, foreground, processEnv, byTitle, titleIds, byOpenFile, uuid7Time, localParts, parseJson } from "../locate.js";
 import { scanTail, fromEnd, NO_READING } from "../tail.js";
 
 const ROLLOUT = /\/rollout-[^/]*\.jsonl$/;
@@ -83,12 +83,12 @@ export default {
   keepsNoReading: true,
 
   // After the read, from the same `hc get` that checks the pid: a title that now names another
-  // thread (`/new`, a resume in the same process) drops the late answer. A title without an id
-  // (starting, another title item for a moment) says nothing: the answer stands.
+  // thread (`/new`, a resume in the same process), or two ids, drops the late answer. A title
+  // without an id (starting, another title item for a moment) says nothing: the answer stands.
   stillSame(source, fg) {
     if (!source.titlePrefix) return true;
-    const now = byTitle(fg.title);
-    return now === null || now === source.titlePrefix;
+    const ids = titleIds(fg.title);
+    return ids.length === 0 || (ids.length === 1 && ids[0] === source.titlePrefix);
   },
 
   // `memo`: the reader's per-terminal store (empty again for another terminal or program).

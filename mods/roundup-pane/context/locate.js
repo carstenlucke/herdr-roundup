@@ -72,9 +72,13 @@ export async function byTerminalFile(io, agent, terminal, pid) {
 // A thread id in a terminal title, whole or as Codex cuts it (`01a1d750-0653-7190-914d-7c804...`):
 // at least the first four groups and one more digit. Two different ids in the title: null.
 const ID = /(?<![0-9a-f-])([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1,12})(?![0-9a-f-])/gi;
+// Every different thread id in a title (none: []).
+export function titleIds(title) {
+  if (typeof title !== "string") return [];
+  return [...new Set([...title.matchAll(ID)].map((m) => m[1].toLowerCase()))];
+}
 export function byTitle(title) {
-  if (typeof title !== "string") return null;
-  const ids = [...new Set([...title.matchAll(ID)].map((m) => m[1].toLowerCase()))];
+  const ids = titleIds(title);
   return ids.length === 1 ? ids[0] : null;
 }
 

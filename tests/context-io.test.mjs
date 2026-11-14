@@ -49,7 +49,7 @@ test("stat, tail, head, list and lastLineWith on a real file", async () => {
   assert.equal(await io.list(join(dir, "none")), null);
 });
 
-test("tail: a file that grows past the size asked for between stat and tail isn't whole; nor is one whose second size isn't known", async () => {
+test("tail: a file that grows past the size asked for between stat and tail isn't whole; one whose second size isn't known is a failed read", async () => {
   const f = join(dir, "grow.jsonl");
   writeFileSync(f, '{"a":1}\n');
   const io = makeIo();
@@ -62,7 +62,7 @@ test("tail: a file that grows past the size asked for between stat and tail isn'
   writeFileSync(f, '{"a":1}\n');
   let stats = 0;
   herdr.onExec((c) => (c.command === "stat" && ++stats === 2 ? { code: 1, stdout: "", stderr: "" } : undefined));
-  assert.equal((await io.tail(f, 1000)).whole, false, "no second size: not whole");
+  assert.equal(await io.tail(f, 1000), null, "no second size where it decides: a failed read, not a cut one");
   assert.equal((await io.tail(f, 1000)).whole, true, "both sizes known and small: whole");
 });
 

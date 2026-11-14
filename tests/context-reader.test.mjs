@@ -715,3 +715,60 @@ test("Claude: a new session in the same process during a read: the late answer s
   assert.equal(reader.misses, 0);
   assert.deepEqual(cx.errors, []);
 });
+
+test("Codex: a failed tail (a second size not known) is retried on the next look without stats, though the rollout didn't change", async () => {
+  const { io, pane } = realAgent("codex");
+  io.now = () => clock.now;
+  const tail = io.tail;
+  let fail = true;
+  io.tail = async (...a) => (fail ? ((fail = false), null) : tail(...a));
+  const reader = new ContextReader(io, { queue: makeQueue(2) });
+  const cx = makeCx();
+  reader.see(pane, true, cx);
+  await clock.advance(2000);
+  assert.equal(reader.reading, null);
+  assert.equal(reader.stats, null, "a failed read keeps no stats");
+  assert.equal(reader.misses, 1);
+  await clock.advance(RETRY_MS[0]);
+  assert.equal(reader.reading?.used, 18_298, "read again, the file unchanged");
+});
+
+test("Codex: a title with a second thread id when the read ends drops the late answer", async () => {
+  const { io, pane } = realAgent("codex");
+  io.now = () => clock.now;
+  const reader = new ContextReader(io, { queue: makeQueue(2) });
+  const cx = makeCx();
+  const orig = io.terminal;
+  let title = null;
+  io.terminal = async (t) => ({ ...(await orig(t)), ...(title === null ? {} : { title }) });
+  reader.see(pane, true, cx);
+  await clock.advance(2000);
+  assert.ok(reader.reading?.used > 0);
+  const tail = io.tail;
+  io.tail = async (...a) => { title = "01a1d750-0653-7190-914d-7c804... | 01a1d751-9827-7f61-959e-cedf8..."; return tail(...a); };
+  reader.key = reader.stats = null; // a file changed: read again
+  reader.see({ ...pane, status: "working" }, true, cx);
+  await clock.advance(10);
+  assert.equal(reader.reading, null, "two ids: not the same thread for sure");
+});
+
+test("a header that closes between wake() and its task's start takes no place in the queue", async () => {
+  const { reader, s } = world();
+  const queue = makeQueue(2);
+  reader.queue = queue;
+  const hang = () => new Promise(() => {});
+  queue.enter(hang); queue.enter(hang); // both places taken
+  const tasks = [];
+  const cx = makeCx();
+  const later = { ...cx, spawn: (body) => { tasks.push(body); } }; // GPUI starts it on the next tick
+  reader.strategy = reader.strategies[0];
+  reader.terminal = "t1";
+  reader.wake(later);
+  reader.close();
+  for (const body of tasks) body(cx); // not awaited: a task that queued would wait for good
+  await flush();
+  assert.equal(queue.waiting, 0, "nothing queued for a closed reader");
+  assert.equal(reader.job, null);
+  assert.equal(reader.busy, false);
+  assert.equal(s.locates, 0);
+});
