@@ -4,7 +4,9 @@
 // - By the thread id in the terminal title (the integration: `tui.terminal_title` with
 //   "thread-id"). Codex cuts it to 29 characters + "...", but the id is a UUIDv7: its first 12 hex
 //   digits are the thread's creation time, which is the local time in the rollout's folder and name
-//   (sessions/YYYY/MM/DD/rollout-YYYY-MM-DDTHH-MM-SS-<id>.jsonl). Exactly one file must match.
+//   (sessions/YYYY/MM/DD/rollout-YYYY-MM-DDTHH-MM-SS-<id>.jsonl). Exactly one file must match. No
+//   file there (CODEX_HOME not as read: cut at a space, or no `ps -E` on Linux): the open files
+//   below, but only a user rollout whose id starts with the title's; two matches there: nothing.
 // - Direct mode (`codex --no-daemon`, as Herdr starts it): the one user rollout the process or one
 //   of its descendants holds open (lsof), asked on every look: `/new` or a resume opens another
 //   one in the same process. A shared daemon's files lie outside the process tree.
@@ -22,8 +24,10 @@ const time = (iso) => {
 // The thread id at the end of a rollout's name: rollout-<stamp>-<36 characters>.jsonl.
 export const rolloutId = (name) => (name.startsWith("rollout-") && name.endsWith(".jsonl") ? name.slice(0, -6).slice(-36).toLowerCase() : null);
 
+export const AMBIGUOUS = Symbol("ambiguous");
+
 // The one rollout whose id starts with `prefix`, looked for in the folder of the id's local day
-// (and the days beside it, should the zone have moved). None or more than one: null.
+// (and the days beside it, should the zone have moved). None: null; more than one: AMBIGUOUS.
 export async function rolloutByPrefix(io, home, prefix) {
   const ms = uuid7Time(prefix);
   if (ms === null) return null;
@@ -33,7 +37,7 @@ export async function rolloutByPrefix(io, home, prefix) {
     const names = await io.list(dir);
     if (!Array.isArray(names)) continue;
     const hits = names.filter((n) => rolloutId(n)?.startsWith(prefix));
-    if (hits.length > 1) return null;
+    if (hits.length > 1) return AMBIGUOUS;
     if (hits.length === 1) return `${dir}/${hits[0]}`;
   }
   return null;
@@ -86,11 +90,13 @@ export default {
     if (env?.HC_TERMINAL_ID && env.HC_TERMINAL_ID !== agent.terminal) return null;
     const home = env?.CODEX_HOME || `${io.home}/.codex`;
     const base = { id: "codex", terminal: agent.terminal, pid: fg.pid };
-    // A thread id in the title names the thread: then only its rollout counts.
+    // A thread id in the title names the thread: then only its rollout counts. `titlePrefix` is
+    // what the title said, for the reader's check after the read (the title still says it).
     const prefix = byTitle(fg.title);
     if (prefix) {
       const file = await rolloutByPrefix(io, home, prefix);
-      return file ? { ...base, file, thread: prefix, how: "title", files: [file] } : null;
+      if (file === AMBIGUOUS) return null;
+      if (file) return { ...base, file, thread: prefix, titlePrefix: prefix, how: "title", files: [file] };
     }
     const open = await byOpenFile(io, fg.pid, ROLLOUT);
     // Whose thread a rollout is never changes (its first line): kept per path while the process
@@ -100,8 +106,11 @@ export default {
     const known = memo.threadSources instanceof Map ? memo.threadSources : (memo.threadSources = new Map());
     if (Array.isArray(open)) for (const f of [...known.keys()]) if (!open.includes(f)) known.delete(f);
     if (!open?.length) return null;
+    // With a title, only its thread's rollouts: two open user threads can be told apart by it.
+    const name = (f) => f.slice(f.lastIndexOf("/") + 1);
+    const candidates = prefix ? open.filter((f) => rolloutId(name(f))?.startsWith(prefix)) : open;
     const users = [];
-    for (const f of open) {
+    for (const f of candidates) {
       let source = known.get(f);
       if (source !== undefined && !(await io.stat(f))) { known.delete(f); source = undefined; }
       if (source === undefined) {
@@ -111,8 +120,8 @@ export default {
       if (source === "user") users.push(f);
     }
     if (users.length !== 1) return null; // none, or two user threads in one process: ambiguous
-    const thread = rolloutId(users[0].slice(users[0].lastIndexOf("/") + 1));
-    return { ...base, file: users[0], thread, how: "open-file", files: [users[0]] };
+    const thread = rolloutId(name(users[0]));
+    return { ...base, file: users[0], thread, titlePrefix: prefix, how: prefix ? "title+open-file" : "open-file", files: [users[0]] };
   },
 
   async read(source, io) {

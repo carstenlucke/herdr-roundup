@@ -3,7 +3,7 @@
 // (Codex 0.167.0, 2026-11-14, thread id in the title) and an io stub.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import codex, { rolloutId, rolloutByPrefix, findRollout, threadSource } from "../mods/roundup-pane/context/strategies/codex.js";
+import codex, { rolloutId, rolloutByPrefix, findRollout, threadSource, AMBIGUOUS } from "../mods/roundup-pane/context/strategies/codex.js";
 import { localParts } from "../mods/roundup-pane/context/locate.js";
 import { NO_READING } from "../mods/roundup-pane/context/tail.js";
 import { contextIo, fixture, jsonl } from "./support/context-io.mjs";
@@ -38,6 +38,8 @@ test("the title's id prefix leads to the one rollout of its day; two matches or 
   const io = setup();
   assert.equal(await rolloutByPrefix(io, "/Users/a/.codex", "01a1d750-0653-7190-914d-7c804"), FILE);
   assert.deepEqual(io.calls.filter((c) => c[0] === "list").map((c) => c[1]), [DIR], "only that day's folder is listed");
+  assert.equal(await rolloutByPrefix(io, "/Users/a/.codex", "01a1d751-9827-7f61-959e-cedf8"), null, "none");
+  assert.equal(await rolloutByPrefix(setup({ files: { [FILE]: rollout, [FILE.replace("7c804d23545c", "7c804d999999")]: rollout } }), "/Users/a/.codex", "01a1d750-0653-7190-914d-7c804"), AMBIGUOUS, "two");
   const twin = FILE.replace("7c804d23545c", "7c804d999999");
   assert.equal(await reading(setup({ files: { [FILE]: rollout, [twin]: rollout } })), null);
   assert.equal(await reading(setup({ files: {} })), null);
@@ -45,8 +47,26 @@ test("the title's id prefix leads to the one rollout of its day; two matches or 
   assert.equal(rolloutId("other.jsonl"), null);
 });
 
-test("a title with an id that matches nothing doesn't fall back to an open file", async () => {
-  const io = setup({ title: "01a1d751-9827-7f61-959e-cedf8...", open: { [PID]: [FILE] } });
+test("a title whose rollout isn't in CODEX_HOME falls back to the open files, but only to its own thread's one user rollout", async () => {
+  // CODEX_HOME as read is wrong (cut at a space, or no ps -E on Linux): the rollout lies elsewhere.
+  const elsewhere = { HC_TERMINAL_ID: "t8", CODEX_HOME: "/Users/a/My" };
+  let io = setup({ env: elsewhere, open: { [PID]: [FILE] } });
+  const src = await codex.locate({ terminal: "t8" }, io);
+  assert.deepEqual([src.how, src.titlePrefix, src.thread], ["title+open-file", "01a1d750-0653-7190-914d-7c804", ID]);
+  assert.equal((await codex.read(src, io)).used, 18_298);
+  // Two user threads open, told apart by the title.
+  const other = `${DIR}/rollout-2026-11-14T00-49-00-01a1d751-9827-7f61-959e-cedf80000000.jsonl`;
+  io = setup({ env: elsewhere, files: { [FILE]: rollout, [other]: rollout }, open: { [PID]: [other, FILE] } });
+  assert.equal((await codex.locate({ terminal: "t8" }, io)).file, FILE);
+  // The title names a thread none of the open rollouts is: nothing, not the one that is open.
+  io = setup({ title: "01a1d751-aaaa-7f61-959e-cedf8...", open: { [PID]: [FILE] } });
+  assert.equal(await reading(io), null);
+  // Two open user rollouts that both start with the title's prefix: nothing.
+  const twin = FILE.replace("7c804d23545c", "7c804d999999");
+  io = setup({ env: elsewhere, files: { [FILE]: rollout, [twin]: rollout }, open: { [PID]: [FILE, twin] } });
+  assert.equal(await reading(io), null);
+  // Two of the title's prefix in its folder: ambiguous there already, no fallback.
+  io = setup({ files: { [FILE]: rollout, [twin]: rollout }, open: { [PID]: [FILE] } });
   assert.equal(await reading(io), null);
   assert.equal(io.calls.some((c) => c[0] === "openFiles"), false);
 });
