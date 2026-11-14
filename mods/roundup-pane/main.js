@@ -24,13 +24,18 @@ import { menuView, shortcut } from "./menu.js";
 import { folder, paneId, cutName } from "./header-text.js";
 // Roundup's own: the agent's context meter (context/, context-io.js, context-view.js; RECIPE "Context").
 import { ContextReader, sweep } from "./context/reader.js";
-import { tier } from "./context/text.js";
+import { headerTier } from "./context/text.js";
 import { makeIo } from "./context-io.js";
 import { meter } from "./context-view.js";
 
 // Integration files of ended terminals go once an hour, by whichever header gets there first.
 let lastSweep = 0;
 const SEE_MS = 2000;
+// A hover card draws above popups: the meter's stays empty while one of these holds an overlay id.
+// This mod's own menu and rename dialog write theirs to OVERLAY and clear only their own (as
+// roundup-menu does); roundup-menu's menus and the close confirmation (close.js) write theirs.
+const OVERLAY = "roundup-pane.overlay";
+const covered = () => Boolean(shared("roundup-menu.open") || shared("roundup-confirm.open") || shared(OVERLAY));
 
 function icon(p, size, color) {
   if (!p?.icon) return null;
@@ -74,6 +79,10 @@ export default class Pane extends View {
   init(_props, cx) {
     this.hovered = false;
     this.copied = false;
+    // The menu and the dialog are overlays: their id goes to OVERLAY until they close.
+    const overlay = (props()?.rename || props()?.target) && props()?.overlay;
+    this.overlay = overlay || null;
+    if (this.overlay) setShared(OVERLAY, this.overlay);
     if (props()?.rename) return this.initDialog(cx);
     // The terminal's right-click menu: props { tab: "pane", target: { pane, terminal }, overlay }.
     if (props()?.target) {
@@ -95,7 +104,10 @@ export default class Pane extends View {
     });
   }
 
+  // Only its own entry: a newer menu or dialog may have taken the key meanwhile. (One left by a
+  // crash goes with the next overlay, which writes its id and clears it on closing.)
   async close() {
+    if (this.overlay && shared(OVERLAY) === this.overlay) setShared(OVERLAY, null);
     this.context?.close();
   }
 
@@ -153,13 +165,16 @@ export default class Pane extends View {
     const st = p.status;
     const pane = p.pane;
     this.context?.see(p, focused()?.tab === p.tab, cx);
-    const ctx = this.context && meter(t, { pane, reading: this.context.reading, tier: tier(this.width), agent: this.context.strategy?.id, hint: this.context.hint, covered: Boolean(shared("roundup-menu.open")),
+    // The tier from the current zoom, so a zoom change re-tiers without a new measurement.
+    this.shownTier = headerTier(this.width, settings()?.zoom);
+    const ctx = this.context && meter(t, { pane, reading: this.context.reading, tier: this.shownTier, agent: this.context.strategy?.id, hint: this.context.hint, covered: covered(),
       // An icon of its own: an element belongs to the one parent it's given (gpui-kit.d.ts).
       head: { pic: icon(p.program, 14, t.dim), name, id: id.shown, font } });
     return h_flex()
       .id(`pane-head-${pane}`)
       .size_full()
-      .on_size_change((size, cx) => { if (size.width !== this.width) { this.width = size.width; cx.notify(); } })
+      // The width is kept on every change (a later zoom tiers it), but only a new tier re-renders.
+      .on_size_change((size, cx) => { this.width = size.width; if (headerTier(this.width, settings()?.zoom) !== this.shownTier) cx.notify(); })
       .px(10)
       .gap(8)
       .items_center()

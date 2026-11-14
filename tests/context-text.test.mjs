@@ -3,7 +3,7 @@
 // source, and which strategy a pane gets (mods/roundup-pane/context/).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { tokens, share, percentText, severity, tier, TIERS, usedText } from "../mods/roundup-pane/context/text.js";
+import { tokens, share, percentText, severity, tier, headerTier, TIERS, usedText } from "../mods/roundup-pane/context/text.js";
 import { completeLines, fromEnd, scanTail, FIRST, NO_READING } from "../mods/roundup-pane/context/tail.js";
 import { byTitle, uuid7Time, byTerminalFile, integrationFile, localParts } from "../mods/roundup-pane/context/locate.js";
 import { strategyFor, STRATEGIES } from "../mods/roundup-pane/context/registry.js";
@@ -50,6 +50,18 @@ test("the meter's tiers: the tokens go first, then the bar, the percent stays lo
   assert.equal(tier(TIERS.percent - 1), "none");
   assert.equal(tier(undefined), "full");
   assert.ok(TIERS.full > TIERS.bar && TIERS.bar > TIERS.percent);
+});
+
+test("headerTier: on_size_change's window px divided by the zoom; no width yet stays full", () => {
+  assert.equal(headerTier(TIERS.full, 1), "full");
+  assert.equal(headerTier(TIERS.full * 1.5 - 1, 1.5), "bar", "zoom 1.5: 600 window px are 400 of the mod's");
+  assert.equal(headerTier(TIERS.full * 1.5, 1.5), "full");
+  assert.equal(headerTier(TIERS.bar * 0.8, 0.8), "bar", "zoom 0.8: fewer window px, the same tier");
+  assert.equal(headerTier(TIERS.bar * 0.8 - 1, 0.8), "percent");
+  assert.equal(headerTier(null, 1.5), "full", "null / zoom would be 0: none");
+  assert.equal(headerTier(undefined, 2), "full");
+  assert.equal(headerTier(TIERS.full, undefined), "full", "no zoom: 1");
+  assert.equal(headerTier(TIERS.full, 0), "full");
 });
 
 test("usedText: used / window, or tokens alone without a window", () => {

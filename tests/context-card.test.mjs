@@ -3,7 +3,7 @@
 // card's rows (context/card.js), and the header showing it (main.js, through the herdr stub).
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { herdr, reset, mount, pane, agentProgram, program, findAll, texts, walk, element, clock } from "./support/harness.mjs";
+import { herdr, reset, mount, pane, agentProgram, program, findAll, texts, walk, element, clock, fire } from "./support/harness.mjs";
 
 const { cardModel } = await import("../mods/roundup-pane/context/card.js");
 const { meter, BAR_W, PILL_H } = await import("../mods/roundup-pane/context-view.js");
@@ -162,5 +162,63 @@ test("the header: under the pointer the buttons come before the meter, so the me
   const ids = root.kids.map((k) => (k.type === "HoverCard" ? k.arg : k.elementId ?? k.type));
   assert.ok(ids.indexOf("ph-x-p1") < ids.indexOf("ph-ctx-card-p1"), `close before the meter: ${ids}`);
   assert.equal(root.kids[ids.indexOf("ph-n-p1") - 1].has("flex_1"), true, "the buttons right after the folder");
+  view.close();
+});
+
+// A Claude header with a reading, mounted and rendered once.
+function claudeHeader(extra = {}) {
+  herdr.set({ panes: [pane("p1", "tb1", { terminal: "t1", program: agentProgram("claude"), status: "idle", cwd: "/x" })], focused: { tab: "tb1" }, ...extra });
+  const m = mount(Pane, { props: { pane: "p1", terminal: "t1" } });
+  m.render();
+  m.view.context.reading = R;
+  return m;
+}
+const cardOf = (root) => root.kids.find((k) => k.type === "HoverCard");
+
+test("the header's tier follows the zoom: on_size_change's window px are divided by it, and only a new tier re-renders", () => {
+  herdr.set({ settings: { zoom: 1.5, dark: true, font_family: "Menlo", font_size: 13 } });
+  const { view, render, cx } = claudeHeader();
+  let root = render();
+  assert.match(words(trigger(cardOf(root))), /97\.6k/, "no width yet: full");
+  const before = cx.notified;
+  fire(root, "size_change", { width: 700, height: 28 }, cx); // 466 of the mod's px at 1.5: "bar"
+  assert.equal(cx.notified, before + 1, "full -> bar re-renders");
+  root = render();
+  assert.doesNotMatch(words(trigger(cardOf(root))), /97\.6k/, "zoom 1.5: 700 window px are too narrow for the tokens");
+  fire(root, "size_change", { width: 710, height: 28 }, cx);
+  fire(root, "size_change", { width: 800, height: 28 }, cx);
+  assert.equal(cx.notified, before + 1, "the same tier: no re-render");
+  assert.equal(view.width, 800, "the width is kept all the same");
+  herdr.set({ settings: { zoom: 1, dark: true, font_family: "Menlo", font_size: 13 } });
+  root = render();
+  assert.match(words(trigger(cardOf(root))), /97\.6k/, "zoom back to 1: 800 px are full, without a new measurement");
+  fire(root, "size_change", { width: 801, height: 28 }, cx);
+  assert.equal(cx.notified, before + 1, "still full: no re-render");
+  view.close();
+});
+
+test("the card stays empty while this mod's menu or rename dialog is open, or a close confirmation; each clears only its own id", async () => {
+  const { view, render } = claudeHeader();
+  // props() is the stub's one value: each mount sets it, so the header's goes back before its render.
+  const empty = () => { herdr.set({ props: { pane: "p1", terminal: "t1" } }); return cardOf(render()).style("content")[0].kids.length === 0; };
+  assert.equal(empty(), false);
+  const menu = mount(Pane, { props: { tab: "pane", target: { pane: "p1", terminal: "t1" }, overlay: "o1" } });
+  assert.equal(herdr.shared("roundup-pane.overlay"), "o1");
+  assert.equal(empty(), true, "the menu is open: the card would draw above it");
+  const dialog = mount(Pane, { props: { rename: { pane: "p1", terminal: "t1", value: "", fallback: "zsh" }, overlay: "o2" } });
+  assert.equal(herdr.shared("roundup-pane.overlay"), "o2");
+  await menu.view.close();
+  assert.equal(herdr.shared("roundup-pane.overlay"), "o2", "the older menu's close leaves the dialog's id");
+  assert.equal(empty(), true);
+  const other = mount(Pane, { props: { pane: "p1", terminal: "t1" } });
+  await other.view.close();
+  assert.equal(herdr.shared("roundup-pane.overlay"), "o2", "a header that starts or closes leaves it alone");
+  await dialog.view.close();
+  assert.equal(herdr.shared("roundup-pane.overlay"), null);
+  assert.equal(empty(), false);
+  herdr.set({ shared: { "roundup-confirm.open": "o3" } });
+  assert.equal(empty(), true, "the close confirmation (close.js) covers it too");
+  herdr.set({ shared: { "roundup-confirm.open": null, "roundup-menu.open": "o4" } });
+  assert.equal(empty(), true, "and roundup-menu's menus, as before");
   view.close();
 });

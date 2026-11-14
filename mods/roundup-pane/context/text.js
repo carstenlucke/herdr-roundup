@@ -39,7 +39,7 @@ export function severity(p) {
 
 // How much of the meter a header of this width shows: "full" (bar, percent, tokens), "bar" (bar
 // and percent), "percent", or "none". The tokens go first, then the bar; the percent stays longest.
-// Widths are the whole header's, as its root's on_size_change reports them.
+// Widths are the whole header's, in the mod's px (headerTier converts on_size_change's).
 export const TIERS = { full: 560, bar: 420, percent: 300 };
 export function tier(width) {
   if (!Number.isFinite(width)) return "full"; // before the first layout: as wide as it can be
@@ -47,6 +47,11 @@ export function tier(width) {
   if (width >= TIERS.bar) return "bar";
   if (width >= TIERS.percent) return "percent";
   return "none";
+}
+// The tier of a width as on_size_change measures it: in the window's pixels, which Herdr's zoom
+// makes larger than the mod's (Herdr's picker divides the same way). No width yet stays "full".
+export function headerTier(width, zoom) {
+  return tier(Number.isFinite(width) ? width / (Number(zoom) || 1) : null);
 }
 
 // The meter's words beside the bar: "97.6k / 200k", or tokens alone without a window ("265k").
