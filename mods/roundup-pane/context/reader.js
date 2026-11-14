@@ -253,12 +253,16 @@ export class ContextReader {
     if (key === this.key && sameStats(stats, this.stats)) return false;
     let r = await strategy.read(src, io, this.memo);
     if (gen !== this.gen) return false;
-    // A late answer can't overwrite a newer session: the terminal still runs the same process.
+    // A late answer of another process is dropped: the terminal must still run the one located,
+    // and where the strategy can tell from hc get (Codex's title), still on the same thread. A new
+    // session in the same process that it can't tell (Claude's /clear) isn't caught here: the next
+    // successful locate, which sees the new session (part of the source's key), replaces or clears
+    // the old reading. Until then (hc not answering that locate, say) the old one stands.
     const fg = await io.terminal(terminal);
     if (gen !== this.gen) return false;
     // No answer from hc (slow, failed) proves nothing: the reading stands, the next look checks again.
     if (!fg) { this.key = this.stats = null; return false; }
-    if (fg.pid !== src.pid) { this.key = this.stats = null; return this.set(null, gen); }
+    if (fg.pid !== src.pid || strategy.stillSame?.(src, fg) === false) { this.key = this.stats = null; return this.set(null, gen); }
     // Read without a number: the meter goes, with no backoff; its stats are kept only where the
     // strategy says the file alone decides (then read again only when a file changes).
     if (r === NO_READING) {

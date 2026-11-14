@@ -619,3 +619,96 @@ test("Claude: a status line file that can't be read a few times is read again ev
   assert.equal(reader.reading?.window, 1_000_000);
   assert.deepEqual(cx.errors, []);
 });
+
+test("a process's environment is asked once per pid: kept while it runs, asked again for a new pid or after a failed ps", async () => {
+  const { io, pane } = realAgent("claude");
+  io.now = () => clock.now;
+  const reader = new ContextReader(io, { queue: makeQueue(2) });
+  const cx = makeCx();
+  const envs = () => io.calls.filter((c) => c[0] === "env").length;
+  const env = io.env;
+  let failOnce = true;
+  io.env = async (pid) => (failOnce ? ((failOnce = false), null) : env(pid));
+  reader.see(pane, true, cx);
+  await clock.advance(2000);
+  await clock.advance(IDLE_MS * 3);
+  assert.ok(reader.reading?.used > 0);
+  // The stub counts only the calls that reached it: the first look's failed ps wasn't kept, the
+  // second look's answer was, and no later look asked again.
+  assert.equal(envs(), 1);
+  assert.equal(reader.memo.env?.pid, 52896);
+  const orig = io.terminal;
+  io.terminal = async (t) => ({ ...(await orig(t)), pid: 52897 }); // a new process in the terminal
+  await clock.advance(IDLE_MS);
+  assert.equal(reader.memo.env?.pid, 52897, "one entry, for the current pid");
+  assert.deepEqual(cx.errors, []);
+});
+
+test("Codex: a title that names another thread when the read ends drops the late answer; one without an id, or the cut id of a fallback, keeps it", async () => {
+  const { io, pane } = realAgent("codex");
+  io.now = () => clock.now;
+  const reader = new ContextReader(io, { queue: makeQueue(2) });
+  const cx = makeCx();
+  const tail = io.tail;
+  let during = null; // the title hc get gives once the read has started
+  const orig = io.terminal;
+  let title = null;
+  io.terminal = async (t) => ({ ...(await orig(t)), ...(title === null ? {} : { title }) });
+  io.tail = async (...a) => { if (during !== null) title = during; return tail(...a); };
+  reader.see(pane, true, cx);
+  await clock.advance(2000);
+  const first = reader.reading;
+  assert.ok(first?.used > 0);
+  // /new in the same process while the read runs: the title now names another thread.
+  during = "01a1d751-9827-7f61-959e-cedf8... | ok";
+  reader.key = reader.stats = null; // a file changed: read again
+  reader.see({ ...pane, status: "working" }, true, cx);
+  await clock.advance(10);
+  assert.equal(reader.reading, null, "another thread: the late answer goes");
+  // A title without an id for a moment says nothing: the answer stands.
+  title = null;
+  during = "Codex";
+  reader.see({ ...pane, status: "idle" }, true, cx);
+  await clock.advance(10);
+  assert.deepEqual(reader.reading, first);
+  assert.deepEqual(cx.errors, []);
+});
+
+test("Codex fallback (CODEX_HOME not as read): the cut title id still matches its open rollout after the read", async () => {
+  const { io, pane } = realAgent("codex");
+  io.now = () => clock.now;
+  const file = Object.keys(io.files)[0];
+  io.env = async () => ({ HC_TERMINAL_ID: "t8", CODEX_HOME: "/Users/a/My" }); // cut at a space
+  io.openFiles = async () => [file];
+  const reader = new ContextReader(io, { queue: makeQueue(2) });
+  const cx = makeCx();
+  reader.see(pane, true, cx);
+  await clock.advance(2000);
+  assert.equal(reader.reading?.used, 18_298);
+  assert.equal(reader.reading?.session, "01a1d750-0653-7190-914d-7c804d23545c", "the whole id, from the rollout's name");
+});
+
+test("Claude: a new session in the same process during a read: the late answer stands until the next successful locate, which clears it", async () => {
+  const { io, pane } = realAgent("claude");
+  io.now = () => clock.now;
+  const reader = new ContextReader(io, { queue: makeQueue(2) });
+  const cx = makeCx();
+  reader.see(pane, true, cx);
+  await clock.advance(2000);
+  const first = reader.reading;
+  assert.ok(first?.used > 0);
+  // /clear: the session file of the same pid names a new session, with no transcript yet.
+  const sessionFile = "/Users/a/.claude/sessions/52896.json";
+  const s = JSON.parse(io.files[sessionFile]);
+  const tail = io.tail;
+  io.tail = async (...a) => { io.files[sessionFile] = JSON.stringify({ ...s, sessionId: "2fbf3e48-42ea-40d5-b3ed-40730f7e7b44" }); return tail(...a); };
+  reader.key = reader.stats = null; // a file changed: read again
+  reader.see({ ...pane, status: "working" }, true, cx);
+  await clock.advance(10);
+  assert.deepEqual(reader.reading, first, "the same pid: not caught after the read");
+  io.tail = tail;
+  await clock.advance(AFTER_STATUS_MS + 10);
+  assert.equal(reader.reading, null, "the next locate sees the new session: no transcript yet, no number");
+  assert.equal(reader.misses, 0);
+  assert.deepEqual(cx.errors, []);
+});

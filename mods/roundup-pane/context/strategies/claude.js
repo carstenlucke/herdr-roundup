@@ -7,7 +7,7 @@
 //   → status line file ~/.cache/herdr-roundup/context/claude/<t>.json, if its pid and session match
 //   → transcript: the status line's transcript_path, else projects/<cwd slug>/<sessionId>.jsonl
 
-import { NO_ANSWER, foreground, byPidFile, byTerminalFile, integrationFile, parseJson } from "../locate.js";
+import { NO_ANSWER, foreground, processEnv, byPidFile, byTerminalFile, integrationFile, parseJson } from "../locate.js";
 import { scanTail, fromEnd, NO_READING } from "../tail.js";
 
 export const IDLE_COMPACT_MS = 55 * 60 * 1000; // observed on this machine, see RECIPE
@@ -123,7 +123,7 @@ export default {
   async locate(agent, io, memo = {}) {
     const fg = await foreground(io, agent.terminal);
     if (!fg || fg === NO_ANSWER) return fg;
-    const env = await io.env(fg.pid);
+    const env = await processEnv(io, fg.pid, memo);
     // The process's environment names its terminal: another one's means another terminal's agent.
     if (env?.HC_TERMINAL_ID && env.HC_TERMINAL_ID !== agent.terminal) return null;
     const home = env?.CLAUDE_CONFIG_DIR || `${io.home}/.claude`;

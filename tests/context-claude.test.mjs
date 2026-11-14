@@ -250,6 +250,7 @@ test("a kept hit that is gone is searched for again at once; another home or ses
   io.files[`/Users/a/.cw/projects/-x/${SID}.jsonl`] = full;
   const envs = { HC_TERMINAL_ID: "t7", CLAUDE_CONFIG_DIR: "/Users/a/.cw" };
   io.env = async () => envs;
+  delete memo.env; // a process's environment is kept per pid: here the same pid stands for a new process
   assert.equal((await look()).transcript, `/Users/a/.cw/projects/-x/${SID}.jsonl`);
   assert.equal(memo.transcripts.size, 3);
 });

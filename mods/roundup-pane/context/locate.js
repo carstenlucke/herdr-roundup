@@ -5,7 +5,8 @@
 //   io.now()                      ms since the epoch
 //   io.terminal(address)          `hc get <t> --json`, cut to { pid, created, title, cwd } (pid: the
 //                                 foreground process, the agent's own), or null: no answer
-//   io.env(pid)                   that process's environment (`ps -wwE`), or null
+//   io.env(pid)                   that process's environment (`ps -wwE`), or null (processEnv
+//                                 keeps it per pid)
 //   io.readText(path)             a small file (up to 1 MiB) as text, or null
 //   io.stat(path)                 { size, mtime } or null
 //   io.tail(path, bytes)          { text, whole } of the file's last bytes, or null
@@ -42,6 +43,16 @@ export async function foreground(io, terminal) {
   const t = await io.terminal(terminal);
   if (!t) return NO_ANSWER;
   return Number.isInteger(t.pid) && t.pid > 0 ? t : null;
+}
+
+// The environment of the terminal's process (`ps -wwE`), which never changes while it runs: kept
+// in the reader's `memo` for the current pid only (one entry), and only an answer (a failed ps is
+// asked again on the next look).
+export async function processEnv(io, pid, memo = {}) {
+  if (memo.env?.pid === pid) return memo.env.value;
+  const value = await io.env(pid);
+  if (value) memo.env = { pid, value };
+  return value;
 }
 
 // A file named after the pid (Claude Code's ~/.claude/sessions/<pid>.json), parsed.
