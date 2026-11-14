@@ -115,12 +115,10 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   pane's id shortened to `p` and 6 hex digits), the folder in `dim`, the
   agent's context meter and status; on hover rename, split right, split
   down, zoom and close come in before the meter, so meter and status stay
-  put. The meter (Claude Code and Codex panes) is a pill 20px high, framed
-  in `border`, rounded 5px, 11.5px: a bar 30 × 4px on a track of its color
-  at 25%, the percent and the tokens in `dim` (`4% 18.3k / 475k`); `accent`
-  with a `muted` number below 65%, `working` from 65% and `blocked` from
-  80% with an alert mark before a `foreground` number. Without a known
-  window only the tokens (`340k`). Terminal padding 14 × 12px. Right-clicking a terminal shows Herdr's
+  put. The meter (Claude Code and Codex panes) is a pill: a bar, the
+  percent and the tokens (`4% 18.3k / 475k`), `accent` below 65%,
+  `working` from 65%, `blocked` with an alert mark from 80%; without a
+  known window only the tokens. Terminal padding 14 × 12px. Right-clicking a terminal shows Herdr's
   pane menu (Split right, Split down, Zoom, where right-clicks go, Close
   pane), then "Ask before closing a pane" with the same three choices. A
   terminal outside a tab has no pane: its menu leaves out Split, Zoom and
@@ -233,25 +231,18 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   focuses the pane. Tooltips: the whole id on the chip, the given and the
   program's name on the name.
 - **Context meter:** follows a working agent within about 15s (and 2s
-  after each status change), an idle one within a minute; a pane in a tab
-  not shown reads once a minute and within 2s of its tab showing again.
-  Narrow headers drop the tokens below 560px, the bar below 420px, the
-  percent below 300px. Hovering it 400ms opens a card (260px, `popover`):
-  the pane's icon, name and id chip; the tokens in use big, "of 1M" and the
-  percent; rows Free, Model, Read (time and source), Compacted
-  (`14:02 267k → 20.7k`) and, for an idle Claude Code session above 200k,
-  Idle compact `~14:32 estimate` in `working` (about 55 min after the last
-  answer, as observed; gone 5 min after it); notes on a rounded window, how
-  to get one, Codex's 12k baseline. Empty while `roundup-menu` is open. No
-  click. No meter for a shell, a mod pane, an agent just started or of
-  another machine, or a source not proven (two Codex threads in one
-  process, a file of another process or session).
+  after each status change), an idle one, or one in a tab not shown,
+  within a minute. Narrow headers drop the tokens, then the bar, then the
+  percent. Hovering it opens a card: the tokens, window and percent, free,
+  model, when and from where read, the last compaction and, for an idle
+  Claude Code session above 200k, the idle compaction it expects (about
+  55 min after the last answer, as observed). No meter for a shell, a mod
+  pane, an agent of another machine, or a source not proven.
   - **Exact numbers need an integration** (`scripts/agent-integrations.sh
-    install|uninstall|status <claude|codex>`, by hand and only with the
-    person's yes: it edits their agent config, backs it up, restores it
-    exactly). Without it, Claude Code shows its window only after a
-    `/context` in that session (`~`), else its tokens alone; Codex only
-    when it holds its rollout itself (`codex --no-daemon`).
+    install|uninstall|status <claude|codex>`, only with the person's yes:
+    it edits their agent config, backs it up, restores it exactly).
+    Without it Claude Code shows its window only after a `/context`, Codex
+    only in direct mode (`codex --no-daemon`).
 - **Closing** asks first as its kind's choice says: the tab menu's for tabs,
   the terminal menu's for panes; both stay after a restart. A tab closes by
   its ×, its menu's Close or `cmd-w`; a pane by its header's ×, Close pane
@@ -491,36 +482,14 @@ Commands: `pane.focus`, `pane.split`, `pane.zoom`, `pane.close`,
 `zoom`, `unzoom`, `close`.
 
 **Context meter** (in `roundup-pane`; sources and why in
-`docs/adr/0003-context-from-agent-integrations.md`, details in the files'
-comments). `main.js` gains an import, a `ContextReader` in `init` (not in
-the dialog or menu copies), a 2s timer calling its `see()`, the root's
-`on_size_change`, one child and `close()`. The rest is herdr-free where it
-can be: `context/text.js` (words, severity, tiers), `context/card.js`
-(`cardModel`), `context/tail.js` (`tail -c` from 256 KiB, growing),
-`context/locate.js`, `context/reader.js` (schedule, cache, a queue of two),
-`context/registry.js` and one `context/strategies/<agent>.js` per program
-(`{id, matches, locate(agent, io, memo), read(source, io, memo)}`);
-`context-io.js` builds `io` on `exec`, `hc` and `readTextFile`;
-`context-view.js` draws the pill and the `HoverCard` (`top_right`, open
-400ms, close 150ms).
-- **Terminal → session:** `hc get <t> --json` gives `foreground.pid` and
-  the title; `ps -wwE` checks `HC_TERMINAL_ID`. Claude Code:
-  `~/.claude/sessions/<pid>.json`, the status line file
-  `~/.cache/herdr-roundup/context/claude/<t>.json` if its pid and
-  `session_id` match, the transcript (`input + caches + output` of the last
-  answer, `postTokens` of a later `compact_boundary`), the window from
-  `context_window_size` or a `/context` line of the same session and
-  model. Codex: the thread id in its title (cut to 29 characters; its
-  UUIDv7 time names the rollout's folder and file, exactly one must match),
-  else the one user rollout the process holds open (`ps`, `lsof`);
-  `last_token_usage.total_tokens` of `model_context_window`.
-- **Integrations:** `claude` sets `statusLine.command` to `sh
+`docs/adr/0003-context-from-agent-integrations.md`, how in the files'
+comments): a `ContextReader` per header copy (`context/reader.js`), one
+strategy per agent program (`context/strategies/<agent>.js`), `io` from
+`context-io.js`, the pill and its `HoverCard` from `context-view.js`.
+- **Integrations:** `claude` sets `statusLine.command` to `exec sh
   '<…>/mods/roundup-pane/integrations/claude-statusline.sh'` (the previous
-  command runs after it under `/bin/sh`, kept in
-  `~/.config/herdr-roundup/integrations/`, guarded against leading back);
-  the script writes `{v: 1, terminal, pid, at, claude: <stdin>}`
-  atomically. `codex` adds `"thread-id"` last to `tui.terminal_title`. A
-  symlinked config stays a link.
+  command runs after it, kept in `~/.config/herdr-roundup/integrations/`);
+  `codex` adds `"thread-id"` last to `tui.terminal_title`.
 - **Adding an agent:** one strategy file and one line in the registry; an
   integration writes `~/.cache/herdr-roundup/context/<agent>/<t>.json`
   with `{v: 1, terminal, pid, at}`.
@@ -759,15 +728,9 @@ of global `tab.close` and `pane.close`.
   or `roundup-pane`. Not covered: the command palette's `tab.close` and
   `pane.close`. `pane.close` has no `confirmed`, so a tab's only pane
   closes with `tab.close`.
-- **Claude Code's status line after `/compact`** reports all-zero
-  `current_usage`: no reading; the transcript's `postTokens` stands until
-  the next answer. Codex cuts its title's thread id, and writes it (and the
-  rollout) only after the first message; the quicklook drops it from
-  titles. Herdr's `fs/promises` has no `stat` (`exec("stat")`).
-- **Headers in hidden tabs don't render:** a header copy starts only when
-  its tab is first shown, and a hidden one learns of its tab and status
-  from its 2s timer. Integration files are named by terminal id only, so a
-  second core can share a name; the pid check keeps its value out.
+- **Claude Code's status line after `/compact`** reports zeros: the
+  transcript's `postTokens` stands until the next answer. Codex cuts its
+  title's thread id and writes it only after the first message.
 - **Mods can't import from each other:** `find()` and `narrow()` are copied
   into both chrome mods, `close.js` and `menu.js` from `roundup-tabs` into
   `roundup-pane`. `scripts/sync.sh` stops when those differ.
@@ -837,11 +800,9 @@ of global `tab.close` and `pane.close`.
   the menu with no card over it.
 - The sidebar toggle narrows to the rail (numbers and `●`/`·`) and widens
   back.
-- A Claude Code and a Codex pane with their integrations show
-  `5% 47.9k / 1M` and `4% 17.3k / 475k`, as `context_window` and the last
-  `token_count` say; split in one tab, each its own. After `/compact` the
-  meter drops to `postTokens`; after `/clear` it goes within a minute.
-  Hovering it opens the card; a shell shows none.
+- A Claude Code and a Codex pane with their integrations show their
+  numbers (`5% 47.9k / 1M`), split in one tab each its own; after
+  `/compact` the meter drops, after `/clear` it goes within a minute.
 - Every pane header shows its terminal's address (`t5j`); double-clicking
   copies it. `hc label t5j roundup-pane.name=Build` shows "Build" within a
   second; so does renaming in the dialog, and an empty name shows the
