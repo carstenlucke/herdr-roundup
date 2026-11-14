@@ -232,6 +232,85 @@ test("with the real Claude strategy, the usage line behind a huge line is found 
   assert.deepEqual(io.calls.filter((c) => c[0] === "tail").map((c) => c[2]), [FIRST, FIRST * 4]);
 });
 
+// The real Claude strategy with its status line file, which `write` replaces (as the integration's
+// mv does): a later `at` than the transcript's answers, so the status line's number is the reading.
+function claudeWorld({ wrap = (s) => s } = {}) {
+  const sid = "0fbf3e48-42ea-40d5-b3ed-40730f7e7b44", pid = 52896;
+  const stdin = JSON.parse(fixture("claude-status-stdin.json"));
+  const mtimes = {};
+  const io = contextIo({
+    files: {
+      [`/Users/a/.claude/projects/-Users-a-src-demo/${sid}.jsonl`]: fixture("claude-transcript.jsonl"),
+      [`/Users/a/.claude/sessions/${pid}.json`]: JSON.stringify({ pid, sessionId: sid, cwd: "/Users/a/src/demo", startedAt: 1794613515093, kind: "interactive" }),
+    },
+    mtimes,
+    terminals: { t7: { pid, created: 1794613511000, title: "Claude Code" } },
+    envs: { [pid]: { HC_TERMINAL_ID: "t7" } },
+  });
+  io.now = () => clock.now;
+  const status = integrationFile(io, "claude", "t7");
+  const write = (cacheRead, at) => {
+    const cw = stdin.context_window;
+    io.files[status] = JSON.stringify({ v: 1, terminal: "t7", pid, at, claude: { ...stdin, context_window: { ...cw, current_usage: { ...cw.current_usage, cache_read_input_tokens: cacheRead } } } });
+    mtimes[status] = at;
+  };
+  const used = (cacheRead) => 4 + 390 + 143 + cacheRead;
+  const reader = new ContextReader(io, { strategies: [wrap(claude)], queue: makeQueue(2) });
+  const cx = makeCx();
+  const see = () => reader.see({ terminal: "t7", program: { key: "claude" }, app: "claude", status: "idle" }, true, cx);
+  const ofStatus = () => io.calls.filter((c) => c[1] === status).map((c) => c[0]);
+  return { io, status, write, used, reader, cx, see, ofStatus };
+}
+const T0 = Date.parse("2026-11-14T00:00:00Z");
+
+test("Claude's status line file is stat'd once and read once per look, stat first; read() asks it nothing", async () => {
+  const w = claudeWorld();
+  w.write(47_784, T0);
+  w.see();
+  await clock.advance(2000);
+  assert.deepEqual(w.cx.errors, []);
+  assert.equal(w.reader.reading.used, w.used(47_784));
+  assert.equal(w.reader.reading.source, "status-line");
+  assert.deepEqual(w.ofStatus(), ["stat", "readText"], "a look that reads: one observation, nothing more");
+  w.io.calls.length = 0;
+  await clock.advance(IDLE_MS);
+  assert.deepEqual(w.ofStatus(), ["stat", "readText"], "a look with nothing new: the same, and no read()");
+  assert.equal(w.io.calls.filter((c) => c[0] === "tail").length, 0, "unchanged: the transcript isn't read");
+});
+
+test("Claude's status line file replaced between locate() and read(): this look keeps what locate saw, the next reads the new file", async () => {
+  let swap = null;
+  const w = claudeWorld({ wrap: (s) => ({ ...s, async locate(...a) { const src = await s.locate(...a); swap?.(); swap = null; return src; } }) });
+  w.write(47_784, T0);
+  swap = () => w.write(90_000, T0 + 5000);
+  w.see();
+  await clock.advance(2000);
+  assert.deepEqual(w.cx.errors, []);
+  assert.equal(w.reader.reading.used, w.used(47_784), "the content of locate()'s observation, not the newer file");
+  assert.equal(w.reader.reading.at, T0, "with that content's time, not the newer file's mtime");
+  await clock.advance(IDLE_MS);
+  assert.equal(w.reader.reading.used, w.used(90_000), "the newer file is read on the next look, not taken as unchanged");
+  assert.equal(w.reader.reading.at, T0 + 5000);
+});
+
+test("Claude's status line file replaced between locate()'s stat and its read: the newer content now, and read again on the next look", async () => {
+  const w = claudeWorld();
+  w.write(47_784, T0);
+  const readText = w.io.readText;
+  let swap = () => w.write(90_000, T0 + 5000);
+  w.io.readText = async (p) => { if (p === w.status && swap) { swap(); swap = null; } return readText(p); };
+  w.see();
+  await clock.advance(2000);
+  assert.equal(w.reader.reading.used, w.used(90_000), "the content read is the newer file's");
+  w.io.calls.length = 0;
+  await clock.advance(IDLE_MS);
+  assert.equal(w.io.calls.filter((c) => c[0] === "tail").length > 0, true, "its stat was the older file's: changed, read again");
+  assert.equal(w.reader.reading.used, w.used(90_000));
+  w.io.calls.length = 0;
+  await clock.advance(IDLE_MS);
+  assert.equal(w.io.calls.filter((c) => c[0] === "tail").length, 0, "then unchanged");
+});
+
 test("sweep removes the integration files of ended terminals whose process is gone, and temp files older than an hour, nothing else", async () => {
   const dir = "/Users/a/.cache/herdr-roundup/context/claude";
   const io = contextIo({

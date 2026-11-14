@@ -65,9 +65,21 @@ export async function byPidFile(io, dir, pid) {
 // written by this process: { v: 1, terminal, pid, at, ... }. A file of an ended terminal, of an
 // earlier process in the same terminal, or of another version gives null.
 export async function byTerminalFile(io, agent, terminal, pid) {
-  const f = parseJson(await io.readText(integrationFile(io, agent, terminal)));
-  if (!f || f.v !== 1 || f.terminal !== terminal || f.pid !== pid || !Number.isFinite(f.at)) return null;
-  return f;
+  return ownFile(parseJson(await io.readText(integrationFile(io, agent, terminal))), terminal, pid);
+}
+const ownFile = (f, terminal, pid) => (!f || f.v !== 1 || f.terminal !== terminal || f.pid !== pid || !Number.isFinite(f.at) ? null : f);
+
+// The same file as one observation, for a strategy that hands it from locate() to read():
+// { path, stat, file }, `file` as byTerminalFile gives it, `stat` null while there is none (then it
+// isn't read). The stat comes first: a file replaced in between (the integrations write a temp file
+// and mv it) has content newer than its stat, and the next look sees a change and reads again.
+// Never the reverse, a newer stat on older content, which the reader would keep as read. The
+// strategy passes the stat on in its source's `observed`, so the reader doesn't stat it again.
+export async function observeTerminalFile(io, agent, terminal, pid) {
+  const path = integrationFile(io, agent, terminal);
+  const stat = await io.stat(path);
+  const file = stat ? ownFile(parseJson(await io.readText(path)), terminal, pid) : null;
+  return { path, stat, file };
 }
 
 // A thread id in a terminal title, whole or as Codex cuts it (`01a1d750-0653-7190-914d-7c804...`):

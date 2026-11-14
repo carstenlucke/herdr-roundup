@@ -8,6 +8,7 @@
 //   compaction. Shown again: at once. A status change while not shown waits for that.
 // - A source is read only when one of its files changed (size or modification time) or its last
 //   read gave no reading; finding it (hc get, the session file) is cheap and runs on each look.
+//   A file the strategy read while finding it comes with the stat of that read (`observed`).
 //   Nothing found, or a failed read: tried again with a backoff, not on every render. Read without
 //   a number (NO_READING): no backoff, the schedule above; read again when a file changed, or on
 //   every look where the strategy can't tell that from a failed read (keepsNoReading false).
@@ -249,7 +250,10 @@ export class ContextReader {
     if (src === NO_ANSWER) { this.key = this.stats = null; return false; }
     if (!src) { this.key = this.stats = null; return this.set(null, gen); }
     const key = sourceKey(src);
-    const stats = await Promise.all(src.files.map((f) => io.stat(f)));
+    // A file the strategy already observed in locate() keeps that stat (`observed`, path → stat or
+    // null), the one of the content it read: a newer stat here could mark newer content as read.
+    const seen = src.observed ?? {};
+    const stats = await Promise.all(src.files.map((f) => (Object.hasOwn(seen, f) ? seen[f] : io.stat(f))));
     if (gen !== this.gen) return false;
     // Nothing new: the reading stands (key is kept only beside a reading, or after NO_READING of
     // a strategy that keeps it: then the meter stays empty).

@@ -7,7 +7,7 @@
 //   → status line file ~/.cache/herdr-roundup/context/claude/<t>.json, if its pid and session match
 //   → transcript: the status line's transcript_path, else projects/<cwd slug>/<sessionId>.jsonl
 
-import { NO_ANSWER, foreground, processEnv, byPidFile, byTerminalFile, integrationFile, parseJson } from "../locate.js";
+import { NO_ANSWER, foreground, processEnv, byPidFile, observeTerminalFile, parseJson } from "../locate.js";
 import { scanTail, fromEnd, NO_READING } from "../tail.js";
 
 export const IDLE_COMPACT_MS = 55 * 60 * 1000; // observed on this machine, see RECIPE
@@ -136,8 +136,10 @@ export default {
     const home = env?.CLAUDE_CONFIG_DIR || `${io.home}/.claude`;
     const session = checkSession(await byPidFile(io, `${home}/sessions`, fg.pid), fg);
     if (!session) return null;
-    const status = await byTerminalFile(io, "claude", agent.terminal, fg.pid);
-    const path = status?.claude?.session_id === session.sessionId ? status.claude.transcript_path : null;
+    // Read once per look, here: read() takes the content and the reader the stat of this one
+    // observation (locate.js, observeTerminalFile), so neither can belong to a newer file.
+    const status = await observeTerminalFile(io, "claude", agent.terminal, fg.pid);
+    const path = status.file?.claude?.session_id === session.sessionId ? status.file.claude.transcript_path : null;
     // The status line's path first, then the slug's: both asked on every look, the folder search
     // (held after a miss) only when neither is there.
     const given = typeof path === "string" && path.endsWith(`${session.sessionId}.jsonl`) ? path : null;
@@ -153,19 +155,21 @@ export default {
       pid: fg.pid,
       session: session.sessionId,
       started: Number.isFinite(session.startedAt) ? session.startedAt : null,
-      statusFile: integrationFile(io, "claude", agent.terminal),
+      status: { file: status.file, mtime: status.stat?.mtime ?? null },
       transcript,
       setting: setting.length ? setting.join(" ") : null,
-      files: [`${home}/sessions/${fg.pid}.json`, integrationFile(io, "claude", agent.terminal), transcript].filter(Boolean),
+      files: [`${home}/sessions/${fg.pid}.json`, status.path, transcript].filter(Boolean),
+      observed: { [status.path]: status.stat },
     };
   },
 
   // `memo` is the reader's per-terminal store: the snapshot search runs once per session and then
   // at most every few minutes, not on every answer.
   async read(source, io, memo = {}) {
-    const statusFile = await byTerminalFile(io, "claude", source.terminal, source.pid);
+    // The status line file as locate() saw it: not read again here.
+    const statusFile = source.status?.file ?? null;
     const st = fromStatus(statusFile, source.session);
-    const stAt = st ? Math.max(statusFile.at, (await io.stat(source.statusFile))?.mtime ?? 0) : null;
+    const stAt = st ? Math.max(statusFile.at, source.status.mtime ?? 0) : null;
     const scan = source.transcript ? await scanTail(io, source.transcript, findTranscript) : null;
     const tr = scan && scan !== NO_READING ? scan : null;
     const failed = Boolean(source.transcript) && scan === null; // the tail failed: an error
