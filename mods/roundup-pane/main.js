@@ -18,10 +18,18 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
-import { panes, terminals, props, run, theme, settings, home, hc, shared, setShared, openOverlay, closeOverlay, notify } from "herdr";
+import { panes, terminals, props, run, theme, settings, home, hc, shared, setShared, openOverlay, closeOverlay, notify, focused } from "herdr";
 import { closePane, givenName, fallbackName, NAME_LABEL, NAMES } from "./close.js";
 import { menuView, shortcut } from "./menu.js";
 import { folder, paneId, cutName } from "./header-text.js";
+// Roundup's own: the agent's context meter (context/, context-io.js, context-view.js; RECIPE "Context").
+import { ContextReader, sweep } from "./context/reader.js";
+import { tier } from "./context/text.js";
+import { makeIo } from "./context-io.js";
+import { meter } from "./context-view.js";
+
+// Integration files of ended terminals go once an hour, by whichever header gets there first.
+let lastSweep = 0;
 
 function icon(p, size, color) {
   if (!p?.icon) return null;
@@ -73,6 +81,17 @@ export default class Pane extends View {
       this.handle.focus();
       return;
     }
+    this.context = new ContextReader(makeIo());
+    this.width = null;
+    cx.timer.every(10 * 60_000, (cx) => {
+      if (Date.now() - lastSweep < 3_600_000) return;
+      lastSweep = Date.now();
+      cx.spawn(async () => { await sweep(makeIo(), terminals().map((t) => t.address)).catch(() => 0); });
+    });
+  }
+
+  async close() {
+    this.context?.cancel();
   }
 
   me() {
@@ -127,9 +146,12 @@ export default class Pane extends View {
     const pic = icon(p.program, 14, t.dim);
     const st = p.status;
     const pane = p.pane;
+    this.context?.see(p, focused()?.tab === p.tab, cx);
+    const ctx = this.context && meter(t, { pane, reading: this.context.reading, tier: tier(this.width), agent: this.context.strategy?.id, hint: this.context.hint, covered: Boolean(shared("roundup-menu.open")) });
     return h_flex()
       .id(`pane-head-${pane}`)
       .size_full()
+      .on_size_change((size, cx) => { if (size.width !== this.width) { this.width = size.width; cx.notify(); } })
       .px(10)
       .gap(8)
       .items_center()
@@ -167,6 +189,7 @@ export default class Pane extends View {
         .on_click((e, cx) => { if (e.click_count === 2) { cx.stop_propagation(); this.copyId(cx, id); } })
         .child(this.copied ? "copied" : id.shown))
       .child(div().flex_1().truncate().text_color(t.dim).child(folder(p.cwd, home())))
+      .when(Boolean(ctx), (el) => el.child(ctx))
       .when(st === "working", el => el.child(svg("mods/workspace-chrome/spinner.svg").size(12).flex_none().text_color(t.working).spin(900)))
       .when(st === "blocked", el => el.child(div().flex_none().px(6).h(18).flex().items_center().rounded(5).bg(t.blocked + "26").text_size(10.5).font_semibold().text_color(t.blocked).child("Needs you")))
       .when(st === "done", el => el.child(div().size(7).flex_none().rounded(4).bg(t.done)))

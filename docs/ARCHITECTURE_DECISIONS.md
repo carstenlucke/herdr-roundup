@@ -7,6 +7,7 @@ and why one won. The details are in `docs/adr/`, one file per decision.
 | --- | --- | --- | --- |
 | [0001](adr/0001-pane-names-in-core-labels.md) | `roundup-pane` keeps a terminal pane's name as the core label `roundup-pane.name`, not in Herdr App's shared state | Accepted | 2026-11-06 |
 | [0002](adr/0002-file-icon-set.md) | `roundup-files` draws Symbols, chosen from nine icon sets on taste and licence | Accepted | 2026-11-06 |
+| [0003](adr/0003-context-from-agent-integrations.md) | The context meter takes the agents' own numbers through opt-in integrations (Claude's status line, Codex's thread id in its title), the session files as the passive part | Accepted | 2026-11-14 |
 
 ## When to write one
 

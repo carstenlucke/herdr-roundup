@@ -1,0 +1,217 @@
+// Claude Code: its context from its own status line (the integration, `agent-integrations.sh
+// install claude`), with the transcript for what the status line doesn't tell: a compaction and
+// the time of the last answer. Without the integration the window comes only from a `/context`
+// snapshot of this session, model and process; without one there is no window, tokens only.
+//
+// terminal → `hc get` foreground pid → ~/.claude/sessions/<pid>.json (sessionId, cwd, startedAt)
+//   → status line file ~/.cache/herdr-roundup/context/claude/<t>.json, if its pid and session match
+//   → transcript: the status line's transcript_path, else projects/<cwd slug>/<sessionId>.jsonl
+
+import { foreground, byPidFile, byTerminalFile, integrationFile, parseJson } from "../locate.js";
+import { scanTail, fromEnd } from "../tail.js";
+
+export const IDLE_COMPACT_MS = 55 * 60 * 1000; // observed on this machine, see RECIPE
+export const IDLE_COMPACT_FROM = 200_000;
+const SNAPSHOT = "## Context Usage";
+const SNAPSHOT_MAX_LINE = 64 * 1024; // the real line is ~2 KB; copies inside api-request-blob lines are far longer
+const SNAPSHOT_EVERY_MS = 5 * 60 * 1000;
+const COMPACT_ENV = ["CLAUDE_CODE_AUTO_COMPACT_WINDOW", "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE"];
+
+// A folder as Claude Code names its project folder: every character not a letter or digit is "-".
+export const slug = (cwd) => cwd.replace(/[^a-zA-Z0-9]/g, "-");
+
+const count = (n) => (Number.isFinite(n) && n >= 0 ? n : null);
+const time = (iso) => {
+  const t = Date.parse(iso ?? "");
+  return Number.isFinite(t) ? t : null;
+};
+
+// The session file of a pid, if it is an interactive session started in this terminal's life.
+export function checkSession(s, fg) {
+  if (!s || typeof s.sessionId !== "string" || !s.sessionId) return null;
+  if (s.kind !== undefined && s.kind !== "interactive") return null;
+  if (s.pid !== undefined && s.pid !== fg.pid) return null;
+  if (Number.isFinite(s.startedAt) && Number.isFinite(fg.created) && s.startedAt < fg.created - 2000) return null;
+  return s;
+}
+
+// The tokens of one answer's usage: input, both caches and the output (Claude Code counts the
+// output too: a compaction's preTokens is that sum). With server tools the top level adds up
+// every request of the turn, so the last of `iterations` counts.
+export function usageTokens(usage) {
+  if (!usage || typeof usage !== "object") return null;
+  const u = Array.isArray(usage.iterations) && usage.iterations.length ? usage.iterations[usage.iterations.length - 1] : usage;
+  const parts = [u.input_tokens, u.cache_creation_input_tokens, u.cache_read_input_tokens, u.output_tokens].map((n) => n ?? 0);
+  if (!parts.every((n) => Number.isFinite(n) && n >= 0)) return null;
+  return parts.reduce((a, b) => a + b, 0);
+}
+
+// The status line's stdin, as the integration kept it, for this session: { window, used, model }.
+// `used` is null at the start of a session (current_usage null) and right after /compact (all
+// four numbers 0): no reading, the transcript's postTokens stands then.
+export function fromStatus(file, session) {
+  const c = file?.claude;
+  if (!c || c.session_id !== session) return null;
+  const cw = c.context_window ?? {};
+  const window = Number.isFinite(cw.context_window_size) && cw.context_window_size > 0 ? cw.context_window_size : null;
+  const cu = cw.current_usage;
+  let used = null;
+  if (cu && typeof cu === "object") {
+    const n = usageTokens(cu);
+    if (n !== null && n > 0) used = n;
+  }
+  return { window, used, model: typeof c.model?.id === "string" ? c.model.id : null };
+}
+
+// The transcript's end, from the last line backwards: the last answer's usage of the main chain
+// and the newest compaction. Lines of side chains and `<synthetic>` answers are skipped.
+// undefined while neither is in the lines read (read more), unless the whole file was read.
+export function findTranscript(lines, whole) {
+  let usage = null, compaction = null;
+  for (const l of fromEnd(lines)) {
+    if (l.isSidechain === true) continue;
+    if (!compaction && l.type === "system" && l.subtype === "compact_boundary") {
+      const m = l.compactMetadata ?? {};
+      const post = count(m.postTokens), at = time(l.timestamp);
+      if (post !== null && at !== null) compaction = { pre: count(m.preTokens), post, at, trigger: m.trigger ?? null };
+      continue;
+    }
+    if (!usage && l.type === "assistant" && l.message?.usage && l.message.model !== "<synthetic>") {
+      const used = usageTokens(l.message.usage), at = time(l.timestamp);
+      if (used !== null && at !== null) usage = { used, at, model: typeof l.message.model === "string" ? l.message.model : null };
+    }
+    if (usage && compaction) break;
+  }
+  if (!usage && !compaction && !whole) return undefined;
+  return { usage, compaction };
+}
+
+// "1m" → 1000000, "200k" → 200000, "33k" → 33000, "749" → 749.
+export function displayTokens(s) {
+  const m = /^\s*([0-9]+(?:\.[0-9]+)?)\s*([kKmM]?)\s*$/.exec(s ?? "");
+  if (!m) return null;
+  const n = parseFloat(m[1]) * ({ k: 1e3, m: 1e6 }[m[2].toLowerCase()] ?? 1);
+  return Math.round(n);
+}
+
+// A `/context` snapshot line: a meta user line whose text starts "## Context Usage", with
+// `**Model:** <id>` and `**Tokens:** 48.1k / 1m (5%)`. Its window holds for this session and model;
+// the used tokens were the moment's, so they don't count. Anything else: null.
+export function parseSnapshot(line) {
+  const l = parseJson(line);
+  if (!l || l.type !== "user" || l.isMeta !== true || l.isSidechain === true) return null;
+  const c = l.message?.content;
+  const text = typeof c === "string" ? c : Array.isArray(c) ? c.find((p) => p?.type === "text")?.text : null;
+  if (typeof text !== "string" || !text.startsWith(SNAPSHOT)) return null;
+  const model = /\*\*Model:\*\*\s*(\S+)/.exec(text)?.[1] ?? null;
+  const tok = /\*\*Tokens:\*\*\s*([0-9.]+[kKmM]?)\s*\/\s*([0-9.]+[kKmM]?)/.exec(text);
+  const window = tok ? displayTokens(tok[2]) : null;
+  const buffer = displayTokens(/\|\s*Autocompact buffer\s*\|\s*([0-9.]+[kKmM]?)\s*\|/.exec(text)?.[1]);
+  const at = time(l.timestamp);
+  if (!model || !window || window <= 0 || at === null) return null;
+  return { model, window, buffer, at, session: l.sessionId ?? null };
+}
+
+export default {
+  id: "claude",
+  matches: ["claude", "claude-code"],
+
+  async locate(agent, io) {
+    const fg = await foreground(io, agent.terminal);
+    if (!fg) return null;
+    const env = await io.env(fg.pid);
+    // The process's environment names its terminal: another one's means another terminal's agent.
+    if (env?.HC_TERMINAL_ID && env.HC_TERMINAL_ID !== agent.terminal) return null;
+    const home = env?.CLAUDE_CONFIG_DIR || `${io.home}/.claude`;
+    const session = checkSession(await byPidFile(io, `${home}/sessions`, fg.pid), fg);
+    if (!session) return null;
+    const status = await byTerminalFile(io, "claude", agent.terminal, fg.pid);
+    const path = status?.claude?.session_id === session.sessionId ? status.claude.transcript_path : null;
+    let transcript = typeof path === "string" && path.endsWith(`${session.sessionId}.jsonl`) ? path : null;
+    if (!transcript && typeof session.cwd === "string") transcript = `${home}/projects/${slug(session.cwd)}/${session.sessionId}.jsonl`;
+    if (transcript && !(await io.stat(transcript))) transcript = await findBySession(io, home, session.sessionId);
+    const setting = COMPACT_ENV.filter((k) => env?.[k]).map((k) => `${k}=${env[k]}`);
+    return {
+      id: "claude",
+      terminal: agent.terminal,
+      pid: fg.pid,
+      session: session.sessionId,
+      started: Number.isFinite(session.startedAt) ? session.startedAt : null,
+      statusFile: integrationFile(io, "claude", agent.terminal),
+      transcript,
+      setting: setting.length ? setting.join(" ") : null,
+      files: [`${home}/sessions/${fg.pid}.json`, integrationFile(io, "claude", agent.terminal), transcript].filter(Boolean),
+    };
+  },
+
+  // `memo` is the reader's per-terminal store: the snapshot search runs once per session and then
+  // at most every few minutes, not on every answer.
+  async read(source, io, memo = {}) {
+    const statusFile = await byTerminalFile(io, "claude", source.terminal, source.pid);
+    const st = fromStatus(statusFile, source.session);
+    const stAt = st ? Math.max(statusFile.at, (await io.stat(source.statusFile))?.mtime ?? 0) : null;
+    const tr = source.transcript ? await scanTail(io, source.transcript, findTranscript) : null;
+
+    let window = st?.window ?? null, windowFrom = window ? "status-line" : null;
+    if (!window && source.transcript) {
+      const snap = await snapshot(source, io, memo);
+      const model = st?.model ?? tr?.usage?.model ?? null;
+      if (snap && snap.model === model && (source.started === null || snap.at >= source.started)) {
+        window = snap.window;
+        windowFrom = "snapshot";
+      }
+    }
+
+    // Of the readings, the newest wins: the status line's, the last answer's, a compaction after it.
+    const cands = [];
+    if (st?.used != null) cands.push({ used: st.used, at: stAt, source: "status-line" });
+    if (tr?.usage) cands.push({ used: tr.usage.used, at: tr.usage.at, source: "transcript" });
+    if (tr?.compaction && (!tr.usage || tr.compaction.at > tr.usage.at)) cands.push({ used: tr.compaction.post, at: tr.compaction.at, source: "compaction" });
+    if (!cands.length) return null;
+    const best = cands.reduce((a, b) => (b.at > a.at ? b : a));
+
+    const reading = {
+      used: best.used,
+      window,
+      percent: window ? (best.used / window) * 100 : null,
+      model: st?.model ?? tr?.usage?.model ?? null,
+      at: best.at,
+      source: best.source,
+      exact: windowFrom !== "snapshot",
+      windowRounded: windowFrom === "snapshot",
+      session: source.session,
+    };
+    if (tr?.compaction) reading.compaction = tr.compaction;
+    if (source.setting) reading.setting = source.setting;
+    // An idle session above 200k is compacted about 55 min after its last answer (observed, not
+    // published): when, if the reading is the last answer's and nothing compacted since.
+    if (tr?.usage && best.source !== "compaction" && best.used > IDLE_COMPACT_FROM) reading.idleCompactAt = tr.usage.at + IDLE_COMPACT_MS;
+    return reading;
+  },
+};
+
+// The newest valid `/context` snapshot of the session, searched for once and then again only when
+// the transcript has grown and a few minutes have passed.
+async function snapshot(source, io, memo) {
+  const now = io.now();
+  const size = (await io.stat(source.transcript))?.size ?? null;
+  const m = memo.snapshot;
+  if (m && m.session === source.session && (m.size === size || now - m.checked < SNAPSHOT_EVERY_MS)) return m.value;
+  const line = await io.lastLineWith(source.transcript, SNAPSHOT, SNAPSHOT_MAX_LINE);
+  const s = parseSnapshot(line);
+  const value = s && (s.session === null || s.session === source.session) ? s : null;
+  memo.snapshot = { session: source.session, size, checked: now, value };
+  return value;
+}
+
+// Should the slug ever not match: each session id is in exactly one project folder.
+async function findBySession(io, home, id) {
+  const dirs = await io.list(`${home}/projects`);
+  if (!Array.isArray(dirs)) return null;
+  const hits = [];
+  for (const d of dirs) {
+    const p = `${home}/projects/${d}/${id}.jsonl`;
+    if (await io.stat(p)) hits.push(p);
+  }
+  return hits.length === 1 ? hits[0] : null;
+}

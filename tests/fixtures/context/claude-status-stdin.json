@@ -1,0 +1,70 @@
+{
+ "session_id": "0fbf3e48-42ea-40d5-b3ed-40730f7e7b44",
+ "transcript_path": "/Users/a/.claude/projects/-Users-a-src-demo/0fbf3e48-42ea-40d5-b3ed-40730f7e7b44.jsonl",
+ "cwd": "/Users/a/src/demo",
+ "prompt_id": "73d0ea9a-4234-4e4d-a358-9ed411140ca0",
+ "effort": {
+  "level": "high"
+ },
+ "session_name": "Antwort nur mit ok",
+ "model": {
+  "id": "claude-opus-5-5",
+  "display_name": "Opus 5.5"
+ },
+ "workspace": {
+  "current_dir": "/Users/a/src/demo",
+  "project_dir": "/Users/a/src/demo",
+  "added_dirs": []
+ },
+ "version": "2.1.325",
+ "output_style": {
+  "name": "default"
+ },
+ "cost": {
+  "total_cost_usd": 0.1
+ },
+ "context_window": {
+  "total_input_tokens": 47931,
+  "total_output_tokens": 390,
+  "context_window_size": 1000000,
+  "current_usage": {
+   "input_tokens": 4,
+   "output_tokens": 390,
+   "cache_creation_input_tokens": 143,
+   "cache_read_input_tokens": 47784
+  },
+  "used_percentage": 5,
+  "remaining_percentage": 95
+ },
+ "exceeds_200k_tokens": false,
+ "prompt_cache": {
+  "warm": true,
+  "caching_observed": true,
+  "ttl": "1h",
+  "expires_at": 1794617157,
+  "requests": 2,
+  "misses": 0,
+  "expected_rebuilds": 0,
+  "hit_ratio": 0.8242736400012537,
+  "cache_write_tokens": 16814,
+  "miss_recache_tokens": 0,
+  "last_miss_at": null,
+  "last_miss_cause": null,
+  "miss_causes": {},
+  "recache_tokens_if_cold": 47931
+ },
+ "fast_mode": false,
+ "thinking": {
+  "enabled": true
+ },
+ "rate_limits": {
+  "five_hour": {
+   "used_percentage": 13,
+   "resets_at": 1794621000
+  },
+  "seven_day": {
+   "used_percentage": 28,
+   "resets_at": 1794866400
+  }
+ }
+}

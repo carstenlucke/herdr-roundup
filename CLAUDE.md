@@ -39,4 +39,7 @@ A Herdr App layout, cloned from Herdr's `main` (0.1.14). See README.md for the l
 - A `HoverCard` draws above popups: empty its content while a popup it would cover is open.
 - A `HoverCard` wraps its trigger in an element no style reaches, which never shrinks below its content: `truncate` inside it cuts nothing unless given a width (`nameRoom` in `roundup-workspace-chrome/brand.js`).
 - Herdr gives mods no signal for an open overlay, and its shipped `menu` sets no shared state: a mod that must know opens a clone that says so (`roundup-menu`, `roundup-menu.open`).
+- Herdr's `fs/promises` has only `exists`, `mkdir`, `readFile`, `readdir`, `rmdir`, `unlink`, `writeFile`: no `stat`. Size and mtime come from `exec("stat", …)` (`mods/roundup-pane/context-io.js`).
+- `terminals()` has no pid (it is `hc ls --json`'s form): a terminal's foreground process comes from `hc(["get", t, "--json"])`.
+- A pane header copy starts only when its pane is first shown: a tab not opened since Herdr started runs none of its headers' timers.
 - Mods don't get the split arrangement (`panes()` has no geometry). It is only in each machine's core document `herdr-app` (`doc.get` over `hc connect`), opaque JSON whose form can change with herdr-core: read it defensively, with a fallback (`mods/roundup-spaces/pane-map.js`).

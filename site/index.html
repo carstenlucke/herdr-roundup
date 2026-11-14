@@ -94,10 +94,11 @@
     <a href="#search"><span>04</span>Search and links</a>
     <a href="#preview"><span>05</span>A preview for every file</a>
     <a href="#panes"><span>06</span>Panes with names</a>
-    <a href="#closing"><span>07</span>Closing asks when it matters</a>
-    <a href="#updates"><span>08</span>Updates through your agent</a>
-    <a href="#install"><span>09</span>Install</a>
-    <a href="#questions"><span>10</span>Questions</a>
+    <a href="#context"><span>07</span>Each agent's context</a>
+    <a href="#closing"><span>08</span>Closing asks when it matters</a>
+    <a href="#updates"><span>09</span>Updates through your agent</a>
+    <a href="#install"><span>10</span>Install</a>
+    <a href="#questions"><span>11</span>Questions</a>
   </nav>
 
   <div class="md">
@@ -173,8 +174,15 @@
       <figure class="crop" style="max-width:500px"><button class="zoom" type="button"><img src="img/rename.webp" width="500" height="296" alt="The Rename pane dialog with the name Facet filters typed in"></button></figure>
     </section>
 
+    <section id="context">
+      <h2><i>07</i>Each agent's context</h2>
+      <p>A Claude Code or Codex pane shows in its header <b>how much of its context window is in use</b>: a small bar, the percent and the tokens. No more typing <code>/context</code> or <code>/status</code> to find out; at 65&nbsp;% the bar turns yellow, at 80&nbsp;% red, with a warning sign beside the number. <b>Hover it</b> for the tokens free, the model and when it was read.</p>
+      <figure class="crop" style="max-width:388px"><button class="zoom" type="button"><img src="img/context.webp" width="388" height="210" alt="Claude Code's pane header with 41% 412k / 1M, and its card: 412k of 1M in use, 588k free, the model and when it was read"></button></figure>
+      <p style="margin-top:30px">For exact numbers switch on each agent's integration once, with your yes: <code>scripts/agent-integrations.sh install claude</code> lets Claude Code's status line pass on its own numbers (your own status line keeps running), <code>install codex</code> puts the thread id into Codex's title. <code>uninstall</code> puts everything back. Without them Claude Code shows its tokens, and Codex its numbers when Herdr started it. An idle Claude Code session above 200k says when it will likely be compacted.</p>
+    </section>
+
     <section id="closing">
-      <h2><i>07</i>Closing asks when it matters</h2>
+      <h2><i>08</i>Closing asks when it matters</h2>
       <p>You choose when closing a tab or a pane asks first: <b>Never</b>, <b>While an agent works</b> (the default) or <b>Always</b>. Tabs have the choice in their right-click menu, panes in the terminal's. <kbd>cmd-w</kbd> closes the tab, <kbd>cmd-shift-w</kbd> the focused pane, both through your choice.</p>
       <div class="stack">
         <figure class="crop"><button class="zoom" type="button"><img src="img/close-menu.webp" width="520" height="290" alt="The tab's right-click menu with Ask before closing a tab: Never, While an agent works, Always"></button></figure>
@@ -184,7 +192,7 @@
     </section>
 
     <section id="updates">
-      <h2><i>08</i>Updates through your agent</h2>
+      <h2><i>09</i>Updates through your agent</h2>
       <div class="side wide">
         <div>
           <p>The installed version sits under the name at the top left. <b>Once a day</b> the layout asks GitHub for its latest release: a plain request with a generic name, so GitHub sees nothing but your IP address.</p>
@@ -196,7 +204,7 @@
     </section>
 
     <section id="install">
-      <h2><i>09</i>Install</h2>
+      <h2><i>10</i>Install</h2>
       <p>Herdr Roundup needs <a href="https://herdr.dev">Herdr App</a>. The easiest way in is your agent: paste this into it.</p>
       <div class="box">
         <div class="line"><code>Read ~/.config/herdr-app/AGENTS.md, then add this layout: https://github.com/carstenlucke/herdr-roundup/tree/main</code><button class="copy" type="button">Copy</button></div>
@@ -211,7 +219,7 @@
     </section>
 
     <section id="questions">
-      <h2><i>10</i>Questions</h2>
+      <h2><i>11</i>Questions</h2>
       <details id="mods"><summary>Which seven mods come with it?</summary>
         <ul>
           <li><code>roundup-workspace-chrome</code>: the sheep, the name and the version at the top left, and the update check.</li>

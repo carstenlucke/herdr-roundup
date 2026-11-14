@@ -118,8 +118,14 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   icon, the pane's name (`foreground`, medium), its id in a small mono chip
   (10.5px, `dim` on `hover`: the terminal's address such as `t5j`, or a mod
   pane's id shortened to `p` and 6 hex digits), the folder in `dim`, the
-  agent's status, and on hover rename, split right, split down, zoom and
-  close. Terminal padding 14 × 12px. Right-clicking a terminal shows Herdr's
+  agent's context meter, the agent's status, and on hover rename, split
+  right, split down, zoom and close. The context meter (Claude Code and
+  Codex panes, 11px): a bar 30 × 4px (the fill on a track of the same
+  color at 25% alpha), the percent of the context window in use and the
+  tokens (`4% 18.3k / 475k`); `accent` and a `muted` number below 65%,
+  `working` from 65% and `blocked` from 80%, then with an alert triangle
+  before a `foreground` number. Without a known window only the tokens
+  (`340k`, `muted`). Terminal padding 14 × 12px. Right-clicking a terminal shows Herdr's
   pane menu (Split right, Split down, Zoom, where right-clicks go, Close
   pane), then "Ask before closing a pane" with the same three choices, for
   panes only. A terminal outside a tab (a layout terminal block, a window)
@@ -260,6 +266,29 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   Esc cancels); an empty name goes back to the program's. A click elsewhere
   on the header focuses the pane. Tooltips: the whole id on the chip, the
   given and the program's name on the name.
+- **Context meter:** each Claude Code and Codex pane shows how full its
+  agent's context window is, without typing `/context` or `/status`. While
+  the agent works it follows within about 15s (and 2s after each status
+  change); idle, within a minute. A narrow header drops the tokens first
+  (below 560px), then the bar (below 420px); the percent stays down to 300px.
+  Hovering it for 400ms opens a card (280px, `popover`): the tokens of the
+  window in use and the percent, the tokens free, the model, when and from
+  what it was read, and as it applies: "Idle compaction expected around
+  14:32 (about 55 min after the last answer; observed on this machine)"
+  (`working`) for an idle Claude Code session above 200k, gone 5 min after
+  that time; "Compacted 14:02: 267k → 20.7k"; "~" on a window from
+  `/context`; how to switch on the integration when no window is known;
+  for Codex that `/status` takes a 12k baseline off. The card is empty while
+  the logo menu (`roundup-menu`) is open. No click. No meter for a shell, a
+  mod pane, an agent just started or of another machine, an unknown program,
+  or when the source isn't proven (two Codex threads in one process, a file
+  of another process or session): that is a normal state, not an error.
+  - **Where the numbers come from:** with the integrations on (`Built from`,
+    Context meter), Claude Code's own status line numbers and the raw
+    numbers of the Codex thread's rollout file. Without them, Claude Code
+    shows its window only from a `/context` typed in this session and
+    process (marked `~`), else its tokens alone; Codex only when it holds
+    its rollout open itself (`codex --no-daemon`, as Herdr starts it).
 - **Closing** asks first as its kind's choice says: the tab menu's for tabs,
   the terminal menu's for panes; both stay after a restart. A tab closes by
   its ×, its menu's Close or `cmd-w`; a pane by its header's ×, Close pane
@@ -587,6 +616,84 @@ of this mod would reach every shown header. Commands: `pane.focus`, `pane.split`
 art: `rename.svg` (a pencil) and the shipped header's `split-right`,
 `split-down`, `zoom`, `unzoom`, `close`; the working spinner is Herdr's
 `mods/workspace-chrome/spinner.svg`.
+
+**Context meter** (in `roundup-pane`, `docs/adr/0003-context-from-agent-integrations.md`).
+The clone's `main.js` changes only by an import, a `ContextReader` made in
+`init` (not in the rename dialog or the menu copies), the root's
+`on_size_change` for the width, one child after the folder and `close()`.
+The rest lives in files of their own, herdr-free where they can be:
+`context/text.js` (`97.6k`, percent, severity, the width tiers 560/420/300),
+`context/card.js` (the card's rows), `context/tail.js` (the end of a big
+file: `tail -c` 256 KiB, four times more while nothing is found, up to
+7 MiB), `context/locate.js` (the ways from a terminal to a source and what
+`io` offers), `context/reader.js` (when to read, the cache, the queue),
+`context/registry.js` and `context/strategies/<agent>.js`, one per agent
+program (Strategy pattern): `{id, matches, locate(agent, io, memo),
+read(source, io, memo)}`; `context-io.js` builds `io` on `exec`, `hc` and
+`readTextFile`; `context-view.js` draws the meter and the `HoverCard`
+(`anchor("top_right")`, open 400ms, close 150ms).
+- **Terminal → process:** `hc get <t> --json` gives `foreground.pid` (the
+  agent's process; `terminals()` has no pid), `created_ms` and the title.
+  `ps -wwE -p <pid>` must not name another terminal's `HC_TERMINAL_ID`, and
+  gives `CLAUDE_CONFIG_DIR`/`CODEX_HOME`.
+- **Claude Code:** `~/.claude/sessions/<pid>.json` (`sessionId`, `cwd`,
+  `startedAt` not before the terminal, `kind: "interactive"`), the status
+  line file `~/.cache/herdr-roundup/context/claude/<t>.json` if its `pid`
+  and `session_id` match, the transcript from its `transcript_path`, else
+  `~/.claude/projects/<cwd, every non-alphanumeric as "->/<sessionId>.jsonl`,
+  else the one project folder holding that file. Tokens: `input +
+  cache_creation + cache_read + output` of the status line's
+  `current_usage` (its `used_percentage` is a whole number, not used), or
+  of the last main-chain `assistant` line's `message.usage` (the last of
+  `iterations[]`; `<synthetic>` and side chains skipped), or
+  `compactMetadata.postTokens` of a `compact_boundary` after it; the newest
+  wins. Window: the status line's `context_window_size`, else the last
+  `/context` line (`isMeta`, starting `## Context Usage`, shorter than
+  64 KiB, so copies in `api-request-blob` lines don't count) of the same
+  session, model and process, searched with `awk` at most every 5 min.
+  Idle compaction: last answer + 55 min above 200k.
+- **Codex:** a thread id in the title (`01a1d750-0653-7190-914d-7c804...`,
+  cut by Codex to 29 characters): a UUIDv7 whose first 12 hex digits are its
+  creation time in ms, which is the local time in its rollout's name, so
+  `~/.codex/sessions/YYYY/MM/DD/` is listed and exactly one
+  `rollout-*-<prefix>*.jsonl` must match. Without one: `pgrep -P` (four
+  levels) and `lsof -Fn -p` for open `rollout-*.jsonl`, of which exactly one
+  must have `thread_source: "user"` in its first line. Tokens:
+  `info.last_token_usage.total_tokens` of `info.model_context_window` of the
+  last `token_count`; none after a `compacted` line or a model change in a
+  later `turn_context`, until the next one.
+- **Schedule:** per header copy, for its own terminal: at start (spread by
+  0–1 s), on each status change and 2s later, every 15s while working and
+  shown, else every 60s, once 30s after an expected idle compaction and once
+  when its hint goes. A look runs `locate` (hc get, ps, the session file) and
+  `stat` of the source's files; it reads only when a size or mtime changed.
+  Nothing found: again after 15, 30, 60, 120, then every 300s. After a read
+  the terminal's pid is checked again, so a late answer can't show a newer
+  session's. One queue for all copies runs two looks at once. Once an hour
+  one copy removes integration files of terminals not in `terminals()` whose
+  pid is dead and which are older than an hour.
+- **Integrations** (`scripts/agent-integrations.sh install|uninstall|status
+  <claude|codex>`, run by hand, never by a mod; it edits the person's agent
+  config, so only with their yes): `claude` sets `statusLine.command` in
+  `~/.claude/settings.json` to
+  `<Herdr App home>/mods/roundup-pane/integrations/claude-statusline.sh`,
+  keeping the entry's other fields; the previous status line goes to
+  `~/.config/herdr-roundup/integrations/claude.json` (whole, for uninstall)
+  and its command to `claude-statusline.next` there, which the script runs
+  with the same stdin. The script (plain `sh`) writes `{v: 1, terminal,
+  pid: $CLAUDE_PID or $PPID, at, claude: <stdin>}` atomically to
+  `~/.cache/herdr-roundup/context/claude/<HC_TERMINAL_ID>.json`. `codex`
+  adds `"thread-id"` to `tui.terminal_title` in `~/.codex/config.toml`
+  (after `"activity"`, else first; without the key, Codex's defaults
+  `activity, thread-name, project-name` with it; a one-line array only),
+  remembering the line in `codex.json`. `install` is idempotent and copies
+  the file to `~/.config/herdr-roundup/integrations/backup/` first;
+  `uninstall` restores exactly what it changed or refuses when that was
+  edited since; `status` says on, off or broken.
+- **Adding an agent:** one file in `context/strategies/`, one line in
+  `context/registry.js`; its integration, if any, writes
+  `~/.cache/herdr-roundup/context/<agent>/<t>.json` with `{v: 1, terminal,
+  pid, at}` and checks it with `byTerminalFile`.
 
 **`roundup-spaces`** (clone of `spaces` 0.1.14, `place: "none"`, title
 "Spaces"). Reads `spaces()`, `panes()`, `terminals()` (each agent's `turn`),
@@ -956,6 +1063,32 @@ global `tab.close` and `pane.close`.
 - **`pane.close` has no `confirmed`**, and on a space's last pane Herdr asks
   anyway. So a tab's only pane closes with `tab.close`, which takes it;
   another pane with `pane.close`.
+- **Claude Code's status line after `/compact`** reports `current_usage`
+  with all four numbers 0 and `used_percentage: 0`, while the transcript's
+  `compact_boundary` says `postTokens`: a zero reading is no reading. At
+  the start of a session `current_usage` is `null`; `/context` itself is an
+  estimate (`48.1k` where the last request was 47 931 + 390 output).
+- **Codex cuts its title items** (`thread-id` at 32 characters with `...`):
+  the full id is never in the title; the prefix with the UUIDv7 time is
+  enough. The title item appears only once a thread has its first message,
+  and the rollout file is created only then. The quicklook in
+  `roundup-spaces` drops that item from the titles it shows (`clean()`).
+- **Herdr's `fs/promises` has no `stat`** (only `exists`, `mkdir`,
+  `readFile`, `readdir`, `rmdir`, `unlink`, `writeFile`): size and mtime come
+  from `stat -f '%z %Fm'` (macOS, ns) or `stat -c '%s %.9Y'`. `readTextFile`
+  stops at 1 MiB, so a transcript's end comes from `tail -c`.
+- **A header copy starts only when its pane is first shown:** a tab never
+  opened since Herdr started has no meter running. Hidden later, it keeps
+  to the idle schedule.
+- **The integration files** live in `~/.cache/herdr-roundup/`, not in the
+  Herdr App home: a terminal's environment has `HC_TERMINAL_ID`,
+  `HC_SCOPE` and `HC_TERMINAL_SOCKET`, but no `HERDR_APP_HOME`. Terminal ids
+  of a second core (an isolated instance) can match the main one's: the pid
+  check keeps a value from the wrong agent.
+- **The terminal menu** is this mod too and sets no shared state, so the
+  card can't empty itself for it; it opens on a right-click in the
+  terminal, away from the meter, and the card closes 150ms after the
+  pointer leaves.
 - **Mods can't import from each other:** `find()` and `narrow()` are copied
   into both chrome mods, `close.js` and `menu.js` from `roundup-tabs` into
   `roundup-pane` unchanged. `scripts/sync.sh` stops when those two differ.
@@ -1086,6 +1219,16 @@ global `tab.close` and `pane.close`.
   the card comes back once the menu is closed and the badge entered again.
 - The sidebar toggle narrows to the rail (numbers and `●`/`·`) and widens
   back to the width it had.
+- A Claude Code pane shows its tokens in the header (`340k`); with
+  `scripts/agent-integrations.sh install claude` and a new session, the bar,
+  the percent and `47.9k / 1M`, the same as `context_window` of its status
+  line. A Codex pane started with the integration on shows `4% 18.3k /
+  475k`, the numbers of the last `token_count` in its rollout; so does one
+  started as `codex --no-daemon` without it. Two agents in one folder show
+  their own. Hovering the meter opens the card; a shell's header shows none.
+- `scripts/agent-integrations.sh status` says `claude: off` and `codex: off`
+  before `install` and again after `uninstall`, with the agent configs as
+  they were.
 - Every pane header shows its terminal's address (`t5j`); double-clicking
   it copies `t5j`. `hc label t5j roundup-pane.name=Build` shows "Build" in
   that header within a second; so does renaming in the dialog, and saving

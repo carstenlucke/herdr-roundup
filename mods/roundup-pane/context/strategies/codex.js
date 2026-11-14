@@ -1,0 +1,113 @@
+// Codex: the raw numbers of its rollout file, `last_token_usage.total_tokens` of
+// `model_context_window`. The rollout is found one of two ways, never by folder or recency:
+//
+// - By the thread id in the terminal title (the integration: `tui.terminal_title` with
+//   "thread-id"). Codex cuts it to 29 characters + "...", but the id is a UUIDv7: its first 12 hex
+//   digits are the thread's creation time, which is the local time in the rollout's folder and name
+//   (sessions/YYYY/MM/DD/rollout-YYYY-MM-DDTHH-MM-SS-<id>.jsonl). Exactly one file must match.
+// - Direct mode (`codex --no-daemon`, as Herdr starts it): the one user rollout the process or one
+//   of its descendants holds open (lsof). A shared daemon's files lie outside the process tree.
+
+import { foreground, byTitle, byOpenFile, uuid7Time, localParts, parseJson } from "../locate.js";
+import { scanTail, fromEnd } from "../tail.js";
+
+const ROLLOUT = /\/rollout-[^/]*\.jsonl$/;
+const DAY = 24 * 60 * 60 * 1000;
+const time = (iso) => {
+  const t = Date.parse(iso ?? "");
+  return Number.isFinite(t) ? t : null;
+};
+
+// The thread id at the end of a rollout's name: rollout-<stamp>-<36 characters>.jsonl.
+export const rolloutId = (name) => (name.startsWith("rollout-") && name.endsWith(".jsonl") ? name.slice(0, -6).slice(-36).toLowerCase() : null);
+
+// The one rollout whose id starts with `prefix`, looked for in the folder of the id's local day
+// (and the days beside it, should the zone have moved). None or more than one: null.
+export async function rolloutByPrefix(io, home, prefix) {
+  const ms = uuid7Time(prefix);
+  if (ms === null) return null;
+  for (const at of [ms, ms - DAY, ms + DAY]) {
+    const { y, mo, d } = localParts(at);
+    const dir = `${home}/sessions/${y}/${mo}/${d}`;
+    const names = await io.list(dir);
+    if (!Array.isArray(names)) continue;
+    const hits = names.filter((n) => rolloutId(n)?.startsWith(prefix));
+    if (hits.length > 1) return null;
+    if (hits.length === 1) return `${dir}/${hits[0]}`;
+  }
+  return null;
+}
+
+// A rollout's first line, session_meta: whose thread it is ("user", "guardian_review", "subagent").
+export function threadSource(head) {
+  if (typeof head !== "string") return null;
+  const nl = head.indexOf("\n");
+  const first = parseJson(nl < 0 ? head : head.slice(0, nl));
+  if (first?.type !== "session_meta") return null;
+  return first.payload?.thread_source ?? null;
+}
+
+// From the end of a rollout: the last token_count with info, unless a compaction or a change of
+// model came after it (then no reading until the next one). The model is the last turn_context's.
+export function findRollout(lines, whole) {
+  let compactedAfter = false, laterModel = null, tc = null, tcModel = null;
+  for (const l of fromEnd(lines)) {
+    const p = l.payload ?? {};
+    if (!tc) {
+      if (l.type === "compacted" || p.type === "context_compacted") compactedAfter = true;
+      else if (l.type === "turn_context") { if (laterModel === null && typeof p.model === "string") laterModel = p.model; }
+      else if (l.type === "event_msg" && p.type === "token_count" && p.info) {
+        const used = p.info.last_token_usage?.total_tokens, window = p.info.model_context_window, at = time(l.timestamp);
+        if (Number.isFinite(used) && used >= 0 && Number.isFinite(window) && window > 0 && at !== null) tc = { used, window, at };
+      }
+      continue;
+    }
+    if (l.type === "turn_context" && typeof p.model === "string") { tcModel = p.model; break; }
+  }
+  if (!tc) return compactedAfter || whole ? null : undefined;
+  if (compactedAfter) return null;
+  if (tcModel && laterModel && tcModel !== laterModel) return null;
+  return { ...tc, model: laterModel ?? tcModel };
+}
+
+export default {
+  id: "codex",
+  matches: ["codex"],
+
+  async locate(agent, io) {
+    const fg = await foreground(io, agent.terminal);
+    if (!fg) return null;
+    const env = await io.env(fg.pid);
+    if (env?.HC_TERMINAL_ID && env.HC_TERMINAL_ID !== agent.terminal) return null;
+    const home = env?.CODEX_HOME || `${io.home}/.codex`;
+    const base = { id: "codex", terminal: agent.terminal, pid: fg.pid };
+    // A thread id in the title names the thread: then only its rollout counts.
+    const prefix = byTitle(fg.title);
+    if (prefix) {
+      const file = await rolloutByPrefix(io, home, prefix);
+      return file ? { ...base, file, thread: prefix, how: "title", files: [file] } : null;
+    }
+    const open = await byOpenFile(io, fg.pid, ROLLOUT);
+    if (!open?.length) return null;
+    const users = [];
+    for (const f of open) if (threadSource(await io.head(f, 256 * 1024)) === "user") users.push(f);
+    if (users.length !== 1) return null; // none, or two user threads in one process: ambiguous
+    const thread = rolloutId(users[0].slice(users[0].lastIndexOf("/") + 1));
+    return { ...base, file: users[0], thread, how: "open-file", files: [users[0]] };
+  },
+
+  async read(source, io) {
+    const r = await scanTail(io, source.file, findRollout);
+    if (!r) return null;
+    return {
+      used: r.used,
+      window: r.window,
+      percent: (r.used / r.window) * 100,
+      model: r.model,
+      at: r.at,
+      source: "rollout",
+      exact: true,
+      session: source.thread,
+    };
+  },
+};

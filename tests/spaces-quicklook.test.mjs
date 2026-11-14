@@ -698,3 +698,14 @@ test("clean strips a program's spinner or star and its space, nothing else in fr
   ];
   for (const [title, want] of cases) assert.equal(clean(title), want, JSON.stringify(title));
 });
+
+test("clean drops a Codex thread id item from the title, whole or cut, and keeps the other items", () => {
+  const cases = [
+    ["⠋ 01a1d768-4d7b-7b11-a82f-959de... | Mit ok antworten | herdr-roundup", "Mit ok antworten | herdr-roundup"],
+    ["01a1d768-4d7b-7b11-a82f-959de0000000 | fix", "fix"],
+    ["01a1d768-4d7b-7b11-a82f-959de...", ""],
+    ["fix 01a1d768-4d7b-7b11-a82f-959de... now", "fix 01a1d768-4d7b-7b11-a82f-959de... now"],
+    ["a | b", "a | b"],
+  ];
+  for (const [title, want] of cases) assert.equal(clean(title), want, JSON.stringify(title));
+});

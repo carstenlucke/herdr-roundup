@@ -17,7 +17,7 @@
 import base64, json, os, re, sys
 from html import escape
 
-SCENES = ["spaces", "quicklook", "files", "files-changed", "search", "symlink", "pane-header", "rename",
+SCENES = ["spaces", "quicklook", "files", "files-changed", "search", "symlink", "pane-header", "context", "rename",
           "close-menu", "close-confirm", "update", "preview-tab", "float"]
 if sys.argv[1:] == ["--scenes"]:
     print("\n".join(SCENES))
@@ -439,11 +439,22 @@ LH = 21  # terminal line height
 TOP = PY + 30 + 12 + 14  # first baseline: header, padding, ascent
 ROWS = (PY + PH - 12 - TOP) // LH + 1
 
-def pane(x, w, prog, name, address, status, focus, lines, bottom, hover=False, y=PY, h=PH):
-    """A pane: roundup-pane's header (icon, name, id chip, folder, status), then the terminal.
-    `lines` run from the top, `bottom` sits on the last rows. `hover`: the pointer is on the
-    header, on its pencil, so the header shows rename, split right, split down, zoom and close.
-    `y`, `h`: its top and height, the tab's whole height unless it is split."""
+def tokens(n):
+    """The context meter's token count, as roundup-pane/context/text.js writes it: 940, 9.4k, 97.6k, 475k, 1M."""
+    one = lambda v, u: f"{round(v * 10) / 10:.1f}".removesuffix(".0") + u
+    if n < 1000: return str(round(n))
+    if n < 100_000: return one(n / 1000, "k")
+    if n < 999_500: return f"{round(n / 1000)}k"
+    return one(n / 1_000_000, "M")
+
+METERS = {}  # address -> (right edge, top) of its context meter, where its hover card hangs
+
+def pane(x, w, prog, name, address, status, focus, lines, bottom, hover=False, y=PY, h=PH, meter=None):
+    """A pane: roundup-pane's header (icon, name, id chip, folder, context meter, status), then the
+    terminal. `lines` run from the top, `bottom` sits on the last rows. `hover`: the pointer is on
+    the header, on its pencil, so the header shows rename, split right, split down, zoom and close.
+    `y`, `h`: its top and height, the tab's whole height unless it is split. `meter`: the agent's
+    context as (used, window) tokens: a 30 x 4px bar, the percent and the tokens."""
     PY, PH = y, h
     rect(x, PY, w, PH, "background", rx=10)
     frame(x, PY, w, PH, "accent" if focus else "border", rx=10)
@@ -468,6 +479,20 @@ def pane(x, w, prog, name, address, status, focus, lines, bottom, hover=False, y
                 rect(bx_, PY + 5, 20, 20, "hover", rx=4)
             icon(glyph, bx_ + 3, PY + 8, 14, "foreground" if i == 0 else "dim", sw=1.3)
         right -= 8
+    if meter:
+        used, window = meter
+        pct = used * 100 / window
+        sev = "blocked" if round(pct) >= 80 else "working" if round(pct) >= 65 else "accent"
+        mx = right - (12 + 8 if status in ("working", "done") else 0)
+        METERS[address] = (mx, PY)
+        words = f"{tokens(used)} / {tokens(window)}"
+        text(mx, PY + 19, words, 11, "dim", anchor="end")
+        mx -= tw(words, 11) + 5
+        loud = sev != "accent"
+        text(mx, PY + 19, f"{round(pct)}%", 11, "foreground" if loud else "muted", 500 if loud else 400, anchor="end")
+        mx -= tw(f"{round(pct)}%", 11, 500 if loud else 400) + 5
+        rect(mx - 30, PY + 13, 30, 4, sev, rx=2, op=0.25)
+        rect(mx - 30, PY + 13, max(1, 30 * min(pct, 100) / 100), 4, sev, rx=2)
     if status == "working":
         spinner(right - 6, PY + 15, "working", 5)
     elif status == "done":
@@ -534,7 +559,7 @@ pane(LX, LW, "claude", "Claude Code", "t4", "working", True, [
     [("› ", M, 400)],
     [],
     [("  ? for shortcuts", D, 400)],
-])
+], meter=(412_300, 1_000_000))
 # The prompt's box and cursor.
 pb = TOP + LH * (ROWS - 3)
 for ry_ in (pb - 15 - LH, pb - 15 + LH):
@@ -562,7 +587,7 @@ pane(RX, RW, "codex", "Reviewer" if PANES else "Codex", "t7", "done", False, [
     [("› ", M, 400), ("Ask for a follow-up", D, 400)],
     [],
     [("  ⏎ send   ⌃J newline", D, 400)],
-], hover=SCENE == "pane-header", h=CH)
+], hover=SCENE == "pane-header", h=CH, meter=(88_200, 475_000))
 
 # Below it a shell in the same folder: the files the agents changed, as the side panel shows them.
 pane(RX, RW, "shell", "zsh", "t8", None, False, [
@@ -1134,6 +1159,23 @@ if SCENE == "quicklook" or POSTER:
             frame(px_, py_, pw_, ph_, "foreground", rx=2)
     add('</g>')
 
+# The context scene: the pointer rests on Claude Code's meter, its hover card hangs below it, its
+# top right at the meter's right (anchor top_right), 4px down; 280px wide, 10px padding, rows 4px apart.
+CARD_W = 280
+if SCENE == "context":
+    mr, mt = METERS["t4"]
+    rows_ = [("Context window", 10.5, "dim", 600), ("412k of 1M in use · 41%", 13, "foreground", 500),
+             ("588k free", 11.5, "muted", 400), ("Model claude-opus-5-5", 11.5, "muted", 400),
+             ("Read 14:02, from Claude Code's status line", 11.5, "muted", 400)]
+    heights = [round(sz * 1.35) for _, sz, _, _ in rows_]
+    CARD_H = 20 + sum(heights) + 4 * (len(rows_) - 1)
+    CARD_X, CARD_Y = mr - CARD_W, mt + 30 + 4
+    overlay(CARD_X, CARD_Y, CARD_W, CARD_H)
+    ty = CARD_Y + 10
+    for (label, sz, col, wt), hh in zip(rows_, heights):
+        text(CARD_X + 10, ty + hh * 0.78, label, sz, col, wt)
+        ty += hh + 4
+
 # What each scene is cropped to: x, y, width, height. A fourth argument "full" keeps the window.
 CROPS = {
     "spaces": (0, 0, SB + 1, 480),
@@ -1143,6 +1185,7 @@ CROPS = {
     "search": (PX - 8, 42, W - PX + 8, 352),
     "symlink": (PX - 8, LINK_Y - 107, W - PX + 8, 200),
     "pane-header": (RX - 8, 42, RW + 16, 120),
+    "context": (LX + LW - 380, 42, 388, 210),
     "rename": ((W - RENAME_W) / 2 - 60, (H - RENAME_H) / 2 - 50, RENAME_W + 120, RENAME_H + 100),
     "close-menu": (WX, 0, 520, 290),
     "close-confirm": ((W - CONFIRM_W) / 2 - 60, (H - CONFIRM_H) / 2 - 50, CONFIRM_W + 120, CONFIRM_H + 100),

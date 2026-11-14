@@ -1,0 +1,81 @@
+// The ways from a terminal to the source of its agent's context, which strategies combine.
+// Pure: everything outside comes through `io` (context-io.js in Herdr, a stub in the tests):
+//
+//   io.home                       the person's home folder
+//   io.now()                      ms since the epoch
+//   io.terminal(address)          `hc get <t> --json`, cut to { pid, created, title, cwd } (pid: the
+//                                 foreground process, the agent's own), or null
+//   io.env(pid)                   that process's environment (`ps -wwE`), or null
+//   io.readText(path)             a small file (up to 1 MiB) as text, or null
+//   io.stat(path)                 { size, mtime } or null
+//   io.tail(path, bytes)          { text, whole } of the file's last bytes, or null
+//   io.head(path, bytes)          its first bytes as text, or null
+//   io.list(dir)                  the names in a folder, or null
+//   io.openFiles(pid)             paths the process and its descendants hold open (`lsof`), or null
+//   io.lastLineWith(path, text, maxLength)
+//                                 the file's last line shorter than maxLength containing text, or null
+//
+// None of these throws for a missing file or a failed program: they give null, and a strategy
+// gives no reading. No guessing: a session found only by folder and recency is never a match.
+
+// Where integrations write, one file per terminal: ~/.cache/herdr-roundup/context/<agent>/<t>.json.
+export const integrationFile = (io, agent, terminal) => `${io.home}/.cache/herdr-roundup/context/${agent}/${terminal}.json`;
+
+export function parseJson(text) {
+  if (typeof text !== "string" || !text) return null;
+  try {
+    const v = JSON.parse(text);
+    return v && typeof v === "object" ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+// The terminal's foreground process: { pid, created, title, cwd }, or null without a live pid.
+export async function foreground(io, terminal) {
+  const t = await io.terminal(terminal);
+  return t && Number.isInteger(t.pid) && t.pid > 0 ? t : null;
+}
+
+// A file named after the pid (Claude Code's ~/.claude/sessions/<pid>.json), parsed.
+export async function byPidFile(io, dir, pid) {
+  return parseJson(await io.readText(`${dir}/${pid}.json`));
+}
+
+// The file an agent's integration writes for this terminal, if it is this terminal's and was
+// written by this process: { v: 1, terminal, pid, at, ... }. A file of an ended terminal, of an
+// earlier process in the same terminal, or of another version gives null.
+export async function byTerminalFile(io, agent, terminal, pid) {
+  const f = parseJson(await io.readText(integrationFile(io, agent, terminal)));
+  if (!f || f.v !== 1 || f.terminal !== terminal || f.pid !== pid || !Number.isFinite(f.at)) return null;
+  return f;
+}
+
+// A thread id in a terminal title, whole or as Codex cuts it (`01a1d750-0653-7190-914d-7c804...`):
+// at least the first four groups and one more digit. Two different ids in the title: null.
+const ID = /(?<![0-9a-f-])([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1,12})(?![0-9a-f-])/gi;
+export function byTitle(title) {
+  if (typeof title !== "string") return null;
+  const ids = [...new Set([...title.matchAll(ID)].map((m) => m[1].toLowerCase()))];
+  return ids.length === 1 ? ids[0] : null;
+}
+
+// A UUIDv7's time: its first 12 hex digits are ms since the epoch. Null for another version.
+export function uuid7Time(id) {
+  const m = /^([0-9a-f]{8})-([0-9a-f]{4})-7/i.exec(id ?? "");
+  return m ? parseInt(m[1] + m[2], 16) : null;
+}
+
+// The open files of a process and its descendants that match `pattern`, without repeats.
+export async function byOpenFile(io, pid, pattern) {
+  const files = await io.openFiles(pid);
+  if (!Array.isArray(files)) return null;
+  return [...new Set(files.filter((f) => pattern.test(f)))];
+}
+
+// Two-digit parts of a local date, as file names use them.
+export function localParts(ms) {
+  const d = new Date(ms);
+  const p = (n) => String(n).padStart(2, "0");
+  return { y: String(d.getFullYear()), mo: p(d.getMonth() + 1), d: p(d.getDate()), h: p(d.getHours()), mi: p(d.getMinutes()), s: p(d.getSeconds()) };
+}

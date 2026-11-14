@@ -58,7 +58,11 @@ const WORD = { blocked: "needs you", done: "done", working: "working", idle: "id
 
 // A terminal's title without the spinner or mark a program puts in front: Braille spinners
 // (codex), Claude Code's stars, each followed by a space. Anything else in front stays.
-export const clean = (s) => (s ?? "").trim().replace(/^(?:[\u2800-\u28ff\u2733\u273b\u273d\u2736\u2722\u00b7][\uFE0E\uFE0F]?\s+)+/u, "");
+// A Codex thread id as a title item (`01a1d750-0653-7190-914d-7c804...`, what the context meter's
+// integration adds to Codex's title, see roundup-pane) is no name: that item goes.
+const THREAD_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1,12}(?:\.\.\.)?$/i;
+export const clean = (s) => (s ?? "").trim().replace(/^(?:[\u2800-\u28ff\u2733\u273b\u273d\u2736\u2722\u00b7][\uFE0E\uFE0F]?\s+)+/u, "")
+  .split(" | ").filter((part) => !THREAD_ID.test(part.trim())).join(" | ");
 
 // The agent's icon from the app's program table: a one-color glyph or a picture.
 function icon(p, size, color) {
