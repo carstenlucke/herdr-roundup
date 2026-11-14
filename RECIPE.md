@@ -95,7 +95,7 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
     after a failed Connect) at its lower right for a remote machine, name
     and state as tooltip; "New space there" is a `+` in an 18px box with a
     1px `dim` border.
-- **Agents** (Herdr's shipped `agents` list, the other half, at least 90px).
+- **Agents** (`roundup-agents`, Herdr's `agents` list, the other half, at least 90px).
 - **Footer** (69px, `border` line on top): "Settings" (a small `accent` dot
   when an app update is ready) and "Add machine" in `dim`, each with a 14px
   icon; on the rail only the icons, centred in 32px cells, label as
@@ -402,7 +402,7 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   - `brand` block (px 46, `window_drag`): `roundup-workspace-chrome`
   - `sidebar-lists` column:
     - `spaces` block (weight 1, min 90): `roundup-spaces`
-    - `agents` block (weight 1, min 90): shipped `agents`
+    - `agents` block (weight 1, min 90): `roundup-agents`
   - `sidebar-footer` block (px 69): `roundup-workspace-chrome` with
     `props: { footer: true }`
 - `work` column (`resizable: false`):
@@ -535,6 +535,10 @@ readable answer per machine, logs the first failure per machine once, and
 reads again for each new set of agents the tree doesn't hold. Programs'
 icons as in `agents`: `svg(icon)` when `tint`, else `image(icon)`.
 
+**`roundup-agents`** (clone of `agents` 0.1.15, `place: "none"`, title
+"Agents"): Herdr's agent list. Its one change: a title item that is only a
+Codex thread id (the context meter's integration) is no row's name.
+
 **`roundup-menu`** (clone of `menu` 0.1.14, `place: "none"`): Herdr's
 context menu. Its one change: `init` writes its overlay id to shared
 `roundup-menu.open`, and `close()` clears the key only while it still holds
@@ -635,7 +639,7 @@ written by `scripts/build-icons.mjs` (`docs/adr/0002-file-icon-set.md`);
 Herdr's `chevron-right`, `chevron-down`, `chevron-left`, `branch`,
 `search`.
 
-**Shipped mods used:** `agents`, `changes`, `workspace-status`, plus
+**Shipped mods used:** `changes`, `workspace-status`, plus
 `picker`, `menu` and `machine-add` as overlays.
 
 **Keys:** the `layout:Herdr-Roundup` section binds `cmd-w` to

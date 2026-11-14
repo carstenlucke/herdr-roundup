@@ -90,8 +90,9 @@ test("each mod command keys.json binds is handled by that mod's command loop, an
 });
 
 // LAY-11
-// Herdr's names for state its shipped mods share with these.
-const HERDR_KEYS = new Set(["sidebar.width", "sidebar.collapsed", "space.colors", "workspace.panels", "layout"]);
+// Herdr's names for state its shipped mods share with these (agents.sort: roundup-agents keeps the
+// order chosen in Herdr's agents).
+const HERDR_KEYS = new Set(["sidebar.width", "sidebar.collapsed", "space.colors", "workspace.panels", "layout", "agents.sort"]);
 test("every shared-state key is under an existing roundup mod's name or one of Herdr's", () => {
   const bad = [];
   let found = 0;

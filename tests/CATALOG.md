@@ -43,7 +43,7 @@ Nothing may need a person: there is no pointer or key injection, so L2 calls han
 | LAY-08 | Every `mods/*` folder starts with `roundup-` and has a `mod.json` with `place: "none"`; clones of shipped mods keep `cloned_from {name, version}`. | CLAUDE.md | L1 | `every mod folder is roundup-* with a mod.json placed nowhere, clones naming what they came from` | — | M |
 | LAY-09 | keys.json holds only `layout:Herdr-Roundup` (no `global`): `cmd-w`→`roundup-tabs.close`, `cmd-shift-w`→`roundup-tabs.close-pane` (never `roundup-pane.close`, which every header copy would get, closing pane after pane). | CLAUDE.md; commit f0ad009 | L1 | `keys.json binds only the layout's own section, cmd-shift-w through the tab bar` | — | H |
 | LAY-10 | Each `<mod>.<command>` bound in keys.json is handled by that mod's `nextCommand` loop, and that mod is placed in the layout. | CLAUDE.md (limits) | L1 | `each mod command keys.json binds is handled by that mod's command loop, and that mod is placed` | static scan of main.js | M |
-| LAY-11 | Shared-state key literals in the mods start with an existing `roundup-<mod>.` or are Herdr's (`sidebar.width`, `sidebar.collapsed`, `space.colors`, `workspace.panels`, `layout`). | CLAUDE.md | L1 | `every shared-state key is under an existing roundup mod's name or one of Herdr's` | static scan | M |
+| LAY-11 | Shared-state key literals in the mods start with an existing `roundup-<mod>.` or are Herdr's (`sidebar.width`, `sidebar.collapsed`, `space.colors`, `workspace.panels`, `layout`, `agents.sort`). | CLAUDE.md | L1 | `every shared-state key is under an existing roundup mod's name or one of Herdr's` | static scan | M |
 | LAY-12 | Every svg/png a mod references exists, dynamic names included (pane: rename/split-right/split-down/zoom/unzoom/close; tabs: win-min/max/restore/close; chrome menu/info icons); no unreferenced svg/png in chrome, pane, tabs, spaces. | PR #13 rc 4503276075; commit a73afea | L1 | `every svg and png a mod draws exists, and none of its own lies unused` | list of dynamic names | L |
 | LAY-13 | With `HERDR_APP_HOME` set to a temp folder, sync.sh installs there and writes nothing under `$HOME/.config/herdr-app`. | sync.sh | L2 | sync.test.mjs: “LAY-13: with HERDR_APP_HOME set, …” | temp HOME, `herdr-app` stub on PATH | H |
 | LAY-14 | sync.sh copies the layout (.json, .svg) and each `roundup-*` mod with `rsync --delete`: a stale file in an installed roundup mod goes; other mods stay; `gpui-kit.d.ts`, `jsconfig.json`, `.gitkeep` aren't copied; `layouts/.state/` survives; an empty `themes/` is fine. | commit c8d800a; sync.sh | L2 | sync.test.mjs: “LAY-14: each roundup mod is mirrored, …”, “LAY-14: gpui-kit.d.ts, jsconfig.json and .gitkeep aren't copied, …”, “LAY-14: an empty themes/ …” | temp app home, `herdr-app` stub | M |
@@ -262,6 +262,12 @@ Nothing may need a person: there is no pointer or key injection, so L2 calls han
 | CNF-06 | Without props the title is "Are you sure?" and the detail "". | code | L2 | pane-menu: "CNF-06, CNF-08: the dialog is rounded 8px on popover, with the defaults for title and detail" | gpui stub | L |
 | CNF-07 | After a dialog from TAB-14, `overlay.close {id}` clears `roundup-confirm.open`, and the tab still exists. | commit f0ad009 | L3 | smoke.sh CNF-07 | isolated Herdr | M |
 | CNF-08 | The dialog is rounded 8px on `popover`, as Herdr's confirm 0.1.14. | Herdr confirm 0.1.14 | L2 | pane-menu: "CNF-06, CNF-08: the dialog is rounded 8px on popover, with the defaults for title and detail" | gpui stub | L |
+
+## roundup-agents (AGT)
+
+| ID | Behaviour (what must hold) | Source | Level | Covered | Needs | Prio |
+|---|---|---|---|---|---|---|
+| AGT-01 | The clone of Herdr's `agents` 0.1.15 (`cloned_from` kept), in the layout's `agents` block, keeps the shipped list but drops a title item that is only a Codex thread id, whole or cut (`…-7c804...`), spinner in front or not: in an unnamed tab's row, with two agents in a tab, and in the raw-title fallback of an agent whose tab isn't known (only the id: the program's name). A named tab shows its name; an id inside other words stays; `agents.sort` is Herdr's key. | PR #38 third review (finding 5; Codex: clone, not only a note) | L2 | agents-title: all four; layout: "every mod the layout places exists, …" | herdr stub | H |
 
 ## roundup-menu (MEN)
 

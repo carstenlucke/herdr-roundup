@@ -61,10 +61,12 @@ pattern), so pi and opencode (PR 2: a pi extension writing
   break them (then no value, never a wrong one), and `status` reports it.
 - Claude has one `statusLine` slot: the same script will carry the plan
   limits of #31 (`rate_limits` is in the same stdin).
-- Codex shows the cut thread id in its title, where Herdr's lists and
-  everything else that shows the title show it too; it comes last, after
-  the person's items. `roundup-spaces` drops it from the quicklook; others
-  can't be changed. Direct mode (`codex --no-daemon`, how Herdr starts
-  Codex) needs no title.
+- Codex shows the cut thread id in its title, where everything that shows
+  the title shows it too; it comes last, after the person's items. This
+  layout's lists drop it: `roundup-spaces` from the quicklook, and
+  `roundup-agents`, a clone of Herdr's `agents` for this alone, from its
+  rows. Views outside the layout (Herdr's own, other layouts) still show
+  it. Direct mode (`codex --no-daemon`, how Herdr starts Codex) needs no
+  title.
 - The internal file formats can change with any release: every read is
   defensive, and a failure means no meter, not an error in `herdr-app status`.

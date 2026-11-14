@@ -28,7 +28,7 @@ const THEME_COLORS = new Set(["background", "surface", "canvas", "chrome", "popo
   "working", "blocked", "done", "idle", "unknown", ...Array.from({ length: 16 }, (_, i) => `ansi${i}`)]);
 
 // Herdr's shipped mods this layout places as they are.
-const SHIPPED = new Set(["agents", "changes", "workspace-status"]);
+const SHIPPED = new Set(["changes", "workspace-status"]);
 const roundupMods = readdirSync(repo("mods")).filter((d) => d.startsWith("roundup-") && statSync(repo(`mods/${d}`)).isDirectory());
 
 // LAY-01
@@ -110,6 +110,7 @@ test("every mod the layout places exists, and the chrome and pane mods sit where
   assert.deepEqual(bad, [], `${FILE}: a mod that is neither mods/roundup-* nor ${[...SHIPPED].join(", ")}`);
 
   assert.equal(layout.terminal_menu, "roundup-pane", `${FILE}: terminal_menu`);
+  assert.equal(block("agents")?.content?.mod, "roundup-agents", `${FILE}: the agents block shows the clone, which drops Codex's thread id`);
   assert.equal(block("brand")?.content?.mod, "roundup-workspace-chrome", `${FILE}: block "brand"`);
   assert.ok(!block("brand").content.props?.footer, `${FILE}: block "brand" must not have props.footer`);
   assert.equal(block("sidebar-footer")?.content?.mod, "roundup-workspace-chrome", `${FILE}: block "sidebar-footer"`);
