@@ -42,4 +42,6 @@ A Herdr App layout, cloned from Herdr's `main` (0.1.14). See README.md for the l
 - Herdr's `fs/promises` has only `exists`, `mkdir`, `readFile`, `readdir`, `rmdir`, `unlink`, `writeFile`: no `stat`. Size and mtime come from `exec("stat", …)` (`mods/roundup-pane/context-io.js`).
 - `terminals()` has no pid (it is `hc ls --json`'s form): a terminal's foreground process comes from `hc(["get", t, "--json"])`.
 - A pane header copy starts only when its pane is first shown: a tab not opened since Herdr started runs none of its headers' timers.
+- A mod copy in a tab not shown doesn't render, but its timers run: what it must notice there (its tab coming back, a status change) it learns from a timer, not from `render()` (`roundup-pane/main.js`, `see()`).
+- herdr.dev's gallery skips a layout whose `RECIPE.md` is 64 KB or larger, with no notice but a warning in `https://assets.herdr.dev/layouts/index.json`. Keep it well below (LAY-23); new detail goes into the code's comments, not the recipe.
 - Mods don't get the split arrangement (`panes()` has no geometry). It is only in each machine's core document `herdr-app` (`doc.get` over `hc connect`), opaque JSON whose form can change with herdr-core: read it defensively, with a fallback (`mods/roundup-spaces/pane-map.js`).

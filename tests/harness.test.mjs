@@ -191,3 +191,16 @@ test("the README's example: the shown tab's × closes it", async () => {
   click(byId(render(), "close-tb1"), cx);
   assert.deepEqual(herdr.calls("run"), [["tab.close", { id: "tb1", confirmed: true }]]);
 });
+
+// SPC-05: a detached `git maintenance` after a fixture's commit left objects/maintenance.lock
+// between two snapshots of .git.
+test("git-repo fixture: git's automatic maintenance and gc are off", async () => {
+  const { repo, git, cleanup } = await import("./support/git-repo.mjs");
+  try {
+    const dir = repo({ "a.txt": "a\n" });
+    assert.equal(git(dir, "config", "--get", "maintenance.auto").trim(), "false");
+    assert.equal(git(dir, "config", "--get", "gc.auto").trim(), "0");
+  } finally {
+    cleanup();
+  }
+});
