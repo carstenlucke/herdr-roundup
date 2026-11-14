@@ -104,11 +104,16 @@ export function makeIo({ after = null } = {}) {
       if (out !== null) statForm = "gnu";
       return parseStat(out);
     },
+    // `whole` (the text starts at the file's beginning) needs the size before and after: a file
+    // that grew past n in between was cut. Growing only after tail ran it wasn't, but counts as cut
+    // then too, which costs a larger read at most. No second size: not whole.
     async tail(p, n) {
       const st = await io.stat(p);
       if (!st) return null;
       const text = await run("tail", ["-c", String(n), p], 10_000);
-      return text === null ? null : { text, whole: st.size <= n };
+      if (text === null) return null;
+      const after = st.size <= n ? await io.stat(p) : null;
+      return { text, whole: st.size <= n && after !== null && after.size <= n };
     },
     async head(p, n) { return run("head", ["-c", String(n), p]); },
     async list(dir) {

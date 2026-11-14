@@ -49,6 +49,23 @@ test("stat, tail, head, list and lastLineWith on a real file", async () => {
   assert.equal(await io.list(join(dir, "none")), null);
 });
 
+test("tail: a file that grows past the size asked for between stat and tail isn't whole; nor is one whose second size isn't known", async () => {
+  const f = join(dir, "grow.jsonl");
+  writeFileSync(f, '{"a":1}\n');
+  const io = makeIo();
+  // The writer appends just as tail is started: tail reads the grown file's end.
+  let grow = true;
+  herdr.onExec((c) => { if (c.command === "tail" && grow) { grow = false; writeFileSync(f, '{"a":1}\n' + `{"b":"${"x".repeat(2000)}"}\n`); } return undefined; });
+  const chunk = await io.tail(f, 1000);
+  assert.equal(chunk.text.length, 1000);
+  assert.equal(chunk.whole, false, "the text starts inside a line: not the file's beginning");
+  writeFileSync(f, '{"a":1}\n');
+  let stats = 0;
+  herdr.onExec((c) => (c.command === "stat" && ++stats === 2 ? { code: 1, stdout: "", stderr: "" } : undefined));
+  assert.equal((await io.tail(f, 1000)).whole, false, "no second size: not whole");
+  assert.equal((await io.tail(f, 1000)).whole, true, "both sizes known and small: whole");
+});
+
 test("a platform without tail, lsof, ps or stat gives null everywhere, and no error", async () => {
   for (const p of ["tail", "lsof", "ps", "stat", "pgrep", "awk", "head"]) herdr.failExec(p);
   const f = join(dir, "u.jsonl");
