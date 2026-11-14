@@ -6,10 +6,13 @@
 #   scripts/agent-integrations.sh status    [claude|codex]
 #
 # claude: Claude Code's status line (`statusLine` in ~/.claude/settings.json) becomes
-#         `sh '<Herdr App home>/mods/roundup-pane/integrations/claude-statusline.sh'`, which keeps
-#         Claude's own context numbers per terminal and then runs the status line the person had
-#         before (moved into a file of its own, so it keeps running). Through `sh`, so the script
-#         needs no executable bit.
+#         `exec sh '<Herdr App home>/mods/roundup-pane/integrations/claude-statusline.sh'`, which
+#         keeps Claude's own context numbers per terminal and then runs the status line the person
+#         had before (moved into a file of its own, so it keeps running). Through `sh`, so the
+#         script needs no executable bit; with `exec`, so the shell Claude Code runs the command in
+#         becomes it and the script's $PPID is Claude itself, whatever that shell does with a
+#         plain command (one that forks would leave its own pid there, and the file would count
+#         for no process).
 # codex:  "thread-id" joins `tui.terminal_title` in ~/.codex/config.toml, last (the person's other
 #         title items stay; without any, Codex's defaults stay too), so the pane header finds the
 #         thread's rollout file from the terminal's title. Everything that shows the title shows
@@ -81,10 +84,11 @@ quote() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
 
 # --- Claude Code -------------------------------------------------------------------------------
 
-command_now="sh $(quote "$script")"
+command_now="exec sh $(quote "$script")"
 # What the status line is now: "canonical" (command_now), "older" (another spelling this script
 # wrote or that names the script plainly: the bare path, with ~/ or $HOME/, `sh` or `/bin/sh`
-# before it), "mentions" (some other command that names claude-statusline.sh), or "other".
+# before it, `exec` before any of these; `sh '<script>'` is what it wrote before `exec`),
+# "mentions" (some other command that names claude-statusline.sh), or "other".
 claude_form() {
   [ -f "$claude_settings" ] || { echo other; return 0; }
   cmd=$(jq -r 'if (.statusLine | type) == "object" then .statusLine.command // "" else "" end' "$claude_settings" 2>/dev/null) || cmd=
@@ -96,7 +100,7 @@ claude_form() {
   esac
   case "$cmd" in *claude-statusline.sh*) echo mentions ;; *) echo other ;; esac
 }
-spelled() { for c in "$1" "sh $1" "/bin/sh $1"; do [ "$cmd" = "$c" ] && return 0; done; return 1; }
+spelled() { for c in "$1" "sh $1" "/bin/sh $1" "exec $1" "exec /bin/sh $1"; do [ "$cmd" = "$c" ] && return 0; done; return 1; }
 claude_ours() { case "$(claude_form)" in canonical | older) return 0 ;; *) return 1 ;; esac; }
 set_command() { # the status line's command → command_now, nothing else
   tmp="$claude_settings.roundup-tmp"
@@ -116,7 +120,7 @@ claude_install() {
       [ -f "$claude_prev" ] || die "claude: broken ($claude_prev is missing, so the previous status line is unknown): not changed"
       backup "$claude_settings"
       set_command
-      echo "claude: on (the status line now runs through sh: $command_now)"
+      echo "claude: on (the status line now runs through exec sh: $command_now)"
       return 0 ;;
     mentions)
       die "claude: your status line appears to reference Roundup's script ($(jq -r '.statusLine.command' "$claude_settings")): not changed. Remove that first, then install again." ;;
@@ -162,7 +166,7 @@ claude_status() {
   if [ "$form" = canonical ] || [ "$form" = older ]; then
     if [ ! -f "$script" ]; then echo "claude: broken ($script is missing: run scripts/sync.sh)"
     elif [ ! -f "$claude_prev" ]; then echo "claude: broken ($claude_prev is missing: uninstall can't restore the previous status line)"
-    elif [ "$form" = older ]; then echo "claude: on (an older form: run install claude again, so it runs through sh)"
+    elif [ "$form" = older ]; then echo "claude: on (an older form: run install claude again, so it runs through exec sh)"
     elif [ -s "$next" ]; then echo "claude: on (then: $(cat "$next"))"
     else echo "claude: on"; fi
   elif [ -f "$claude_prev" ]; then echo "claude: broken (the status line was changed since install: $claude_settings)"

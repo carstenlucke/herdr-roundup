@@ -8,6 +8,8 @@
 #     { "v": 1, "terminal": "t7", "pid": <Claude's pid>, "at": <ms>, "claude": <stdin> }
 #
 # Written atomically (a temp file, then mv). Outside a Herdr terminal nothing is written.
+# Claude's pid is $PPID: install writes the command as `exec sh '<script>'`, so the shell Claude
+# Code runs it in becomes this script instead of forking it (CLAUDE_PID overrides, for tests).
 # Plain sh, no jq or node: it runs on every update of Claude's status line.
 #
 # The previous status line runs under /bin/sh, as Claude Code runs a status line command (not

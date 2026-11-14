@@ -34,8 +34,8 @@ const put = (path, text) => { mkdirSync(join(path, ".."), { recursive: true }); 
 const json = (path) => JSON.parse(readFileSync(path, "utf8"));
 const toml = (path) => spawnSync("python3", ["-c", "import sys, tomllib, json; print(json.dumps(tomllib.load(open(sys.argv[1], 'rb'))))", path], { encoding: "utf8" });
 const hasPython = spawnSync("python3", ["-c", "import tomllib"]).status === 0;
-// The status line's command as install writes it: through sh, the path in single quotes.
-const shCommand = (p) => `sh '${p.replace(/'/g, "'\\''")}'`;
+// The status line's command as install writes it: exec sh, the path in single quotes.
+const shCommand = (p) => `exec sh '${p.replace(/'/g, "'\\''")}'`;
 const backups = () => (existsSync(join(state, "backup")) ? readdirSync(join(state, "backup")) : []);
 
 test("claude: install wraps the person's status line, keeps their other settings, and uninstall restores it exactly", () => {
@@ -206,7 +206,7 @@ const statusLine = (input, extra = {}) => spawnSync("sh", [script], { input, env
 test("claude: an earlier install's spelling of the script is recognised and moved to sh, keeping what uninstall restores", () => {
   const before = { statusLine: { type: "command", command: "echo mine" } };
   const rel = script.slice(home.length + 1);
-  for (const old of [script, `~/${rel}`, `$HOME/${rel}`, `sh ${script}`, `/bin/sh '${script}'`]) {
+  for (const old of [script, `~/${rel}`, `$HOME/${rel}`, `sh ${script}`, `/bin/sh '${script}'`, `sh '${script}'`, `exec ${script}`]) {
     put(settings, JSON.stringify(before));
     assert.equal(run("install", "claude").code, 0);
     const prev = readFileSync(join(state, "claude.json"));
@@ -217,7 +217,7 @@ test("claude: an earlier install's spelling of the script is recognised and move
     assert.match(run("status", "claude").out, /^claude: on \(an older form/, old);
     const r = run("install", "claude");
     assert.equal(r.code, 0, r.err);
-    assert.match(r.out, /now runs through sh/);
+    assert.match(r.out, /now runs through exec sh/);
     assert.equal(json(settings).statusLine.command, shCommand(script));
     assert.deepEqual(readFileSync(join(state, "claude.json")), prev, "restore point untouched");
     assert.deepEqual(readFileSync(join(state, "claude-statusline.next")), next, "the previous line untouched");
@@ -511,4 +511,19 @@ test("codex: a key that only starts with tui, or tui inside another table, is no
     assert.equal(run("uninstall", "codex").code, 0);
     assert.equal(readFileSync(codex, "utf8"), text);
   }
+});
+
+test("the installed command gives the status line Claude's pid as $PPID, also under a shell that forks for a plain command", () => {
+  assert.equal(run("install", "claude").code, 0);
+  const cmd = json(settings).statusLine.command;
+  // As Claude Code runs it: `<shell> -c <command>`. The trailing `:` keeps that shell from
+  // replacing itself on its own, as dash before 0.5.11 or a wrapper never does: only the
+  // command's `exec` makes the script this process's child. No CLAUDE_PID, as in Claude Code.
+  const call = (command) => {
+    const r = spawnSync("/bin/sh", ["-c", `${command}; :`], { input: '{"session_id":"s1"}', env: { ...env, HC_TERMINAL_ID: "t7" }, encoding: "utf8", timeout: 10_000 });
+    assert.equal(r.status, 0, String(r.error ?? r.stderr));
+    return json(cache("t7")).pid;
+  };
+  assert.equal(call(cmd), process.pid, "the pid of the process that started the command");
+  assert.notEqual(call(shCommand(script).replace(/^exec /, "")), process.pid, "without exec: the forking shell's pid (what the fix is for)");
 });
