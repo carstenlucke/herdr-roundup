@@ -145,6 +145,9 @@ export function makeIo({ after = null } = {}) {
     async alive(pid) {
       try { return (await exec("kill", ["-0", String(pid)], { timeout: T })).code === 0; } catch { return false; }
     },
+    // Through `rm`, not fs.unlink: Herdr's fs/promises writes only under ~/.config/herdr-app
+    // (AGENTS.md), and these files are under ~/.cache (ADR 0003). An unlink there would fail
+    // into the catch and the sweep would quietly remove nothing; node's fs in the tests can't tell.
     async remove(p) {
       try { return (await exec("rm", ["-f", p], { timeout: T })).code === 0; } catch { return false; }
     },
