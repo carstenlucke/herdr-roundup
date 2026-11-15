@@ -27,6 +27,25 @@
 // Where integrations write, one file per terminal: ~/.cache/herdr-roundup/context/<agent>/<t>.json.
 export const integrationFile = (io, agent, terminal) => `${io.home}/.cache/herdr-roundup/context/${agent}/${terminal}.json`;
 
+// A folder as one spelling: repeated slashes as one, none at the end ("/" stays "/"). An agent's
+// config folder names its account (limits/store.js): `/x/.claude/` and `/x/.claude` are one. A `~`
+// stays as written: the agent takes the variable as it is too.
+export const folder = (p) => (typeof p === "string" ? p.replace(/\/{2,}/g, "/").replace(/(.)\/$/, "$1") : p);
+
+// `fn` over `items`, at most `limit` at a time; a failing one costs only its own result (null).
+export async function eachLimited(items, limit, fn) {
+  const out = new Array(items.length).fill(null);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      try { out[i] = await fn(items[i], i); } catch { out[i] = null; }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
+}
+
 export function parseJson(text) {
   if (typeof text !== "string" || !text) return null;
   try {

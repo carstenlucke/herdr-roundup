@@ -11,7 +11,7 @@
 //   of its descendants holds open (lsof), asked on every look: `/new` or a resume opens another
 //   one in the same process. A shared daemon's files lie outside the process tree.
 
-import { NO_ANSWER, foreground, processEnv, byTitle, titleIds, byOpenFile, uuid7Time, localParts, parseJson } from "../locate.js";
+import { NO_ANSWER, foreground, processEnv, byTitle, titleIds, byOpenFile, uuid7Time, localParts, parseJson, folder, eachLimited } from "../locate.js";
 import { scanTail, fromEnd, completeLines, FIRST, NO_READING } from "../tail.js";
 import { codexLimits, CODEX_EVENTS } from "../../limits/parse.js";
 
@@ -91,6 +91,7 @@ export function findRollout(lines, whole) {
 
 export const ACCOUNT_FILES = 5;
 export const ACCOUNT_DAYS = 8; // a weekly window, and a day
+export const ACCOUNT_AT_ONCE = 4; // rollout ends read at a time
 
 // The rollouts started last, newest first, at most `n` and none from a day folder older than
 // `days`: sessions/YYYY/MM/DD/rollout-<stamp>-<id>.jsonl sort by their names.
@@ -138,7 +139,7 @@ export default {
     if (!fg || fg === NO_ANSWER) return fg;
     const env = await processEnv(io, fg.pid, memo);
     if (env?.HC_TERMINAL_ID && env.HC_TERMINAL_ID !== agent.terminal) return null;
-    const home = env?.CODEX_HOME || `${io.home}/.codex`;
+    const home = folder(env?.CODEX_HOME || `${io.home}/.codex`);
     // The account for the plan limits (limits/store.js): the config folder, known before a rollout is.
     memo.account = `codex:${home}`;
     memo.home = home;
@@ -189,11 +190,11 @@ export default {
   // carries them, whoever's it is: the end of each is read, and the store keeps what is newest.
   async accountLimits(io, memo) {
     if (!memo.home || !memo.account) return;
-    for (const file of await newestRollouts(io, memo.home)) {
+    await eachLimited(await newestRollouts(io, memo.home), ACCOUNT_AT_ONCE, async (file) => {
       const chunk = await io.tail(file, FIRST);
-      if (!chunk || typeof chunk.text !== "string") continue;
+      if (!chunk || typeof chunk.text !== "string") return;
       io.limits.offer(memo.account, codexLimits(completeLines(chunk.text, chunk.whole)).reading);
-    }
+    });
   },
 
   async read(source, io, memo = {}) {

@@ -238,8 +238,9 @@ export class ContextReader {
 
   // An agent has started in this pane (a new pane, or a shell that became one): once, as soon as
   // its account is known, what the account's other files say goes to the store, so a session that
-  // hasn't answered yet shows its limits. At most once a minute per account (store.due); a failure
-  // costs nothing but the limits.
+  // hasn't answered yet shows its limits. At most once a minute per account (store.due, noted as the
+  // job starts: an ask released while it waits takes no other pane's turn); a failure costs nothing
+  // but the limits.
   // After the pane's own look is out (also one that found no source), as a job of its own in the
   // queue: the pane's own number never waits for it, and the header's 2 s look draws what it
   // brings. It works on the account and folder as they are now, not on `memo`, which belongs to
@@ -251,11 +252,12 @@ export class ContextReader {
     const { io, strategy, memo } = this;
     if (this.accountAsked || this.closed || !memo.account || memo.noLimits || !strategy?.accountLimits || !io.limits) return;
     this.accountAsked = true;
-    if (!io.limits.due(memo.account, io.now())) return;
     const about = { account: memo.account, home: memo.home };
     const gen = this.gen;
     const side = this.queue.enter(async () => {
       if (this.closed || gen !== this.gen) return false;
+      // Several panes of an account starting at once: the first job that runs asks, the others end here.
+      if (!io.limits.due(about.account, io.now())) return false;
       try { await strategy.accountLimits(io, about); } catch {}
       return false;
     });

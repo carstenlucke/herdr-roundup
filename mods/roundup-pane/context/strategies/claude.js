@@ -7,7 +7,7 @@
 //   → status line file ~/.cache/herdr-roundup/context/claude/<t>.json, if its pid and session match
 //   → transcript: the status line's transcript_path, else projects/<cwd slug>/<sessionId>.jsonl
 
-import { NO_ANSWER, foreground, processEnv, observeJsonFile, observeTerminalFile, parseJson } from "../locate.js";
+import { NO_ANSWER, foreground, processEnv, observeJsonFile, observeTerminalFile, parseJson, folder, eachLimited } from "../locate.js";
 import { scanTail, fromEnd, NO_READING } from "../tail.js";
 import { fromClaude } from "../../limits/parse.js";
 
@@ -24,15 +24,18 @@ export const SNAPSHOT_META = '"isMeta"[[:space:]]*:[[:space:]]*true';
 // filtered lines that are no snapshot follow the last one, the window stays unknown (tokens only).
 export const SNAPSHOT_CANDIDATES = 8;
 const COMPACT_ENV = ["CLAUDE_CODE_AUTO_COMPACT_WINDOW", "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE"];
-export const ACCOUNT_FILES = 60; // how many terminals' files accountLimits reads at most
+// accountLimits reads every terminal's file, a few at a time, up to a bound only a runaway folder
+// reaches: past it, which files are read is chance (best effort; the sweep keeps live terminals).
+export const ACCOUNT_READS = 500;
+export const ACCOUNT_AT_ONCE = 4;
 
 // The process doesn't run on the plan: it is told to use Bedrock, Vertex or Foundry (switched on
-// as Claude Code reads such a switch), or another endpoint. An API key or a token in the
-// environment decides nothing (Claude Code may still use the subscription): such a pane shows its
+// as Claude Code reads such a switch). An API key, a token or another endpoint (ANTHROPIC_BASE_URL:
+// a pass-through proxy may still carry the subscription) decides nothing: such a pane shows its
 // account's limits until its own first answer says otherwise (noLimits, below).
 const ON = new Set(["1", "true", "yes", "on"]);
 const OFF_PLAN = ["CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY"];
-export const offPlan = (env) => Boolean(env) && (OFF_PLAN.some((k) => ON.has(String(env[k] ?? "").trim().toLowerCase())) || Boolean(String(env.ANTHROPIC_BASE_URL ?? "").trim()));
+export const offPlan = (env) => Boolean(env) && (OFF_PLAN.some((k) => ON.has(String(env[k] ?? "").trim().toLowerCase())));
 
 // A folder as Claude Code names its project folder: every character not a letter or digit is "-".
 export const slug = (cwd) => cwd.replace(/[^a-zA-Z0-9]/g, "-");
@@ -143,7 +146,7 @@ export default {
     const env = await processEnv(io, fg.pid, memo);
     // The process's environment names its terminal: another one's means another terminal's agent.
     if (env?.HC_TERMINAL_ID && env.HC_TERMINAL_ID !== agent.terminal) return null;
-    const home = env?.CLAUDE_CONFIG_DIR || `${io.home}/.claude`;
+    const home = folder(env?.CLAUDE_CONFIG_DIR || `${io.home}/.claude`);
     // The account for the plan limits (limits/store.js): the config folder, known before a session is.
     memo.account = `claude:${home}`;
     memo.home = home;
@@ -167,11 +170,16 @@ export default {
     if (status.file && !byEnv) io.limits?.offer(memo.account, fromClaude(status.file));
     // This session's own word: it has answered (its API time counts) and its status has no limits,
     // so it doesn't run on the plan. Only the file of this very session says so; without it (not
-    // written yet, not readable this time) what the session said before stands.
+    // written yet, not readable this time) what the session said before stands. Once its status
+    // carried limits, this process's session is on the plan for good (`memo.onPlan`): a later
+    // status without them (a call that brought no limit headers) doesn't hide them.
     if (!byEnv) {
       const own = status.file?.claude?.session_id === session.sessionId ? status.file.claude : null;
+      const limited = Boolean(own?.rate_limits && typeof own.rate_limits === "object");
+      if (memo.onPlan && (memo.onPlan.pid !== fg.pid || memo.onPlan.session !== session.sessionId)) memo.onPlan = null;
+      if (limited) memo.onPlan = { pid: fg.pid, session: session.sessionId };
       const was = memo.noLimits?.session === session.sessionId;
-      const none = own ? own.cost?.total_api_duration_ms > 0 && !(own.rate_limits && typeof own.rate_limits === "object") : was;
+      const none = !memo.onPlan && (own ? own.cost?.total_api_duration_ms > 0 && !limited : was);
       memo.noLimits = none ? { pid: fg.pid, session: session.sessionId } : null;
     }
     const path = status.file?.claude?.session_id === session.sessionId ? status.file.claude.transcript_path : null;
@@ -205,17 +213,19 @@ export default {
   // The account's limits as the integration kept them for other terminals (the reader asks once
   // when Claude starts in a pane: a session before its first answer has none of its own). A file
   // counts when its session's transcript lies under this config folder: the same account. Files
-  // of ended terminals count too, until the sweep removes them: the store keeps what is newest.
+  // of ended terminals count too, until the sweep removes them: the store keeps what is newest, so
+  // every file is read (ACCOUNT_READS), not the first few, whose order the folder doesn't give.
   async accountLimits(io, memo) {
     if (!memo.home || !memo.account) return;
     const dir = `${io.home}/.cache/herdr-roundup/context/claude`;
-    const names = ((await io.list(dir)) ?? []).filter((n) => /^[A-Za-z0-9_-]+\.json$/.test(n)).slice(0, ACCOUNT_FILES);
-    for (const name of names) {
+    const names = ((await io.list(dir)) ?? []).filter((n) => /^[A-Za-z0-9_-]+\.json$/.test(n)).slice(0, ACCOUNT_READS);
+    const under = `${folder(memo.home)}/projects/`;
+    await eachLimited(names, ACCOUNT_AT_ONCE, async (name) => {
       const f = parseJson(await io.readText(`${dir}/${name}`));
       const path = f?.claude?.transcript_path;
-      if (f?.v !== 1 || typeof path !== "string" || !path.startsWith(`${memo.home}/projects/`)) continue;
+      if (f?.v !== 1 || typeof path !== "string" || !folder(path).startsWith(under)) return;
       io.limits.offer(memo.account, fromClaude(f));
-    }
+    });
   },
 
   // `memo` is the reader's per-terminal store: the snapshot search runs once per session and then
