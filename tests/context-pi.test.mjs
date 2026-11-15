@@ -67,8 +67,7 @@ test("pi's extension file right after a compaction (tokens unknown): no number, 
 });
 
 test("an extension file of another process or terminal doesn't count: then pi's footer", async () => {
-  // A child's file (its ppid the foreground pid) counts only for opencode's launcher, not for pi.
-  for (const over of [{ pid: PID + 1 }, { pid: PID + 1, ppid: PID }, { terminal: "t9" }, { v: 2 }]) {
+  for (const over of [{ pid: PID + 1 }, { terminal: "t9" }, { v: 2 }]) {
     const r = await reading(setup({ files: { [EXT]: file(over) } }));
     assert.equal(r.source, "screen", JSON.stringify(over));
   }

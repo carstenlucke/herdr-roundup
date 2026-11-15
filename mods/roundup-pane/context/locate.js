@@ -85,21 +85,18 @@ export async function observeJsonFile(io, path) {
 // `file` only if it is this terminal's and was written by this process: { v: 1, terminal, pid, at,
 // ... }. A file of an ended terminal, of an earlier process in the same terminal, or of another
 // version gives null (with its stat: it was read).
-// `parent`: a file written by a direct child of the foreground process counts too (its `ppid` is
-// that pid), for an agent started through a launcher that stays in the foreground and runs the real
-// program as its child (opencode installed with npm or bun: a node script spawns the binary, and hc
-// reports the script's pid). One level only, from the file: no process tree is asked.
-export async function observeTerminalFile(io, agent, terminal, pid, { parent = false } = {}) {
+export async function observeTerminalFile(io, agent, terminal, pid) {
   const { path, stat, json: f } = await observeJsonFile(io, integrationFile(io, agent, terminal));
-  const writer = f && (f.pid === pid || (parent && Number.isInteger(f.ppid) && f.ppid > 1 && f.ppid === pid));
-  const own = f && f.v === 1 && f.terminal === terminal && writer && Number.isFinite(f.at);
+  const own = f && f.v === 1 && f.terminal === terminal && f.pid === pid && Number.isFinite(f.at);
   return { path, stat, file: own ? f : null };
 }
 
 // The normalized form an extension or plugin writes (pi, opencode), after { v, terminal, pid, at }:
 // `session`, `model`, `used` (null when unknown, e.g. right after a compaction), `window` (null when
-// unknown) and `percent` (null when unknown). → a reading, or null for "no number" (no session
-// shown, nothing answered yet, numbers that aren't sane). `source` names it for the hover card.
+// unknown) and `percent` (null when unknown); opencode also `footerWindow`, the larger window its
+// own footer divides by (kept only when larger than `window`). → a reading, or null for "no
+// number" (no session shown, nothing answered yet, numbers that aren't sane). `source` names it
+// for the hover card.
 export function normalizedReading(file, source) {
   if (!file || !Number.isFinite(file.at)) return null;
   const n = (v) => (Number.isFinite(v) && v >= 0 ? v : null);
@@ -108,9 +105,11 @@ export function normalizedReading(file, source) {
   let percent = n(file.percent);
   if (used !== null && window !== null) percent = (used / window) * 100;
   if (used === null && percent === null) return null;
+  const footerWindow = window !== null && Number.isFinite(file.footerWindow) && file.footerWindow > window ? file.footerWindow : null;
   return {
     used,
     window,
+    ...(footerWindow ? { footerWindow } : {}),
     percent,
     model: typeof file.model === "string" && file.model ? file.model : null,
     at: file.at,

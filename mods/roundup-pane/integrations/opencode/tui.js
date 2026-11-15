@@ -5,15 +5,17 @@
 // another terminal's pid. It keeps the numbers of the session the TUI shows, per Herdr terminal:
 //
 //   ~/.cache/herdr-roundup/context/opencode/<HC_TERMINAL_ID>.json
-//     { "v": 1, "terminal": "t7", "pid": <the TUI's pid>, "ppid": <its parent's>, "at": <ms>,
-//       "session", "model", "used", "window", "percent" }
+//     { "v": 1, "terminal": "t7", "pid": <the TUI's pid>, "at": <ms>, "session", "model",
+//       "used", "window", "footerWindow", "percent" }
 //
-// `ppid`: installed with npm or bun, opencode runs as the child of a node launcher, and that
-// launcher is the terminal's foreground process; the pane header accepts either.
-//
-// As opencode's own footer and sidebar count it (tui/src/util/session.ts, contextUsage): the last
-// answer with tokens after the last completed compaction, before a revert point, input + output +
-// reasoning + cache read + cache write, of the answer's model's `limit.context` (0: unknown).
+// `used` as opencode's own footer and sidebar count it (tui/src/util/session.ts, contextUsage): the
+// last answer with tokens after the last completed compaction, before a revert point, input +
+// output + reasoning + cache read + cache write. `window` is the prompt's room, the one opencode
+// compacts against (core/src/session/compaction.ts, inputWindow): min(limit.input, limit.context)
+// of the answer's model, or the one of them it has (0: unknown). Its footer divides by
+// `limit.context`, which also holds the answer: logged in with ChatGPT, gpt-6.1-sol's input is
+// capped at 500k and its context is 500k + 128k of output, 628k. `footerWindow` is that
+// `limit.context` when it is larger than `window` (else null), for the hover card to say so.
 // On the home screen, or before a first answer, the numbers are null. Written atomically (a temp
 // file, then rename), only when something changed, a moment after opencode's events (they come
 // for every session of the shared server) and once a second for the route (it sends none).
@@ -34,7 +36,17 @@ export const contextDir = (env = process.env) => join(env.HOME || homedir(), ".c
 
 const count = (v) => (Number.isFinite(v) && v >= 0 ? v : 0);
 
-// opencode's contextUsage, in its own terms: → { used, window, model, at } or null.
+const positive = (v) => (Number.isFinite(v) && v > 0 ? v : 0);
+
+// The prompt's room as opencode's compaction takes it: min(input, context), or the one it has.
+// → { window, footerWindow } (null when unknown; footerWindow only when the footer's is larger).
+export function windowOf(limit) {
+  const input = positive(limit?.input), context = positive(limit?.context);
+  const window = input && context ? Math.min(input, context) : input || context;
+  return { window: window || null, footerWindow: context > window ? context : null };
+}
+
+// opencode's contextUsage, in its own terms: → { used, window, footerWindow, model, at } or null.
 export function usageOf(messages, models, boundary) {
   if (!Array.isArray(messages)) return null;
   const boundaryIndex = boundary ? messages.findIndex((m) => m?.id === boundary) : -1;
@@ -50,11 +62,10 @@ export function usageOf(messages, models, boundary) {
   if (!(used > 0)) return null;
   const ref = last.model ?? {};
   const model = Array.isArray(models) ? models.find((m) => m?.providerID === ref.providerID && m?.id === ref.id) : undefined;
-  const limit = model?.limit?.context;
   const at = last.time?.completed ?? last.time?.created;
   return {
     used,
-    window: Number.isFinite(limit) && limit > 0 ? limit : null,
+    ...windowOf(model?.limit),
     model: typeof ref.id === "string" && ref.id ? ref.id : null,
     at: Number.isFinite(at) ? at : null,
   };
@@ -64,7 +75,7 @@ export function usageOf(messages, models, boundary) {
 // TUI's current one (`context.location`, as opencode's own session route does with
 // `session.location ?? location.ref`): a session whose info isn't loaded yet; neither of them, and
 // the model list falls back to the default location itself.
-export function record(context, { terminal, pid, ppid = null, now }) {
+export function record(context, { terminal, pid, now }) {
   const route = context.ui.router.current();
   const session = route?.type === "session" && typeof route.sessionID === "string" ? route.sessionID : null;
   let u = null;
@@ -78,12 +89,12 @@ export function record(context, { terminal, pid, ppid = null, now }) {
     v: 1,
     terminal,
     pid,
-    ppid: Number.isInteger(ppid) && ppid > 0 ? ppid : null,
     at: u?.at ?? now,
     session,
     model: u?.model ?? null,
     used: u?.used ?? null,
     window: u?.window ?? null,
+    footerWindow: u?.footerWindow ?? null,
     percent: u && u.window ? (u.used / u.window) * 100 : null,
   };
 }
@@ -111,7 +122,7 @@ export function removeOwn(dir, terminal, pid) {
   } catch {}
 }
 
-export function setup(context, { env = process.env, pid = process.pid, ppid = process.ppid, now = () => Date.now() } = {}) {
+export function setup(context, { env = process.env, pid = process.pid, now = () => Date.now() } = {}) {
   const terminal = env.HC_TERMINAL_ID;
   if (typeof terminal !== "string" || !TERMINAL.test(terminal)) return;
   const dir = contextDir(env);
@@ -120,7 +131,7 @@ export function setup(context, { env = process.env, pid = process.pid, ppid = pr
     timer = null;
     if (disposed) return;
     try {
-      const content = record(context, { terminal, pid, ppid, now: now() });
+      const content = record(context, { terminal, pid, now: now() });
       // The time alone (home screen, no answer: now) is no change.
       const key = JSON.stringify({ ...content, at: content.used === null ? 0 : content.at });
       if (key !== last && writeAtomic(dir, content)) last = key;

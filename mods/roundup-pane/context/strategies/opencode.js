@@ -5,11 +5,11 @@
 // The plugin (integrations/opencode/tui.js) runs in the TUI, the terminal's own process (the
 // server is a shared service with another terminal's pid and environment), and writes
 // ~/.cache/herdr-roundup/context/opencode/<t>.json for the session it shows: the tokens of its last
-// answer after the last compaction (input + output + reasoning + cache read + cache write) of the
-// model's `limit.context`, as opencode's own footer sums them. On its home screen, or before an
-// answer, the file says no number. It counts only if its pid, or its parent's (`ppid`), is the
-// terminal's foreground process: opencode installed with npm or bun runs as a child of a node
-// launcher, which hc reports. The source keeps the foreground pid, which the reader checks again.
+// answer after the last compaction (input + output + reasoning + cache read + cache write), as
+// opencode's own footer sums them, of the window opencode compacts against (min of the model's
+// `limit.input` and `limit.context`; its footer divides by `limit.context`). On its home screen,
+// or before an answer, the file says no number. It counts only if its pid is the terminal's
+// foreground process.
 
 import { NO_ANSWER, foreground, processEnv, observeTerminalFile, normalizedReading } from "../locate.js";
 import { NO_READING } from "../tail.js";
@@ -24,7 +24,7 @@ export default {
     if (!fg || fg === NO_ANSWER) return fg;
     const env = await processEnv(io, fg.pid, memo);
     if (env?.HC_TERMINAL_ID && env.HC_TERMINAL_ID !== agent.terminal) return null;
-    const plugin = await observeTerminalFile(io, "opencode", agent.terminal, fg.pid, { parent: true });
+    const plugin = await observeTerminalFile(io, "opencode", agent.terminal, fg.pid);
     if (!plugin.file) return null;
     return {
       id: "opencode",

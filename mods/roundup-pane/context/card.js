@@ -47,6 +47,7 @@ export function cardModel(reading, { agent, hint = null } = {}) {
     row("Idle compact", `~${clock(hint)}`, "estimate", "warn");
     notes.push("Expected about 55 min after the last answer, as observed on this machine");
   }
+  if (Number.isFinite(reading.footerWindow) && hasWindow) notes.push(`The window opencode compacts against; its own footer counts of ${tokens(reading.footerWindow)}, which includes room for the answer`);
   if (reading.source === "screen") notes.push("Rounded, as pi's footer shows it. For pi's own number: scripts/agent-integrations.sh install pi");
   else if (reading.windowRounded) notes.push("Window from this session's /context, which rounds it");
   if (!hasWindow && agent === "claude") notes.push("Switch on the status line integration for its window: scripts/agent-integrations.sh install claude (or type /context)");

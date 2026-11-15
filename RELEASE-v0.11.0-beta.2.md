@@ -7,7 +7,7 @@ Second beta of 0.11.0: the context meter in the pane header now also shows for P
 ## New
 
 - **Pi Agent:** with its integration, pi's own numbers (`24% 48.1k / 200k`). Without it, the percent from pi's footer, rounded and marked `~`, without tokens.
-- **OpenCode (2.x):** with its integration, the numbers of the session it shows, counted as OpenCode's own footer counts them. Without it, no meter: nothing ties an OpenCode session to its terminal.
+- **OpenCode (2.x):** with its integration, the numbers of the session it shows: the tokens as OpenCode's own footer counts them, of the window OpenCode compacts against. Logged in with ChatGPT that is 500k for GPT-6.1 Sol, while OpenCode's footer counts of 628k (room for the answer included); the hover card says so. Without the integration, no meter: nothing ties an OpenCode session to its terminal.
 - **Two more integrations:** `scripts/agent-integrations.sh install pi|opencode`. Each adds one link in the agent's extensions or plugins folder to a file of the layout, so updates of the layout reach it. `status` shows it, `uninstall` removes the link.
 
 ## Coming next
