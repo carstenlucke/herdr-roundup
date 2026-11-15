@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { tokens, share, percentText, severity, tier, headerTier, TIERS, usedText } from "../mods/roundup-pane/context/text.js";
 import { completeLines, fromEnd, scanTail, FIRST, NO_READING } from "../mods/roundup-pane/context/tail.js";
-import { byTitle, uuid7Time, byTerminalFile, integrationFile, localParts } from "../mods/roundup-pane/context/locate.js";
+import { byTitle, uuid7Time, observeJsonFile, observeTerminalFile, integrationFile, localParts, UNSURE } from "../mods/roundup-pane/context/locate.js";
 import { strategyFor, STRATEGIES } from "../mods/roundup-pane/context/registry.js";
 import { contextIo } from "./support/context-io.mjs";
 
@@ -108,20 +108,63 @@ test("uuid7Time: a UUIDv7's first 12 hex digits are its creation time in ms; ano
   assert.match(`${p.y}-${p.mo}-${p.d}T${p.h}-${p.mi}-${p.s}`, /^\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d$/);
 });
 
-test("byTerminalFile: only this terminal's file, written by this pid in this format", async () => {
+test("observeTerminalFile: only this terminal's file, written by this pid in this format; another's is read too, and keeps its stat", async () => {
   const io = contextIo();
   const path = integrationFile(io, "claude", "t7");
   assert.equal(path, "/Users/a/.cache/herdr-roundup/context/claude/t7.json");
   const put = (v) => (io.files[path] = JSON.stringify(v));
+  const stat = () => ({ size: Buffer.byteLength(io.files[path]), mtime: 0 });
   put({ v: 1, terminal: "t7", pid: 42, at: 1 });
-  assert.equal((await byTerminalFile(io, "claude", "t7", 42)).pid, 42);
-  assert.equal(await byTerminalFile(io, "claude", "t7", 43), null, "an earlier process in the same terminal");
+  let o = await observeTerminalFile(io, "claude", "t7", 42);
+  assert.equal(o.path, path);
+  assert.equal(o.file.pid, 42);
+  assert.deepEqual(o.stat, stat());
+  assert.deepEqual(io.calls, [["stat", path], ["readText", path]], "one stat, then one read");
+  const foreign = async (pid, why) => {
+    o = await observeTerminalFile(io, "claude", "t7", pid);
+    assert.equal(o.file, null, why);
+    assert.deepEqual(o.stat, stat(), `${why}: read, so its stat stands`);
+  };
+  await foreign(43, "an earlier process in the same terminal");
   put({ v: 1, terminal: "t8", pid: 42, at: 1 });
-  assert.equal(await byTerminalFile(io, "claude", "t7", 42), null, "another terminal's");
+  await foreign(42, "another terminal's");
   put({ v: 2, terminal: "t7", pid: 42, at: 1 });
-  assert.equal(await byTerminalFile(io, "claude", "t7", 42), null, "another version");
+  await foreign(42, "another version");
+  put({ v: 1, terminal: "t7", pid: 42 });
+  await foreign(42, "no time");
   io.files[path] = "{ half";
-  assert.equal(await byTerminalFile(io, "claude", "t7", 42), null, "half written");
+  o = await observeTerminalFile(io, "claude", "t7", 42);
+  assert.equal(o.file, null, "half written");
+  assert.equal(o.stat, UNSURE, "not parsed: nothing the reader may keep");
+});
+
+test("observeJsonFile: the stat first, the file read whatever it said; a stat only beside parsed content, null only when neither answered, else UNSURE", async () => {
+  const io = contextIo({ files: { "/f.json": '{"a":1}' }, mtimes: { "/f.json": 7 } });
+  const { stat, readText } = io;
+  let o = await observeJsonFile(io, "/f.json");
+  assert.deepEqual(o, { path: "/f.json", stat: { size: 7, mtime: 7 }, json: { a: 1 } });
+  assert.deepEqual(io.calls.map((c) => c[0]), ["stat", "readText"]);
+  io.calls.length = 0;
+  o = await observeJsonFile(io, "/none.json");
+  assert.deepEqual(o, { path: "/none.json", stat: null, json: null }, "no file");
+  assert.deepEqual(io.calls.map((c) => c[0]), ["stat", "readText"], "read all the same: a failed stat gives null too");
+  io.stat = async () => null; // `stat` failed or timed out
+  o = await observeJsonFile(io, "/f.json");
+  assert.deepEqual(o.json, { a: 1 }, "the content is used");
+  assert.equal(o.stat, UNSURE, "no stat for content that is there");
+  io.stat = stat;
+  io.readText = async () => null;
+  assert.deepEqual(await observeJsonFile(io, "/f.json"), { path: "/f.json", stat: UNSURE, json: null }, "a file that couldn't be read");
+  io.readText = readText;
+  for (const text of ["{ half", "", "7"]) {
+    io.files["/f.json"] = text;
+    assert.deepEqual(await observeJsonFile(io, "/f.json"), { path: "/f.json", stat: UNSURE, json: null }, `not an object: ${JSON.stringify(text)}`);
+  }
+  // Replaced between the stat and the read: the newer content with the older stat, never the reverse.
+  io.files["/f.json"] = '{"a":1}';
+  io.readText = async (p) => { io.files[p] = '{"a":22}'; return readText(p); };
+  o = await observeJsonFile(io, "/f.json");
+  assert.deepEqual(o, { path: "/f.json", stat: { size: 7, mtime: 7 }, json: { a: 22 } });
 });
 
 test("registry: the strategy for a program.key or app, none for a shell, a mod pane or an unknown program", () => {

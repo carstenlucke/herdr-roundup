@@ -8,14 +8,15 @@
 //   compaction. Shown again: at once. A status change while not shown waits for that.
 // - A source is read only when one of its files changed (size or modification time) or its last
 //   read gave no reading; finding it (hc get, the session file) is cheap and runs on each look.
-//   A file the strategy read while finding it comes with the stat of that read (`observed`).
+//   A file the strategy read while finding it comes with the stat of that read (`observed`); one
+//   whose stat and content it couldn't both get (UNSURE) is read again on the next look.
 //   Nothing found, or a failed read: tried again with a backoff, not on every render. Read without
 //   a number (NO_READING): no backoff, the schedule above; read again when a file changed, or on
 //   every look where the strategy can't tell that from a failed read (keepsNoReading false).
 // - Module code is shared by the copies: one queue lets two reads run at once, not all panes'.
 
 import { STRATEGIES, strategyFor } from "./registry.js";
-import { NO_ANSWER } from "./locate.js";
+import { NO_ANSWER, UNSURE } from "./locate.js";
 import { NO_READING } from "./tail.js";
 
 export const WORKING_MS = 15_000;
@@ -250,14 +251,17 @@ export class ContextReader {
     if (src === NO_ANSWER) { this.key = this.stats = null; return false; }
     if (!src) { this.key = this.stats = null; return this.set(null, gen); }
     const key = sourceKey(src);
-    // A file the strategy already observed in locate() keeps that stat (`observed`, path → stat or
-    // null), the one of the content it read: a newer stat here could mark newer content as read.
+    // A file the strategy already observed in locate() keeps that stat (`observed`, path → stat,
+    // null or UNSURE), the one of the content it read: a newer stat here could mark newer content
+    // as read. UNSURE (locate.js: the stat or the content is missing) says nothing about a change:
+    // this look reads, and its stats aren't kept, so the next one reads again.
     const seen = src.observed ?? {};
     const stats = await Promise.all(src.files.map((f) => (Object.hasOwn(seen, f) ? seen[f] : io.stat(f))));
     if (gen !== this.gen) return false;
+    const sure = !stats.includes(UNSURE);
     // Nothing new: the reading stands (key is kept only beside a reading, or after NO_READING of
     // a strategy that keeps it: then the meter stays empty).
-    if (key === this.key && sameStats(stats, this.stats)) return false;
+    if (sure && key === this.key && sameStats(stats, this.stats)) return false;
     let r = await strategy.read(src, io, this.memo);
     if (gen !== this.gen) return false;
     // A late answer of another process is dropped: the terminal must still run the one located,
@@ -273,12 +277,12 @@ export class ContextReader {
     // Read without a number: the meter goes, with no backoff; its stats are kept only where the
     // strategy says the file alone decides (then read again only when a file changes).
     if (r === NO_READING) {
-      if (strategy.keepsNoReading === true) { this.key = key; this.stats = stats; } else this.key = this.stats = null;
+      if (strategy.keepsNoReading === true && sure) { this.key = key; this.stats = stats; } else this.key = this.stats = null;
       return this.set(null, gen, true);
     }
     // Only a reading counts as read: no reading (a failed tail, a file being written) is tried
     // again on the next look, not taken as "unchanged" until a file of it changes.
-    if (valid(r)) { this.key = key; this.stats = stats; } else this.key = this.stats = null;
+    if (valid(r) && sure) { this.key = key; this.stats = stats; } else this.key = this.stats = null;
     return this.set(r, gen);
   }
 }

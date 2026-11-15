@@ -306,3 +306,33 @@ test("while a miss is held, the status line's path and the slug path are still a
   assert.equal((await w.look()).transcript, given);
   assert.equal(w.lists(), 1);
 });
+
+test("locate: the source carries each of its files' stat, the transcript's the one that found it, by its slug, by the search or as a kept hit", async () => {
+  const sessionFile = `/Users/a/.claude/sessions/${PID}.json`;
+  const statOf = (io, p) => ({ size: Buffer.byteLength(io.files[p]), mtime: 0 });
+  const stats = (io, p) => io.calls.filter((c) => c[0] === "stat" && c[1] === p).length;
+  // By its slug, with the status line file.
+  let io = setup();
+  const status = integrationFile(io, "claude", "t7");
+  let src = await claude.locate({ terminal: "t7" }, io);
+  assert.deepEqual(src.files, [sessionFile, status, TRANSCRIPT]);
+  assert.deepEqual(src.observed, { [sessionFile]: statOf(io, sessionFile), [status]: statOf(io, status), [TRANSCRIPT]: statOf(io, TRANSCRIPT) });
+  assert.deepEqual(src.files.map((f) => stats(io, f)), [1, 1, 1], "one stat each");
+  assert.equal(src.transcript, TRANSCRIPT, "the transcript itself stays a path");
+  // No status line file: null, which the reader takes as no file; no transcript: no entry.
+  const f = fresh();
+  src = await f.look();
+  assert.deepEqual(src.observed, { [sessionFile]: statOf(f.io, sessionFile), [status]: null });
+  // Found by the search, then kept: each look's own stat, and none more for `observed`.
+  const off = `/Users/a/.claude/projects/-elsewhere/${SID}.jsonl`;
+  f.io.files[off] = full;
+  f.io.clock += FIND_AGAIN_MS;
+  src = await f.look();
+  assert.deepEqual(src.observed[off], statOf(f.io, off));
+  assert.equal(stats(f.io, off), 1, "the search's stat");
+  f.io.files[off] += "\n";
+  src = await f.look();
+  assert.deepEqual(src.observed[off], statOf(f.io, off), "a kept hit: this look's stat, not the one kept");
+  assert.equal(stats(f.io, off), 2, "one per look");
+  assert.deepEqual([...f.memo.transcripts.values()].map((m) => Object.keys(m)), [["path", "at"]], "the memo keeps no stat");
+});

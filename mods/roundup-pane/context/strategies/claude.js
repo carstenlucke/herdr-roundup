@@ -7,7 +7,7 @@
 //   → status line file ~/.cache/herdr-roundup/context/claude/<t>.json, if its pid and session match
 //   → transcript: the status line's transcript_path, else projects/<cwd slug>/<sessionId>.jsonl
 
-import { NO_ANSWER, foreground, processEnv, byPidFile, observeTerminalFile, parseJson } from "../locate.js";
+import { NO_ANSWER, foreground, processEnv, observeJsonFile, observeTerminalFile, parseJson } from "../locate.js";
 import { scanTail, fromEnd, NO_READING } from "../tail.js";
 
 export const IDLE_COMPACT_MS = 55 * 60 * 1000; // observed on this machine, see RECIPE
@@ -134,10 +134,13 @@ export default {
     // The process's environment names its terminal: another one's means another terminal's agent.
     if (env?.HC_TERMINAL_ID && env.HC_TERMINAL_ID !== agent.terminal) return null;
     const home = env?.CLAUDE_CONFIG_DIR || `${io.home}/.claude`;
-    const session = checkSession(await byPidFile(io, `${home}/sessions`, fg.pid), fg);
+    // Each file of the source is observed once per look, here, its stat before its content
+    // (locate.js, observeJsonFile): the reader takes these stats (`observed`) and asks none again,
+    // so no stat can be newer than what was read. The session file, then the status line file,
+    // whose content read() takes from the source.
+    const sessionFile = await observeJsonFile(io, `${home}/sessions/${fg.pid}.json`);
+    const session = checkSession(sessionFile.json, fg);
     if (!session) return null;
-    // Read once per look, here: read() takes the content and the reader the stat of this one
-    // observation (locate.js, observeTerminalFile), so neither can belong to a newer file.
     const status = await observeTerminalFile(io, "claude", agent.terminal, fg.pid);
     const path = status.file?.claude?.session_id === session.sessionId ? status.file.claude.transcript_path : null;
     // The status line's path first, then the slug's: both asked on every look, the folder search
@@ -145,8 +148,12 @@ export default {
     const given = typeof path === "string" && path.endsWith(`${session.sessionId}.jsonl`) ? path : null;
     const bySlug = typeof session.cwd === "string" ? `${home}/projects/${slug(session.cwd)}/${session.sessionId}.jsonl` : null;
     const candidates = [...new Set([given, bySlug].filter(Boolean))];
+    // The transcript as { path, stat }: the stat that found it, taken before read() tails it.
     let transcript = null;
-    for (const c of candidates) if (await io.stat(c)) { transcript = c; break; }
+    for (const c of candidates) {
+      const stat = await io.stat(c);
+      if (stat) { transcript = { path: c, stat }; break; }
+    }
     if (!transcript && candidates.length) transcript = await findBySession(io, home, session.sessionId, memo);
     const setting = COMPACT_ENV.filter((k) => env?.[k]).map((k) => `${k}=${env[k]}`);
     return {
@@ -156,10 +163,10 @@ export default {
       session: session.sessionId,
       started: Number.isFinite(session.startedAt) ? session.startedAt : null,
       status: { file: status.file, mtime: status.stat?.mtime ?? null },
-      transcript,
+      transcript: transcript?.path ?? null,
       setting: setting.length ? setting.join(" ") : null,
-      files: [`${home}/sessions/${fg.pid}.json`, status.path, transcript].filter(Boolean),
-      observed: { [status.path]: status.stat },
+      files: [sessionFile.path, status.path, transcript?.path].filter(Boolean),
+      observed: { [sessionFile.path]: sessionFile.stat, [status.path]: status.stat, ...(transcript && { [transcript.path]: transcript.stat }) },
     };
   },
 
@@ -236,16 +243,18 @@ async function snapshot(source, io, memo) {
 // yet, and the folders are many (one stat each).
 export const FIND_AGAIN_MS = 2 * 60_000;
 // The transcript by its session id in any project folder, when it isn't where the cwd's slug puts
-// it. Only one match counts. Kept per Claude home and session in `memo`: a hit while its file is
-// there (gone: searched again at once), a miss for FIND_AGAIN_MS. The slug path and the status
-// line's path are still asked on every look, before this, so a transcript written there is found
-// at once; one written elsewhere can wait that long.
+// it, as { path, stat } with the stat that found it this time. Only one match counts. Kept per
+// Claude home and session in `memo` (the path, not its stat): a hit while its file is there (gone:
+// searched again at once), a miss for FIND_AGAIN_MS. The slug path and the status line's path are
+// still asked on every look, before this, so a transcript written there is found at once; one
+// written elsewhere can wait that long.
 async function findBySession(io, home, id, memo = {}) {
   const found = memo.transcripts instanceof Map ? memo.transcripts : (memo.transcripts = new Map());
   const key = `${home}\n${id}`;
   const last = found.get(key);
   if (last?.path) {
-    if (await io.stat(last.path)) return last.path;
+    const stat = await io.stat(last.path);
+    if (stat) return { path: last.path, stat };
     found.delete(key);
   } else if (last && io.now() - last.at < FIND_AGAIN_MS) return null;
   const dirs = await io.list(`${home}/projects`);
@@ -253,9 +262,9 @@ async function findBySession(io, home, id, memo = {}) {
   for (let i = 0; Array.isArray(dirs) && i < dirs.length; i += 8) {
     const paths = dirs.slice(i, i + 8).map((d) => `${home}/projects/${d}/${id}.jsonl`);
     const stats = await Promise.all(paths.map((p) => io.stat(p)));
-    paths.forEach((p, k) => { if (stats[k]) hits.push(p); });
+    paths.forEach((path, k) => { if (stats[k]) hits.push({ path, stat: stats[k] }); });
   }
-  const path = hits.length === 1 ? hits[0] : null;
-  found.set(key, { path, at: io.now() });
-  return path;
+  const hit = hits.length === 1 ? hits[0] : null;
+  found.set(key, { path: hit?.path ?? null, at: io.now() });
+  return hit;
 }

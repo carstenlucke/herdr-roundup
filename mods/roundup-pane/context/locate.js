@@ -56,30 +56,38 @@ export async function processEnv(io, pid, memo = {}) {
   return value;
 }
 
-// A file named after the pid (Claude Code's ~/.claude/sessions/<pid>.json), parsed.
-export async function byPidFile(io, dir, pid) {
-  return parseJson(await io.readText(`${dir}/${pid}.json`));
+// What a strategy puts in its source's `observed` for a file whose stat and content don't belong
+// together for sure: the reader uses this look's content, but keeps nothing of the look, so the
+// next one reads again.
+export const UNSURE = Symbol("unsure");
+
+// One JSON file as one observation, for a strategy that reads it in locate(): { path, stat, json }.
+// The stat comes first: a file replaced in between (the integrations write a temp file and mv it)
+// has content newer than its stat, and the next look sees a change and reads again. Never the
+// reverse, a newer stat on older content, which the reader would keep as read.
+// The file is read whatever the stat said (io.stat gives null for a failed or slow `stat` too, not
+// only for no file). `stat` is what the reader may keep of it, passed on in `observed` (path →
+// stat), so the reader doesn't stat the file again:
+//   { size, mtime }  stat'd, read and parsed (whoever's JSON it is: the caller's checks come after)
+//   null             neither the stat nor the read gave anything: no file, as far as can be told
+//   UNSURE           one without the other: the stat failed though there is content, or the
+//                    content couldn't be read or parsed though there is a file
+export async function observeJsonFile(io, path) {
+  const st = await io.stat(path);
+  const text = await io.readText(path);
+  const json = parseJson(text);
+  const stat = st && json ? st : st === null && text === null ? null : UNSURE;
+  return { path, stat, json };
 }
 
-// The file an agent's integration writes for this terminal, if it is this terminal's and was
-// written by this process: { v: 1, terminal, pid, at, ... }. A file of an ended terminal, of an
-// earlier process in the same terminal, or of another version gives null.
-export async function byTerminalFile(io, agent, terminal, pid) {
-  return ownFile(parseJson(await io.readText(integrationFile(io, agent, terminal))), terminal, pid);
-}
-const ownFile = (f, terminal, pid) => (!f || f.v !== 1 || f.terminal !== terminal || f.pid !== pid || !Number.isFinite(f.at) ? null : f);
-
-// The same file as one observation, for a strategy that hands it from locate() to read():
-// { path, stat, file }, `file` as byTerminalFile gives it, `stat` null while there is none (then it
-// isn't read). The stat comes first: a file replaced in between (the integrations write a temp file
-// and mv it) has content newer than its stat, and the next look sees a change and reads again.
-// Never the reverse, a newer stat on older content, which the reader would keep as read. The
-// strategy passes the stat on in its source's `observed`, so the reader doesn't stat it again.
+// The file an agent's integration writes for this terminal, as one observation: { path, stat, file }.
+// `file` only if it is this terminal's and was written by this process: { v: 1, terminal, pid, at,
+// ... }. A file of an ended terminal, of an earlier process in the same terminal, or of another
+// version gives null (with its stat: it was read).
 export async function observeTerminalFile(io, agent, terminal, pid) {
-  const path = integrationFile(io, agent, terminal);
-  const stat = await io.stat(path);
-  const file = stat ? ownFile(parseJson(await io.readText(path)), terminal, pid) : null;
-  return { path, stat, file };
+  const { path, stat, json: f } = await observeJsonFile(io, integrationFile(io, agent, terminal));
+  const own = f && f.v === 1 && f.terminal === terminal && f.pid === pid && Number.isFinite(f.at);
+  return { path, stat, file: own ? f : null };
 }
 
 // A thread id in a terminal title, whole or as Codex cuts it (`01a1d750-0653-7190-914d-7c804...`):

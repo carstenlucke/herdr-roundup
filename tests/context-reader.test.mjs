@@ -9,7 +9,7 @@ import { contextIo, fixture } from "./support/context-io.mjs";
 import { ContextReader, makeQueue, valid, idleHint, sweep, WORKING_MS, IDLE_MS, AFTER_STATUS_MS, RETRY_MS, HINT_FOR_MS } from "../mods/roundup-pane/context/reader.js";
 import claude from "../mods/roundup-pane/context/strategies/claude.js";
 import { FIRST, NO_READING } from "../mods/roundup-pane/context/tail.js";
-import { localParts, integrationFile } from "../mods/roundup-pane/context/locate.js";
+import { localParts, integrationFile, UNSURE } from "../mods/roundup-pane/context/locate.js";
 
 beforeEach(() => clock.reset());
 
@@ -234,15 +234,14 @@ test("with the real Claude strategy, the usage line behind a huge line is found 
 
 // The real Claude strategy with its status line file, which `write` replaces (as the integration's
 // mv does): a later `at` than the transcript's answers, so the status line's number is the reading.
-function claudeWorld({ wrap = (s) => s } = {}) {
+function claudeWorld({ wrap = (s) => s, text = fixture("claude-transcript.jsonl") } = {}) {
   const sid = "0fbf3e48-42ea-40d5-b3ed-40730f7e7b44", pid = 52896;
   const stdin = JSON.parse(fixture("claude-status-stdin.json"));
   const mtimes = {};
+  const transcript = `/Users/a/.claude/projects/-Users-a-src-demo/${sid}.jsonl`, session = `/Users/a/.claude/sessions/${pid}.json`;
+  const started = (startedAt) => JSON.stringify({ pid, sessionId: sid, cwd: "/Users/a/src/demo", startedAt, kind: "interactive" });
   const io = contextIo({
-    files: {
-      [`/Users/a/.claude/projects/-Users-a-src-demo/${sid}.jsonl`]: fixture("claude-transcript.jsonl"),
-      [`/Users/a/.claude/sessions/${pid}.json`]: JSON.stringify({ pid, sessionId: sid, cwd: "/Users/a/src/demo", startedAt: 1794613515093, kind: "interactive" }),
-    },
+    files: { [transcript]: text, [session]: started(1794613515093) },
     mtimes,
     terminals: { t7: { pid, created: 1794613511000, title: "Claude Code" } },
     envs: { [pid]: { HC_TERMINAL_ID: "t7" } },
@@ -258,8 +257,16 @@ function claudeWorld({ wrap = (s) => s } = {}) {
   const reader = new ContextReader(io, { strategies: [wrap(claude)], queue: makeQueue(2) });
   const cx = makeCx();
   const see = () => reader.see({ terminal: "t7", program: { key: "claude" }, app: "claude", status: "idle" }, true, cx);
-  const ofStatus = () => io.calls.filter((c) => c[1] === status).map((c) => c[0]);
-  return { io, status, write, used, reader, cx, see, ofStatus };
+  const of = (path) => io.calls.filter((c) => c[1] === path).map((c) => c[0]);
+  const ofStatus = () => of(status);
+  const tails = () => io.calls.filter((c) => c[0] === "tail").length;
+  // `stat` or `readText` of one file answering as `fn` says; the returned function ends it.
+  const stub = (name, path, fn) => {
+    const real = io[name];
+    io[name] = async (p, ...a) => (p === path ? fn(() => real(p, ...a)) : real(p, ...a));
+    return () => { io[name] = real; };
+  };
+  return { io, status, transcript, session, started, mtimes, write, used, reader, cx, see, of, ofStatus, tails, stub };
 }
 const T0 = Date.parse("2026-11-14T00:00:00Z");
 
@@ -309,6 +316,144 @@ test("Claude's status line file replaced between locate()'s stat and its read: t
   w.io.calls.length = 0;
   await clock.advance(IDLE_MS);
   assert.equal(w.io.calls.filter((c) => c[0] === "tail").length, 0, "then unchanged");
+});
+
+test("Claude: each file of the source is stat'd once per look, before it is read, and the reader stats none again", async () => {
+  const w = claudeWorld();
+  w.write(47_784, T0);
+  w.see();
+  await clock.advance(2000);
+  assert.equal(w.reader.reading.source, "status-line");
+  // The status line gives the window: no snapshot search, which stats the transcript itself.
+  assert.deepEqual(w.of(w.session), ["stat", "readText"]);
+  assert.deepEqual(w.of(w.status), ["stat", "readText"]);
+  assert.deepEqual(w.of(w.transcript), ["stat", "tail"], "the stat that found it is the reader's (the stub's tail stats nothing)");
+  w.io.calls.length = 0;
+  await clock.advance(IDLE_MS);
+  assert.deepEqual([w.of(w.session), w.of(w.status), w.of(w.transcript)], [["stat", "readText"], ["stat", "readText"], ["stat"]], "nothing new: the same, without the read");
+});
+
+test("Claude: a status line file whose stat fails is read all the same, and again on every look while it fails", async () => {
+  const w = claudeWorld();
+  w.write(47_784, T0);
+  w.see();
+  await clock.advance(2000);
+  assert.equal(w.reader.reading.used, w.used(47_784));
+  const works = w.stub("stat", w.status, () => null); // `stat` failed or timed out; the file is there
+  w.write(60_000, T0 + 1000);
+  await clock.advance(IDLE_MS);
+  assert.equal(w.reader.reading.used, w.used(60_000), "no stat: its content counts");
+  assert.equal(w.reader.reading.source, "status-line");
+  w.write(70_000, T0 + 2000);
+  await clock.advance(IDLE_MS);
+  assert.equal(w.reader.reading.used, w.used(70_000), "no stat twice: not taken as unchanged");
+  works();
+  w.io.calls.length = 0;
+  await clock.advance(IDLE_MS);
+  assert.ok(w.tails() > 0, "a look without a stat is not kept: read again");
+  assert.equal(w.reader.reading.used, w.used(70_000));
+  w.io.calls.length = 0;
+  await clock.advance(IDLE_MS);
+  assert.equal(w.tails(), 0, "with its stat: unchanged");
+  assert.deepEqual(w.cx.errors, []);
+});
+
+for (const [what, answer] of [["can't be read", null], ["doesn't parse", "{ half"]]) {
+  test(`Claude: a status line file that ${what} once, while the transcript gives a reading: read again on the next look, its stat unchanged`, async () => {
+    const w = claudeWorld();
+    w.write(47_784, T0);
+    const works = w.stub("readText", w.status, () => answer);
+    w.see();
+    await clock.advance(2000);
+    assert.ok(valid(w.reader.reading), "the transcript's reading");
+    assert.notEqual(w.reader.reading.source, "status-line");
+    works();
+    await clock.advance(IDLE_MS);
+    assert.equal(w.reader.reading.source, "status-line", "the file wasn't taken as read");
+    assert.equal(w.reader.reading.used, w.used(47_784));
+    w.io.calls.length = 0;
+    await clock.advance(IDLE_MS);
+    assert.equal(w.tails(), 0, "read: unchanged");
+    assert.deepEqual(w.cx.errors, []);
+  });
+}
+
+test("Claude without a status line file: one stat and one read of it per look, the transcript not read again; one that comes is read, its stat failing or not", async () => {
+  const w = claudeWorld();
+  w.see();
+  await clock.advance(2000);
+  assert.ok(valid(w.reader.reading));
+  assert.equal(w.reader.reading.source, "compaction");
+  w.io.calls.length = 0;
+  await clock.advance(IDLE_MS * 3);
+  const looks = w.of(w.session).filter((c) => c === "stat").length;
+  assert.ok(looks >= 3);
+  assert.deepEqual(w.ofStatus(), Array(looks).fill(["stat", "readText"]).flat(), "asked on every look, as before");
+  assert.equal(w.tails(), 0, "no file twice is no change");
+  const works = w.stub("stat", w.status, () => null);
+  w.write(47_784, T0);
+  await clock.advance(IDLE_MS);
+  assert.equal(w.reader.reading.source, "status-line", "there now, its stat failing");
+  works();
+  await clock.advance(IDLE_MS);
+  w.io.calls.length = 0;
+  await clock.advance(IDLE_MS);
+  assert.equal(w.tails(), 0);
+});
+
+// The transcript up to its compaction, without the status line: the window is the /context
+// snapshot's (23:46:18), which counts only for a session started before it.
+const snapshotOnly = () => {
+  const lines = fixture("claude-transcript.jsonl").trimEnd().split("\n");
+  return lines.slice(0, lines.findIndex((l) => JSON.parse(l).subtype === "compact_boundary")).join("\n") + "\n";
+};
+const AFTER_SNAPSHOT = Date.parse("2026-11-13T23:47:00Z");
+
+test("Claude's session file replaced between locate() and the read, only its startedAt new: this look keeps what locate saw, the next weighs the snapshot again", async () => {
+  let swap = null;
+  const w = claudeWorld({ text: snapshotOnly(), wrap: (s) => ({ ...s, async locate(...a) { const src = await s.locate(...a); swap?.(); swap = null; return src; } }) });
+  // The same session id and folder (so the source's key stays), the same size: only the time.
+  swap = () => { w.io.files[w.session] = w.started(AFTER_SNAPSHOT); w.mtimes[w.session] = 5; };
+  w.see();
+  await clock.advance(2000);
+  assert.deepEqual(w.cx.errors, []);
+  assert.equal(w.reader.reading.window, 1_000_000, "the session as locate() read it: the snapshot counts");
+  await clock.advance(IDLE_MS);
+  assert.equal(w.reader.reading.window, null, "the newer session file is read on the next look: the snapshot is from before it");
+  assert.equal(w.reader.reading.used, 48_321);
+});
+
+test("Claude's session file replaced between locate()'s stat and its read: the newer content now, and read again on the next look", async () => {
+  const w = claudeWorld({ text: snapshotOnly() });
+  let swap = () => { w.io.files[w.session] = w.started(AFTER_SNAPSHOT); w.mtimes[w.session] = 5; };
+  const works = w.stub("readText", w.session, (real) => { swap?.(); swap = null; return real(); });
+  w.see();
+  await clock.advance(2000);
+  assert.equal(w.reader.reading.window, null, "the content read is the newer file's");
+  works();
+  w.io.calls.length = 0;
+  await clock.advance(IDLE_MS);
+  assert.ok(w.tails() > 0, "its stat was the older file's: changed, read again");
+  w.io.calls.length = 0;
+  await clock.advance(IDLE_MS);
+  assert.equal(w.tails(), 0, "then unchanged");
+});
+
+test("Claude: a session file whose stat fails is used all the same, and the source read again on every look while it fails", async () => {
+  const w = claudeWorld({ text: snapshotOnly() });
+  const works = w.stub("stat", w.session, () => null);
+  w.see();
+  await clock.advance(2000);
+  assert.equal(w.reader.reading.window, 1_000_000);
+  w.io.files[w.session] = w.started(AFTER_SNAPSHOT); // no stat to tell it by
+  await clock.advance(IDLE_MS);
+  assert.equal(w.reader.reading.window, null, "not taken as unchanged");
+  works();
+  await clock.advance(IDLE_MS);
+  w.io.calls.length = 0;
+  await clock.advance(IDLE_MS);
+  assert.equal(w.tails(), 0, "with its stat: unchanged");
+  assert.deepEqual(w.cx.errors, []);
 });
 
 test("sweep removes the integration files of ended terminals whose process is gone, and temp files older than an hour, nothing else", async () => {
@@ -659,6 +804,30 @@ test("read without a number, where the file alone decides: the meter goes, no ba
   await clock.advance(WORKING_MS);
   assert.equal(reader.reading?.used, 100, "the next count within 15 s");
   assert.deepEqual(cx.errors, []);
+});
+
+test("a file observed as UNSURE: its look is never kept, with a reading or without a number where the file alone decides; read again on every look", async () => {
+  for (const reading of [undefined, NO_READING]) {
+    const { s, reader, cx, pane } = world();
+    reader.strategies[0].keepsNoReading = true; // Codex
+    s.src = { ...s.src, observed: { [FILE]: UNSURE } };
+    if (reading) s.reading = reading;
+    reader.see(pane(), true, cx);
+    await clock.advance(2000);
+    assert.equal(s.reads, 1);
+    assert.equal(reader.reading?.used, reading ? undefined : 100, "the look's content counts");
+    assert.deepEqual([reader.key, reader.stats], [null, null], "nothing kept, the sentinel least of all");
+    await clock.advance(IDLE_MS * 2);
+    assert.equal(s.reads, 3, "read on each look");
+    assert.equal(reader.misses, 0);
+    s.src = { ...s.src, observed: { [FILE]: { size: 1, mtime: 0 } } };
+    await clock.advance(IDLE_MS);
+    assert.equal(s.reads, 4);
+    assert.notEqual(reader.stats, null, "with its stat: kept");
+    await clock.advance(IDLE_MS);
+    assert.equal(s.reads, 4, "and unchanged");
+    assert.deepEqual(cx.errors, []);
+  }
 });
 
 test("read without a number, where the strategy can't tell it from a failed read: read again on every look, without a backoff", async () => {
