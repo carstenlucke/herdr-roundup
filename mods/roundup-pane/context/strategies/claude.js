@@ -219,7 +219,8 @@ export default {
     if (!memo.home || !memo.account) return;
     const dir = `${io.home}/.cache/herdr-roundup/context/claude`;
     const names = ((await io.list(dir)) ?? []).filter((n) => /^[A-Za-z0-9_-]+\.json$/.test(n)).slice(0, ACCOUNT_READS);
-    const under = `${folder(memo.home)}/projects/`;
+    // Normalized as a whole, so a config folder "/" gives "/projects/", not "//projects/".
+    const under = `${folder(`${memo.home}/projects`)}/`;
     await eachLimited(names, ACCOUNT_AT_ONCE, async (name) => {
       const f = parseJson(await io.readText(`${dir}/${name}`));
       const path = f?.claude?.transcript_path;

@@ -570,6 +570,11 @@ test("Claude's account and its paths: one config folder however it is spelled", 
   io.limits = fresh;
   await claude.accountLimits(io, memo);
   assert.ok(fresh.get(memo.account), "found under the folder");
+  // The root as the config folder: its transcripts lie under /projects/.
+  const root = claudeIo({ status: null });
+  root.files[`${dir}/t3.json`] = JSON.stringify({ v: 1, terminal: "t3", pid: 9, at: AT, limitsAt: AT, claude: { ...stdin, transcript_path: "/projects/-x/s.jsonl" } });
+  await claude.accountLimits(root, { account: "claude:/", home: "/" });
+  assert.ok(root.limits.get("claude:/"), "the root's files are its account's");
 });
 
 test("Claude's account limits: every file of the folder is read, the account's among many others' too, a few at a time", async () => {
@@ -1003,11 +1008,40 @@ test("an ask released while it waits for its place takes no other pane's turn: t
   second.see(pane("t2", "fake"), true, cx);
   await clock.advance(2000);
   assert.deepEqual(asked, ["ask"], "the second pane asks: the released one never noted the account");
-  // Two panes starting at once still ask once.
+  // A pane starting later within the minute doesn't ask again.
   const third = new ContextReader(io, { strategies: [strategy], queue: one });
   third.see(pane("t1", "fake"), true, cx);
   await clock.advance(2000);
   assert.deepEqual(asked, ["ask"], "within the minute: not again");
   first.close(); second.close(); third.close();
+  assert.deepEqual(cx.errors, []);
+});
+
+test("two panes of an account starting at once ask once, though both asks run side by side", async () => {
+  const io = contextIo({ terminals: { t1: { pid: 10, created: 0, title: "" }, t2: { pid: 11, created: 0, title: "" } } });
+  io.now = () => clock.now;
+  io.limits = makeStore();
+  let asks = 0, open = null;
+  const strategy = {
+    id: "fake", matches: ["fake"],
+    async locate(_a, _io, memo) { memo.account = "fake:/Users/a/.fake"; memo.home = "/Users/a/.fake"; return null; },
+    async read() { return null; },
+    // The first ask holds its place until the test lets it go.
+    accountLimits() { asks++; return new Promise((resolve) => { open = resolve; }); },
+  };
+  const queue = makeQueue(2); // room for both asks at once
+  const pane = (terminal) => ({ terminal, program: { key: "fake" }, app: null, status: "idle" });
+  const cx = makeCx();
+  const a = new ContextReader(io, { strategies: [strategy], queue });
+  const b = new ContextReader(io, { strategies: [strategy], queue });
+  a.see(pane("t1"), true, cx);
+  b.see(pane("t2"), true, cx);
+  await clock.advance(2000);
+  assert.ok(open, "the first ask is under way and still open");
+  assert.equal(asks, 1, "the second pane's ask ran beside it and found the account just asked");
+  open();
+  await clock.advance(2000);
+  assert.equal(asks, 1);
+  a.close(); b.close();
   assert.deepEqual(cx.errors, []);
 });
