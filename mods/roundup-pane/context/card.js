@@ -11,7 +11,7 @@ const FROM = {
   compaction: "compaction",
   rollout: "Codex rollout",
   extension: "pi extension",
-  plugin: "opencode plugin",
+  plugin: "oc plugin", // short: the card's extra column holds about 12 characters
   screen: "pi's footer",
 };
 

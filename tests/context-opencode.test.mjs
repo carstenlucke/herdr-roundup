@@ -34,7 +34,7 @@ test("opencode with its plugin: its own numbers for the shown session, exact", a
   assert.deepEqual(r, { used: 42_000, window: 200_000, percent: 21, model: "claude-sonnet-5-5", at: 1_700_000_000_000, source: "plugin", exact: true, session: "ses_1" });
   const card = cardModel(r, { agent: "opencode" });
   assert.equal(card.big.of, "of 200k");
-  assert.ok(card.rows.some((row) => row.label === "Read" && row.extra === "opencode plugin"));
+  assert.ok(card.rows.some((row) => row.label === "Read" && row.extra === "oc plugin"));
 });
 
 test("opencode without its plugin, or a file of another process or terminal: no meter", async () => {
