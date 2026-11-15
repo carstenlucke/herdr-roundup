@@ -15,8 +15,9 @@
 //   within the second of the reading it corrects loses, until the next answer;
 // - a reading without a time (`at` null) is a stopgap: it never replaces one with a time, and one
 //   with a time always replaces it. Among themselves such readings go by the window: a later
-//   reset is the next window, the same one (resets within SAME_MS) only fills;
-// - a kept window whose reset has passed says nothing any more: any window still running replaces it.
+//   reset is the next window, the same one (resets within SAME_MS) only fills.
+// A kept window whose reset has passed stays until a newer reading comes: an older reading with a
+// later reset is not the next window, it may be the very one the newer reading corrected.
 // The times are the agents' own and not exact (parse.js): a line of Codex that is newer than its
 // numbers can lower what another pane read more recently, until the next answer of any pane.
 // Nothing is kept across a restart: the agents' files are, and every header offers what its file says.
@@ -29,9 +30,8 @@ export const SAME_MS = 2 * 60_000;
 export const ASK_EVERY_MS = 60_000;
 
 // Whether `next` takes the place of `kept` (both { used, resetsAt, at }).
-function replaces(next, kept, now) {
+function replaces(next, kept) {
   if (!kept) return true;
-  if (kept.resetsAt <= now && next.resetsAt > now) return true;
   if (next.at !== null) return kept.at === null || next.at > kept.at || (next.at === kept.at && next.used > kept.used);
   if (kept.at !== null) return false;
   if (next.resetsAt > kept.resetsAt + SAME_MS) return true;
@@ -50,8 +50,8 @@ export function makeStore() {
       asked.set(account, now);
       return true;
     },
-    // True when the account's reading changed. `now`: for the windows whose reset has passed.
-    offer(account, reading, now = Date.now()) {
+    // True when the account's reading changed.
+    offer(account, reading) {
       if (!account || !reading || !Array.isArray(reading.windows)) return false;
       let a = accounts.get(account);
       if (!a) accounts.set(account, (a = { plan: null, source: null, rev: 0, windows: new Map() }));
@@ -59,7 +59,7 @@ export function makeStore() {
       let changed = false;
       for (const w of reading.windows) {
         const next = { minutes: w.minutes, used: w.used, resetsAt: w.resetsAt, at };
-        if (!replaces(next, a.windows.get(w.minutes), now)) continue;
+        if (!replaces(next, a.windows.get(w.minutes))) continue;
         a.windows.set(w.minutes, next);
         changed = true;
       }

@@ -143,6 +143,10 @@ export class ContextReader {
       this.reading = null;
       this.account = null;
       this.accountAsked = false;
+      // The ask for the last program's account is not this one's: its place in the queue goes
+      // (close() could no longer reach it once the next ask takes `side`).
+      this.side?.release();
+      this.side = null;
       this.key = this.stats = null;
       this.memo = {};
       this.misses = 0;
@@ -239,14 +243,22 @@ export class ContextReader {
   // After the pane's own look is out (also one that found no source), as a job of its own in the
   // queue: the pane's own number never waits for it, and the header's 2 s look draws what it
   // brings. It works on the account and folder as they are now, not on `memo`, which belongs to
-  // whatever runs in the pane later; it tells the store only, and nothing about this pane.
+  // whatever runs in the pane later; it tells the store only, and nothing about this pane. Still
+  // waiting when the pane closes or runs another program, it never starts (released, and its
+  // generation is gone); already running, it frees its place and its answer is the account's all
+  // the same.
   askAccount() {
     const { io, strategy, memo } = this;
     if (this.accountAsked || this.closed || !memo.account || memo.noLimits || !strategy?.accountLimits || !io.limits) return;
     this.accountAsked = true;
     if (!io.limits.due(memo.account, io.now())) return;
     const about = { account: memo.account, home: memo.home };
-    const side = this.queue.enter(async () => { try { await strategy.accountLimits(io, about); } catch {} return false; });
+    const gen = this.gen;
+    const side = this.queue.enter(async () => {
+      if (this.closed || gen !== this.gen) return false;
+      try { await strategy.accountLimits(io, about); } catch {}
+      return false;
+    });
     this.side = side;
     side.promise.catch(() => {}).finally(() => { if (this.side === side) this.side = null; });
   }

@@ -182,8 +182,8 @@ test("Codex: a window a minute off a known length is that window, any other leng
   assert.deepEqual(off.windows.map((w) => [w.minutes, names(w.minutes).short, w.resetsAt]), [[300, "5h", 1794762296_000], [10080, "wk", 1795122098_000]], "named and kept as the 5-hour and the weekly window, their resets untouched");
   // An older build's 299 and a newer one's 300 are one window in the store.
   const store = makeStore();
-  store.offer("codex:/Users/a/.codex", off, NOW);
-  store.offer("codex:/Users/a/.codex", fromCodex({ ...tokenCount, timestamp: "2026-11-15T15:12:00.000Z" }), NOW);
+  store.offer("codex:/Users/a/.codex", off);
+  store.offer("codex:/Users/a/.codex", fromCodex({ ...tokenCount, timestamp: "2026-11-15T15:12:00.000Z" }));
   assert.deepEqual(store.get("codex:/Users/a/.codex").windows.map((w) => [w.minutes, w.used]), [[300, 87], [10080, 21]]);
 });
 
@@ -235,8 +235,8 @@ test("Codex: of a rollout's last token_counts the newest with default-pool limit
 // --- the store ---
 
 const A = "claude:/Users/a/.claude";
-// `at`: the time the reading is from (null: unknown); `now`: when it is offered.
-const offer = (store, account, windows, at = NOW, extra = {}, now = NOW) => store.offer(account, { at, plan: null, source: "status-line", windows, ...extra }, now);
+// `at`: the time the reading is from (null: unknown).
+const offer = (store, account, windows, at = NOW, extra = {}) => store.offer(account, { at, plan: null, source: "status-line", windows, ...extra });
 
 test("the store keeps an account's windows; an unchanged offer changes nothing", () => {
   const store = makeStore();
@@ -265,7 +265,7 @@ test("the newer reading stays, whatever it says: a lower percent and an earlier 
   assert.equal(store.get(A).at, NOW + 10 * MIN, "as of the answer that said it");
   // A session that hasn't answered since hands its old numbers on again (a mode change runs the
   // status line): they are as old as they were, however often and whenever they come.
-  for (let i = 0; i < 3; i++) assert.equal(offer(store, A, [five(80), week(41)], NOW, {}, NOW + (11 + i) * MIN), false);
+  for (let i = 0; i < 3; i++) assert.equal(offer(store, A, [five(80), week(41)], NOW), false);
   assert.equal(offer(store, A, [five(95), week(60)], NOW + 5 * MIN), false, "older and higher: still older");
   assert.deepEqual(store.get(A).windows.map((w) => w.used), [16, 41]);
   // A newer reading with an earlier reset (another login in the same folder) replaces the kept one.
@@ -274,11 +274,11 @@ test("the newer reading stays, whatever it says: a lower percent and an earlier 
   assert.equal(store.get(A).windows[0].resetsAt, earlier.resetsAt);
   // And the next window, with a later reset, when its answer comes.
   const next = { ...five(3), resetsAt: five(3).resetsAt + 5 * H };
-  assert.equal(offer(store, A, [next], NOW + 3 * H, {}, NOW + 3 * H), true);
+  assert.equal(offer(store, A, [next], NOW + 3 * H), true);
   assert.deepEqual(store.get(A).windows.map((w) => w.used), [3, 41], "the new 5-hour window, the week as it was");
-  assert.equal(offer(store, A, [five(99)], NOW + 2 * H, {}, NOW + 4 * H), false, "the old window again, from a session that slept through the reset");
+  assert.equal(offer(store, A, [five(99)], NOW + 2 * H), false, "the old window again, from a session that slept through the reset");
   // A window missing from an offer (Claude leaves an expired one out) keeps what was known.
-  offer(store, A, [week(45)], NOW + 4 * H, {}, NOW + 4 * H);
+  offer(store, A, [week(45)], NOW + 4 * H);
   assert.deepEqual(store.get(A).windows.map((w) => w.used), [3, 45]);
 });
 
@@ -311,19 +311,28 @@ test("a reading without a time is a stopgap: it never replaces one with a time, 
   // And then no reading without a time comes back, whatever it says.
   assert.equal(offer(store, A, [five(99)], null), false);
   assert.equal(offer(store, A, [{ ...five(99), resetsAt: five(99).resetsAt + 5 * H }], null), false, "nor with a later reset: a stale file of another login");
-  assert.equal(store.offer(A, { plan: null, source: "status-line", windows: [five(99)] }, NOW), false, "no time given is no time");
+  assert.equal(store.offer(A, { plan: null, source: "status-line", windows: [five(99)] }), false, "no time given is no time");
   offer(store, A, [week(44)], NOW);
   assert.equal(store.get(A).at, NOW - 3 * H, "all known: the oldest window's time");
 });
 
-test("a kept window whose reset has passed gives way to any window still running", () => {
+test("a kept window whose reset has passed stays until a newer reading: an older one with a later reset is not the next window", () => {
   const store = makeStore();
-  offer(store, A, [five(96)], NOW); // resets at NOW + 150 min
-  const next = { ...five(3), resetsAt: NOW + 9 * H };
-  assert.equal(offer(store, A, [next], null, {}, NOW + 100 * MIN), false, "the kept one still runs: a reading without a time doesn't replace it");
-  assert.equal(offer(store, A, [next], null, {}, NOW + 4 * H), true, "it has reset: what it said is gone, anything running is better");
-  assert.deepEqual(store.get(A).windows.map((w) => [w.used, w.at]), [[3, null]]);
-  assert.equal(offer(store, A, [{ ...five(50), resetsAt: NOW + 2 * H }], null, {}, NOW + 4 * H), false, "a window that has passed too replaces nothing");
+  // Read an hour ago: 16 %, a window that reset half an hour ago (the correction of what follows).
+  const corrected = { ...five(16), resetsAt: NOW - 30 * MIN };
+  offer(store, A, [corrected], NOW - H);
+  // Read two hours ago: 80 %, said to reset in an hour. Handed on again now, and again.
+  const before = { ...five(80), resetsAt: NOW + H };
+  for (let i = 0; i < 3; i++) assert.equal(offer(store, A, [before], NOW - 2 * H), false, "older: it doesn't come back as the next window");
+  assert.equal(offer(store, A, [before], null), false, "nor without a time, which would take the known one away");
+  assert.deepEqual(store.get(A).windows.map((w) => [w.used, w.resetsAt, w.at]), [[16, NOW - 30 * MIN, NOW - H]], "it reads as reset since, until an answer");
+  // The next answer brings the window that runs now.
+  assert.equal(offer(store, A, [{ ...five(3), resetsAt: NOW + 5 * H }], NOW), true);
+  assert.equal(store.get(A).windows[0].used, 3);
+  // Readings without a time among themselves: a later reset is the next window, passed or not.
+  const loose = makeStore();
+  offer(loose, A, [{ ...five(96), resetsAt: NOW - MIN }], null);
+  assert.equal(offer(loose, A, [{ ...five(3), resetsAt: NOW + 5 * H }], null), true);
 });
 
 test("two accounts never mix, and a third source is one offer with its own window", () => {
@@ -571,6 +580,59 @@ test("Codex's strategy: a session whose last token_counts have no default-pool l
   assert.equal(m4.noLimits, null);
 });
 
+test("Codex's strategy: another thread in the same process (/new) starts without the last thread's word, also before its rollout is there", async () => {
+  const titled = (title) => {
+    const io = contextIo({ terminals: { t8: { pid: XPID, created: 1, title, cwd: "/Users/a/src/demo" } }, envs: { [XPID]: { HC_TERMINAL_ID: "t8" } } });
+    io.limits = makeStore();
+    return io;
+  };
+  const said = () => ({ noLimits: { pid: XPID, file: ROLLOUT } });
+  // The title names a new thread, which has no rollout yet: no source, and no word against it.
+  let memo = said();
+  assert.equal(await codex.locate({ terminal: "t8" }, titled("01a1e0cd-a605-7880-8cf9-4473b... | new"), memo), null);
+  assert.equal(memo.noLimits, null, "the new thread shows its account's limits");
+  // The title still names the thread that said it, or names none (starting, another title item): it stands.
+  memo = said();
+  await codex.locate({ terminal: "t8" }, titled("01a1d750-0653-7190-914d-7c804... | ok"), memo);
+  assert.ok(memo.noLimits);
+  memo = said();
+  await codex.locate({ terminal: "t8" }, titled("Codex"), memo);
+  assert.ok(memo.noLimits, "no thread named: nothing known against it");
+});
+
+test("Codex's strategy: only a read that came to an end, over all the walk looks at, says the session has no limits", async () => {
+  const p = tokenCount.payload;
+  const filler = { timestamp: "2026-11-15T15:20:00.000Z", type: "response_item", payload: { text: "x".repeat(300 * 1024) } };
+  const bare = (info) => ({ ...tokenCount, timestamp: "2026-11-15T15:30:00.000Z", payload: { ...p, info, rate_limits: null } });
+  // The pool's limits, 300 KB of an answer, then a token_count without a context number or
+  // limits: the first end of the file holds the last event only, the context read asks for more.
+  const long = jsonl(tokenCount, filler, bare(null));
+  const failing = codexIo(long);
+  const tail = failing.tail;
+  let tails = 0;
+  failing.tail = async (...args) => (++tails === 2 ? null : tail(...args));
+  const memo = {};
+  const src = await codex.locate({ terminal: "t8" }, failing, memo);
+  assert.equal(await codex.read(src, failing, memo), null, "the larger end couldn't be read");
+  assert.equal(tails, 2);
+  assert.ok(!memo.noLimits, "a walk of the smaller end proves nothing: the pane keeps its account's limits");
+  // The same file read to its end: the limits are there.
+  const fine = codexIo(long);
+  const m2 = {};
+  await codex.read(await codex.locate({ terminal: "t8" }, fine, m2), fine, m2);
+  assert.equal(m2.noLimits, null);
+  assert.equal(fine.limits.get("codex:/Users/a/.codex").windows[0].used, 87);
+  // A read that ends in the first end of the file (its last event has a context number), having
+  // seen one event of many and not the whole file: nothing said either.
+  const short = codexIo(jsonl(tokenCount, filler, bare(p.info)));
+  const m3 = {};
+  const s3 = await codex.locate({ terminal: "t8" }, short, m3);
+  assert.ok(await codex.read(s3, short, m3));
+  assert.equal(short.calls.filter((c) => c[0] === "tail").length, 1);
+  assert.ok(!m3.noLimits);
+  assert.equal(short.limits.get(s3.account), null, "and nothing offered: the limits lie further back than was read");
+});
+
 test("Codex: limits count where a compaction after them leaves no context number, and the account is known without a rollout", async () => {
   const compacted = { timestamp: "2026-11-15T15:12:00.000Z", type: "compacted", payload: {} };
   const io = codexIo(fixture("codex-rollout.jsonl") + jsonl(tokenCount, compacted));
@@ -704,7 +766,7 @@ test("the reader asks for the account's limits once when an agent starts in its 
     id: "fake", matches: ["fake"],
     async locate(_a, _io, memo) { memo.account = "fake:/Users/a/.fake"; memo.home = "/Users/a/.fake"; return null; },
     async read() { return null; },
-    async accountLimits(io_, memo) { asks++; if (fail) throw new Error("boom"); io_.limits.offer(memo.account, { at: clock.now, plan: null, source: "fake", windows: [{ minutes: 300, used: 5, resetsAt: clock.now + H }] }, clock.now); },
+    async accountLimits(io_, memo) { asks++; if (fail) throw new Error("boom"); io_.limits.offer(memo.account, { at: clock.now, plan: null, source: "fake", windows: [{ minutes: 300, used: 5, resetsAt: clock.now + H }] }); },
   };
   const pane = (terminal, key) => ({ terminal, program: { key }, app: null, status: "idle" });
   const reader = new ContextReader(io, { strategies: [strategy], queue: makeQueue(2) });
@@ -774,5 +836,50 @@ test("the ask for the account's limits is a job of its own after the pane's look
   await clock.advance(10);
   assert.equal(done, 1);
   assert.equal(queue.running, 0);
+  assert.deepEqual(cx.errors, []);
+});
+
+test("another program in the pane frees the last one's ask: no place in the queue is left behind at close, and an ask still waiting never starts", async () => {
+  const io = contextIo({ terminals: { t1: { pid: 10, created: 0, title: "" } } });
+  io.now = () => clock.now;
+  io.limits = makeStore();
+  const asked = [];
+  const slow = (id) => ({
+    id, matches: [id],
+    async locate(_a, _io, memo) { memo.account = `${id}:/Users/a/.${id}`; memo.home = `/Users/a/.${id}`; return null; },
+    async read() { return null; },
+    accountLimits() { asked.push(id); return new Promise(() => {}); }, // never ends
+  });
+  const pane = (key) => ({ terminal: "t1", program: { key }, app: null, status: "idle" });
+  const queue = makeQueue(2);
+  const reader = new ContextReader(io, { strategies: [slow("one"), slow("two")], queue });
+  const cx = makeCx();
+  reader.see(pane("one"), true, cx);
+  await clock.advance(2000);
+  assert.deepEqual([asked, queue.running], [["one"], 1]);
+  reader.see(pane("two"), true, cx);
+  assert.equal(queue.running, 0, "the first program's ask gives its place back with the switch");
+  await clock.advance(2000);
+  assert.deepEqual([asked, queue.running], [["one", "two"], 1]);
+  reader.close();
+  assert.equal(queue.running, 0, "nothing left in the queue: both places are free for other headers");
+  // An ask that waits for a place when the program changes never runs.
+  const one = makeQueue(1);
+  let free = null;
+  const waiting = new ContextReader(io, { strategies: [{ ...slow("three"), async locate(_a, _io, memo) {
+    memo.account = "three:/Users/a/.three"; memo.home = "/Users/a/.three";
+    // Something else takes the queue's only place right after this look.
+    if (!free) one.enter(() => new Promise((resolve) => { free = resolve; }));
+    return null;
+  } }], queue: one });
+  waiting.see(pane("three"), true, cx);
+  await clock.advance(2000);
+  assert.equal(one.waiting, 1, "the ask waits behind it");
+  waiting.see(pane("shell"), true, cx);
+  assert.equal(one.waiting, 0);
+  free();
+  await clock.advance(2000);
+  assert.equal(asked.includes("three"), false);
+  waiting.close();
   assert.deepEqual(cx.errors, []);
 });

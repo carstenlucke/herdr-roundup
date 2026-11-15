@@ -164,7 +164,7 @@ export default {
     const status = await observeTerminalFile(io, "claude", agent.terminal, fg.pid);
     // The status line's stdin carries the account's plan limits too: offered to the store all
     // headers share (`io.limits`; the file is this terminal's and this process's, so this account's).
-    if (status.file && !byEnv) io.limits?.offer(memo.account, fromClaude(status.file), io.now());
+    if (status.file && !byEnv) io.limits?.offer(memo.account, fromClaude(status.file));
     // This session's own word: it has answered (its API time counts) and its status has no limits,
     // so it doesn't run on the plan. Only the file of this very session says so; without it (not
     // written yet, not readable this time) what the session said before stands.
@@ -214,7 +214,7 @@ export default {
       const f = parseJson(await io.readText(`${dir}/${name}`));
       const path = f?.claude?.transcript_path;
       if (f?.v !== 1 || typeof path !== "string" || !path.startsWith(`${memo.home}/projects/`)) continue;
-      io.limits.offer(memo.account, fromClaude(f), io.now());
+      io.limits.offer(memo.account, fromClaude(f));
     }
   },
 

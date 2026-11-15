@@ -13,7 +13,7 @@
 
 import { NO_ANSWER, foreground, processEnv, byTitle, titleIds, byOpenFile, uuid7Time, localParts, parseJson } from "../locate.js";
 import { scanTail, fromEnd, completeLines, FIRST, NO_READING } from "../tail.js";
-import { codexLimits } from "../../limits/parse.js";
+import { codexLimits, CODEX_EVENTS } from "../../limits/parse.js";
 
 const ROLLOUT = /\/rollout-[^/]*\.jsonl$/;
 const DAY = 24 * 60 * 60 * 1000;
@@ -149,6 +149,9 @@ export default {
     // A thread id in the title names the thread: then only its rollout counts. `titlePrefix` is
     // what the title said, for the reader's check after the read (the title still says it).
     const prefix = byTitle(fg.title);
+    // The title names another thread than the one that said it has no limits (`/new`, a resume):
+    // that word is not this thread's, also before its rollout is there to say anything.
+    if (prefix && memo.noLimits?.file && !rolloutId(memo.noLimits.file.slice(memo.noLimits.file.lastIndexOf("/") + 1))?.startsWith(prefix)) memo.noLimits = null;
     if (prefix) {
       const file = await rolloutByPrefix(io, home, prefix, memo);
       if (file === AMBIGUOUS) return null;
@@ -189,7 +192,7 @@ export default {
     for (const file of await newestRollouts(io, memo.home)) {
       const chunk = await io.tail(file, FIRST);
       if (!chunk || typeof chunk.text !== "string") continue;
-      io.limits.offer(memo.account, codexLimits(completeLines(chunk.text, chunk.whole)).reading, io.now());
+      io.limits.offer(memo.account, codexLimits(completeLines(chunk.text, chunk.whole)).reading);
     }
   },
 
@@ -199,16 +202,19 @@ export default {
     // headers share (`io.limits`). A larger end holds all of a smaller one, so the last walk counts.
     let limits = null;
     const r = await scanTail(io, source.file, (lines, whole) => {
-      limits = codexLimits(lines);
+      limits = { ...codexLimits(lines), whole };
       return findRollout(lines, whole);
     });
-    // This session's own word (parse.js, codexLimits): events without default-pool limits mean
-    // it has none, and the pane shows none; limits mean it has; no event says nothing, and what
-    // this rollout said before stands. Never from another session's file (accountLimits).
+    // This session's own word (parse.js, codexLimits): limits mean it has them. Events without
+    // default-pool limits mean it has none, and the pane shows none: only where the read came to
+    // an end (a failed larger tail leaves a walk of the smaller one, which proves nothing) and the
+    // walk saw all it looks at (CODEX_EVENTS events, or the whole file). Anything less says
+    // nothing, and what this rollout said before stands. Never from another session's file
+    // (accountLimits).
     if (limits?.reading) {
-      io.limits?.offer(source.account, limits.reading, io.now());
+      io.limits?.offer(source.account, limits.reading);
       memo.noLimits = null;
-    } else if (limits?.events > 0) memo.noLimits = { pid: source.pid, file: source.file };
+    } else if (r !== null && limits?.events > 0 && (limits.events >= CODEX_EVENTS || limits.whole)) memo.noLimits = { pid: source.pid, file: source.file };
     else if (memo.noLimits && memo.noLimits.file !== source.file) memo.noLimits = null;
     if (r === NO_READING) return NO_READING;
     if (!r) return null;
