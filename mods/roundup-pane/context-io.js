@@ -68,28 +68,28 @@ let statForm = null; // "mac" or "gnu", found on the first call
 // counts as no answer. The race doesn't stop hc itself, whose late answer is dropped. Without
 // `after` (the sweeper, which never asks hc) there is no deadline.
 export function makeIo({ after = null } = {}) {
+  // One hc call, its JSON answer through `pick`, bounded by HC_MS where there is a timer.
+  const ask = async (args, pick) => {
+    let timer = null;
+    try {
+      const answer = hc(args).then((r) => (r.code === 0 ? pick(JSON.parse(r.stdout)) : null)).catch(() => null);
+      if (!after) return await answer;
+      let expire;
+      const deadline = new Promise((resolve) => { expire = resolve; });
+      timer = after(HC_MS, () => expire(null)); // a closed cx throws here: no answer
+      return await Promise.race([answer, deadline]);
+    } catch {
+      return null; // hc failing as it is called, or no timer to bound it: no answer
+    } finally {
+      try { timer?.cancel(); } catch {}
+    }
+  };
   const io = {
     home: home(),
     now: () => Date.now(),
-    async terminal(t) {
-      let timer = null;
-      try {
-        const ask = hc(["get", t, "--json"]).then((r) => {
-          if (r.code !== 0) return null;
-          const j = JSON.parse(r.stdout);
-          return { pid: j.foreground?.pid ?? null, created: j.created_ms ?? null, title: j.title ?? "", cwd: j.foreground?.cwd ?? j.cwd ?? null };
-        }).catch(() => null);
-        if (!after) return await ask;
-        let expire;
-        const deadline = new Promise((resolve) => { expire = resolve; });
-        timer = after(HC_MS, () => expire(null)); // a closed cx throws here: no answer
-        return await Promise.race([ask, deadline]);
-      } catch {
-        return null; // hc failing as it is called, or no timer to bound it: no answer
-      } finally {
-        try { timer?.cancel(); } catch {}
-      }
-    },
+    terminal: (t) => ask(["get", t, "--json"], (j) => ({ pid: j.foreground?.pid ?? null, created: j.created_ms ?? null, title: j.title ?? "", cwd: j.foreground?.cwd ?? j.cwd ?? null })),
+    // The screen only (no history above it): `{ text }` of `hc read`.
+    screen: (t) => ask(["read", t, "--json"], (j) => (typeof j.text === "string" ? j.text : null)),
     async env(pid) { return parseEnv(await run("ps", ["-wwE", "-p", String(pid), "-o", "command="])); },
     async readText(p) {
       try { return await readTextFile(p); } catch { return null; }

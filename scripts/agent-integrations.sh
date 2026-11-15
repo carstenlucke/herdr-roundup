@@ -1,9 +1,9 @@
 #!/bin/sh
 # Switches the agents' integrations for the context meter in the pane header on and off.
 #
-#   scripts/agent-integrations.sh install   <claude|codex>
-#   scripts/agent-integrations.sh uninstall <claude|codex>
-#   scripts/agent-integrations.sh status    [claude|codex]
+#   scripts/agent-integrations.sh install   <claude|codex|pi|opencode>
+#   scripts/agent-integrations.sh uninstall <claude|codex|pi|opencode>
+#   scripts/agent-integrations.sh status    [claude|codex|pi|opencode]
 #
 # claude: Claude Code's status line (`statusLine` in ~/.claude/settings.json) becomes
 #         `exec sh '<Herdr App home>/mods/roundup-pane/integrations/claude-statusline.sh'`, which
@@ -17,13 +17,21 @@
 #         title items stay; without any, Codex's defaults stay too), so the pane header finds the
 #         thread's rollout file from the terminal's title. Everything that shows the title shows
 #         the id too.
+# pi:     a link ~/.pi/agent/extensions/roundup-context.js to
+#         `<Herdr App home>/mods/roundup-pane/integrations/pi-context.js`, an extension that keeps
+#         pi's own context numbers per terminal. pi loads every extension there on start.
+# opencode: a link ~/.config/opencode/plugins/roundup-context to the folder
+#         `<Herdr App home>/mods/roundup-pane/integrations/opencode`, a TUI plugin (opencode 2) that
+#         keeps the shown session's numbers per terminal.
+# The links follow the layout's files, so an update of the layout (scripts/sync.sh) updates what
+# pi and opencode load; no config file of theirs is edited, so there is nothing to back up.
 #
 # Each change edits the person's own agent config: run it only after they said yes. `install` is
 # idempotent and keeps a backup of the file it changes; `uninstall` restores exactly what `install`
 # changed and nothing else; `status` says per agent on, off or broken. Nothing else is touched.
 # A config that is a symlink (dotfiles) stays one: its target is changed. A link that leads
-# nowhere or in a circle is refused. Paths follow CLAUDE_CONFIG_DIR, CODEX_HOME, HERDR_APP_HOME
-# and XDG_CONFIG_HOME when set.
+# nowhere or in a circle is refused. Paths follow CLAUDE_CONFIG_DIR, CODEX_HOME,
+# PI_CODING_AGENT_DIR, OPENCODE_CONFIG_DIR, HERDR_APP_HOME and XDG_CONFIG_HOME when set.
 set -eu
 
 app=${HERDR_APP_HOME:-$HOME/.config/herdr-app}
@@ -34,6 +42,12 @@ codex_config="${CODEX_HOME:-$HOME/.codex}/config.toml"
 next="$state/claude-statusline.next"
 claude_prev="$state/claude.json"
 codex_prev="$state/codex.json"
+pi_agent=${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}
+case "$pi_agent" in "~") pi_agent=$HOME ;; "~/"*) pi_agent="$HOME/${pi_agent#"~/"}" ;; esac
+pi_link="$pi_agent/extensions/roundup-context.js"
+pi_target="$app/mods/roundup-pane/integrations/pi-context.js"
+opencode_link="${OPENCODE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}/plugins/roundup-context"
+opencode_target="$app/mods/roundup-pane/integrations/opencode"
 # Codex's own default when terminal_title is unset (DEFAULT_TERMINAL_TITLE_ITEMS, codex-rs 0.167),
 # with "thread-id" last.
 codex_items='["activity", "thread-name", "project-name", "thread-id"]'
@@ -322,16 +336,62 @@ codex_status() {
   else echo "codex: off"; fi
 }
 
+# --- pi and opencode: a link to the layout's file ----------------------------------------------
+
+# What stands at the link's place: "ours" (a link to the target, or to the same file of another
+# Herdr App home: an older install), "missing", or "other" (anything else, the person's own).
+link_form() { # link suffix
+  if [ -L "$1" ]; then
+    case "$(readlink "$1")" in */mods/roundup-pane/integrations/"$2") echo ours ;; *) echo other ;; esac
+  elif [ -e "$1" ]; then echo other
+  else echo missing; fi
+}
+link_install() { # agent link target suffix
+  [ -e "$3" ] || die "$1: $3 is missing: install the layout first (scripts/sync.sh)"
+  case "$(link_form "$2" "$4")" in
+    ours)
+      if [ "$(readlink "$2")" = "$3" ]; then echo "$1: already on"; return 0; fi
+      rm -f "$2" ;; # an older install's link: pointed here again
+    other) die "$1: $2 is there and isn't Roundup's: not changed" ;;
+  esac
+  mkdir -p "$(dirname "$2")"
+  ln -s "$3" "$2"
+  echo "$1: on (new $1 sessions keep their context for the pane header: $2)"
+}
+link_uninstall() { # agent link suffix
+  case "$(link_form "$2" "$3")" in
+    ours) rm -f "$2"; echo "$1: off" ;;
+    missing) echo "$1: already off" ;;
+    other) die "$1: $2 isn't Roundup's: left as it is" ;;
+  esac
+}
+link_status() { # agent link target suffix
+  case "$(link_form "$2" "$4")" in
+    ours)
+      if [ ! -e "$2" ]; then echo "$1: broken ($(readlink "$2") is missing: run scripts/sync.sh, or install $1 again)"
+      elif [ "$(readlink "$2")" != "$3" ]; then echo "$1: on (an older install: run install $1 again, so it follows this layout)"
+      else echo "$1: on"; fi ;;
+    missing) echo "$1: off" ;;
+    other) echo "$1: unknown ($2 is there and isn't Roundup's)" ;;
+  esac
+}
+pi_install() { link_install pi "$pi_link" "$pi_target" pi-context.js; }
+pi_uninstall() { link_uninstall pi "$pi_link" pi-context.js; }
+pi_status() { link_status pi "$pi_link" "$pi_target" pi-context.js; }
+opencode_install() { link_install opencode "$opencode_link" "$opencode_target" opencode; }
+opencode_uninstall() { link_uninstall opencode "$opencode_link" opencode; }
+opencode_status() { link_status opencode "$opencode_link" "$opencode_target" opencode; }
+
 # -------------------------------------------------------------------------------------------------
 
-usage() { die "usage: $0 install|uninstall <claude|codex>, or $0 status [claude|codex]"; }
+usage() { die "usage: $0 install|uninstall <claude|codex|pi|opencode>, or $0 status [claude|codex|pi|opencode]"; }
 [ $# -ge 1 ] || usage
 action=$1
 agent=${2:-}
 case "$action" in
   status)
-    case "$agent" in "") claude_status; codex_status ;; claude | codex) "${agent}_status" ;; *) usage ;; esac ;;
+    case "$agent" in "") claude_status; codex_status; pi_status; opencode_status ;; claude | codex | pi | opencode) "${agent}_status" ;; *) usage ;; esac ;;
   install | uninstall)
-    case "$agent" in claude | codex) "${agent}_${action}" ;; *) usage ;; esac ;;
+    case "$agent" in claude | codex | pi | opencode) "${agent}_${action}" ;; *) usage ;; esac ;;
   *) usage ;;
 esac

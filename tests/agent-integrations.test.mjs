@@ -189,9 +189,9 @@ test("codex: a line changed by hand since install is left alone", () => {
   assert.equal(readFileSync(codex, "utf8"), '[tui]\nterminal_title = ["model"]\n');
 });
 
-test("status lists both agents; a wrong action or agent prints the usage", () => {
-  assert.deepEqual(run("status").out.split("\n"), ["claude: off", "codex: off"]);
-  for (const args of [[], ["install"], ["install", "pi"], ["remove", "claude"]]) {
+test("status lists all four agents; a wrong action or agent prints the usage", () => {
+  assert.deepEqual(run("status").out.split("\n"), ["claude: off", "codex: off", "pi: off", "opencode: off"]);
+  for (const args of [[], ["install"], ["install", "gemini"], ["remove", "claude"]]) {
     const r = run(...args);
     assert.notEqual(r.code, 0);
     assert.match(r.err, /usage:/);
@@ -526,4 +526,65 @@ test("the installed command gives the status line Claude's pid as $PPID, also un
   };
   assert.equal(call(cmd), process.pid, "the pid of the process that started the command");
   assert.notEqual(call(shCommand(script).replace(/^exec /, "")), process.pid, "without exec: the forking shell's pid (what the fix is for)");
+});
+
+// --- pi and opencode: a link to the layout's file ------------------------------------------------
+
+const piLink = () => join(home, ".pi/agent/extensions/roundup-context.js");
+const opencodeLink = () => join(home, ".config/opencode/plugins/roundup-context");
+const target = (rel) => join(env.HERDR_APP_HOME, "mods/roundup-pane/integrations", rel);
+
+for (const [agent, link, rel] of [["pi", piLink, "pi-context.js"], ["opencode", opencodeLink, "opencode"]]) {
+  test(`${agent}: install links the layout's ${rel}, is idempotent, and uninstall removes only that link`, () => {
+    let r = run("install", agent);
+    assert.equal(r.code, 0, r.err);
+    assert.match(r.out, new RegExp(`^${agent}: on`));
+    assert.equal(lstatSync(link()).isSymbolicLink(), true);
+    assert.equal(spawnSync("readlink", [link()], { encoding: "utf8" }).stdout.trim(), target(rel));
+    assert.equal(run("status", agent).out, `${agent}: on`);
+    assert.equal(run("install", agent).out, `${agent}: already on`);
+    assert.equal(backups().length, 0, "nothing of the person's changed: no backup");
+    r = run("uninstall", agent);
+    assert.equal(r.code, 0, r.err);
+    assert.equal(r.out, `${agent}: off`);
+    assert.equal(existsSync(link()), false);
+    assert.equal(existsSync(target(rel)), true, "the layout's file stays");
+    assert.equal(run("status", agent).out, `${agent}: off`);
+    assert.equal(run("uninstall", agent).out, `${agent}: already off`);
+  });
+
+  test(`${agent}: the person's own file there is left alone; a link whose file went is broken; an older home's link is ours`, () => {
+    put(link(), "mine\n");
+    let r = run("install", agent);
+    assert.notEqual(r.code, 0);
+    assert.match(r.err, /isn't Roundup's: not changed/);
+    assert.match(run("status", agent).out, new RegExp(`^${agent}: unknown`));
+    assert.notEqual(run("uninstall", agent).code, 0);
+    assert.equal(readFileSync(link(), "utf8"), "mine\n");
+    rmSync(link());
+    // Another Herdr App home's link (the layout installed elsewhere before): ours, pointed here again.
+    const old = join(home, "old-app/mods/roundup-pane/integrations", rel);
+    mkdirSync(join(old, ".."), { recursive: true });
+    symlinkSync(old, link());
+    assert.match(run("status", agent).out, /broken \(.* is missing/);
+    r = run("install", agent);
+    assert.equal(r.code, 0, r.err);
+    assert.equal(spawnSync("readlink", [link()], { encoding: "utf8" }).stdout.trim(), target(rel));
+    // The layout's file gone (no sync yet): install refuses, status says broken.
+    rmSync(target(rel), { recursive: true });
+    assert.match(run("status", agent).out, /broken/);
+    rmSync(link());
+    r = run("install", agent);
+    assert.notEqual(r.code, 0);
+    assert.match(r.err, /scripts\/sync\.sh/);
+  });
+}
+
+test("pi follows PI_CODING_AGENT_DIR (with ~), opencode OPENCODE_CONFIG_DIR", () => {
+  env.PI_CODING_AGENT_DIR = "~/pi-home";
+  env.OPENCODE_CONFIG_DIR = join(home, "oc");
+  assert.equal(run("install", "pi").code, 0);
+  assert.equal(run("install", "opencode").code, 0);
+  assert.equal(lstatSync(join(home, "pi-home/extensions/roundup-context.js")).isSymbolicLink(), true);
+  assert.equal(lstatSync(join(home, "oc/plugins/roundup-context")).isSymbolicLink(), true);
 });

@@ -115,10 +115,10 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   pane's id shortened to `p` and 6 hex digits), the folder in `dim`, the
   agent's context meter and status; on hover rename, split right, split
   down, zoom and close come in before the meter, so meter and status stay
-  put. The meter (Claude Code and Codex panes) is a pill: a bar, the
-  percent and the tokens (`4% 18.3k / 475k`), `accent` below 65%,
+  put. The meter (Claude Code, Codex, pi and opencode panes) is a pill: a
+  bar, the percent and the tokens (`4% 18.3k / 475k`), `accent` below 65%,
   `working` from 65%, `blocked` with an alert mark from 80%; without a
-  known window only the tokens. Terminal padding 14 × 12px. Right-clicking a terminal shows Herdr's
+  known window only the tokens, from pi's footer bar and `~` percent only. Terminal padding 14 × 12px. Right-clicking a terminal shows Herdr's
   pane menu (Split right, Split down, Zoom, where right-clicks go, Close
   pane), then "Ask before closing a pane" with the same three choices. A
   terminal outside a tab has no pane: its menu leaves out Split, Zoom and
@@ -239,10 +239,11 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   55 min after the last answer, as observed). No meter for a shell, a mod
   pane, an agent of another machine, or a source not proven.
   - **Exact numbers need an integration** (`scripts/agent-integrations.sh
-    install|uninstall|status <claude|codex>`, only with the person's yes:
-    it edits their agent config, backs it up, restores it exactly).
-    Without it Claude Code shows its window only after a `/context`, Codex
-    only in direct mode (`codex --no-daemon`).
+    install|uninstall|status <claude|codex|pi|opencode>`, only with the
+    person's yes: it edits their agent config, backs it up, restores it
+    exactly). Without it Claude Code shows its window only after a
+    `/context`, Codex only in direct mode (`codex --no-daemon`), pi the
+    rounded percent of its footer, opencode nothing.
 - **Closing** asks first as its kind's choice says: the tab menu's for tabs,
   the terminal menu's for panes; both stay after a restart. A tab closes by
   its ×, its menu's Close or `cmd-w`; a pane by its header's ×, Close pane
@@ -489,7 +490,10 @@ strategy per agent program (`context/strategies/<agent>.js`), `io` from
 - **Integrations:** `claude` sets `statusLine.command` to `exec sh
   '<…>/mods/roundup-pane/integrations/claude-statusline.sh'` (the previous
   command runs after it, kept in `~/.config/herdr-roundup/integrations/`);
-  `codex` adds `"thread-id"` last to `tui.terminal_title`.
+  `codex` adds `"thread-id"` last to `tui.terminal_title`; `pi` links
+  `~/.pi/agent/extensions/roundup-context.js` and `opencode` (2.x)
+  `~/.config/opencode/plugins/roundup-context` to `integrations/` in the
+  app home, so a sync updates them and no config file of theirs changes.
 - **Adding an agent:** one strategy file and one line in the registry; an
   integration writes `~/.cache/herdr-roundup/context/<agent>/<t>.json`
   with `{v: 1, terminal, pid, at}`.
@@ -806,7 +810,10 @@ of global `tab.close` and `pane.close`.
   back.
 - A Claude Code and a Codex pane with their integrations show their
   numbers (`5% 47.9k / 1M`), split in one tab each its own; after
-  `/compact` the meter drops, after `/clear` it goes within a minute.
+  `/compact` the meter drops, after `/clear` it goes within a minute. Two
+  pi or two opencode in one folder show their own; pi without its
+  extension shows its footer's `~` percent, opencode without its plugin
+  nothing.
 - Every pane header shows its terminal's address (`t5j`); double-clicking
   copies it. `hc label t5j roundup-pane.name=Build` shows "Build" within a
   second; so does renaming in the dialog, and an empty name shows the

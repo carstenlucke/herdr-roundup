@@ -1,11 +1,11 @@
 // An `io` for the context strategies (mods/roundup-pane/context/locate.js names its parts) over
-// files in memory: { path: text }. Terminals, environments and open files are fixtures too.
+// files in memory: { path: text }. Terminals, environments, open files and screens are fixtures too.
 // `calls` records what was asked, so a test can see that nothing more was read than needed.
 import { readFileSync } from "node:fs";
 
 export const fixture = (name) => readFileSync(new URL(`../fixtures/context/${name}`, import.meta.url), "utf8");
 
-export function contextIo({ home = "/Users/a", now = Date.parse("2026-11-14T00:00:00Z"), files = {}, mtimes = {}, terminals = {}, envs = {}, open = {} } = {}) {
+export function contextIo({ home = "/Users/a", now = Date.parse("2026-11-14T00:00:00Z"), files = {}, mtimes = {}, terminals = {}, envs = {}, open = {}, screens = {} } = {}) {
   const calls = [];
   const io = {
     home,
@@ -30,6 +30,8 @@ export function contextIo({ home = "/Users/a", now = Date.parse("2026-11-14T00:0
       return names.length ? [...new Set(names)] : null;
     },
     async openFiles(pid) { calls.push(["openFiles", pid]); return open[pid] ?? null; },
+    screens,
+    async screen(t) { calls.push(["screen", t]); return t in screens ? screens[t] : null; },
     // As context-io.js's awk, with the ERE's [[:space:]] as \s.
     async lastLinesWith(p, text, re, max, n) {
       calls.push(["lastLinesWith", p]);

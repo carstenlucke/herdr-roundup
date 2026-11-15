@@ -5,7 +5,8 @@
 // - Below 65 % the bar is `accent` and the number `muted`; from 65 % `working`, from 80 % `blocked`,
 //   the number `foreground` with an alert mark before it, so the level never rests on hue alone.
 // - Narrow headers drop the tokens, then the bar; the percent stays longest (context/text.js tier).
-// - Tokens alone (Claude without a known window): no bar, no percent.
+// - Tokens alone (Claude without a known window): no bar, no percent. A share alone (pi's footer):
+//   bar and percent, no tokens.
 
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, HoverCard } from "gpui-base";
@@ -48,7 +49,9 @@ export function meter(t, { pane, reading, tier, agent, hint = null, covered = fa
     num.child(div().flex_none().text_color(loud ? t.foreground : t.muted).when(loud, (e) => e.font_medium())
       .child(`${reading.windowRounded ? "~" : ""}${percentText(p)}`));
     el.child(num);
-    if (tier === "full") el.child(div().flex_none().text_color(t.dim).child(usedText(reading)));
+    // No tokens beside a share without them (pi's footer): bar and percent only.
+    const words = usedText(reading);
+    if (tier === "full" && words) el.child(div().flex_none().text_color(t.dim).child(words));
   }
   return HoverCard.new(`ph-ctx-card-${pane}`).anchor("top_right").open_delay(400).close_delay(150).trigger(el)
     .content(covered ? div() : card(t, cardModel(reading, { agent, hint }), head));

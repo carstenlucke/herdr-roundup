@@ -5,8 +5,10 @@
 
 import claude from "./strategies/claude.js";
 import codex from "./strategies/codex.js";
+import pi from "./strategies/pi.js";
+import opencode from "./strategies/opencode.js";
 
-export const STRATEGIES = [claude, codex];
+export const STRATEGIES = [claude, codex, pi, opencode];
 
 // A terminal of another machine (`vps/t7`) gets none: its agent's files are there, not here.
 export function strategyFor(pane, list = STRATEGIES) {

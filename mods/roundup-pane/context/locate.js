@@ -13,6 +13,7 @@
 //   io.head(path, bytes)          its first bytes as text, or null
 //   io.list(dir)                  the names in a folder, or null
 //   io.openFiles(pid)             paths the process and its descendants hold open (`lsof`), or null
+//   io.screen(address)            the terminal's screen as text (`hc read <t> --json`), or null
 //   io.lastLinesWith(path, text, re, maxLength, n)
 //                                 the file's last n lines shorter than maxLength containing text and
 //                                 matching the awk ERE re, newest first: [] for none, null on failure
@@ -88,6 +89,30 @@ export async function observeTerminalFile(io, agent, terminal, pid) {
   const { path, stat, json: f } = await observeJsonFile(io, integrationFile(io, agent, terminal));
   const own = f && f.v === 1 && f.terminal === terminal && f.pid === pid && Number.isFinite(f.at);
   return { path, stat, file: own ? f : null };
+}
+
+// The normalized form an extension or plugin writes (pi, opencode), after { v, terminal, pid, at }:
+// `session`, `model`, `used` (null when unknown, e.g. right after a compaction), `window` (null when
+// unknown) and `percent` (null when unknown). → a reading, or null for "no number" (no session
+// shown, nothing answered yet, numbers that aren't sane). `source` names it for the hover card.
+export function normalizedReading(file, source) {
+  if (!file || !Number.isFinite(file.at)) return null;
+  const n = (v) => (Number.isFinite(v) && v >= 0 ? v : null);
+  const used = n(file.used);
+  const window = Number.isFinite(file.window) && file.window > 0 ? file.window : null;
+  let percent = n(file.percent);
+  if (used !== null && window !== null) percent = (used / window) * 100;
+  if (used === null && percent === null) return null;
+  return {
+    used,
+    window,
+    percent,
+    model: typeof file.model === "string" && file.model ? file.model : null,
+    at: file.at,
+    source,
+    exact: true,
+    session: typeof file.session === "string" ? file.session : null,
+  };
 }
 
 // A thread id in a terminal title, whole or as Codex cuts it (`01a1d750-0653-7190-914d-7c804...`):

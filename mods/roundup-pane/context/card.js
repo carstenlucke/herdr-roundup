@@ -10,6 +10,9 @@ const FROM = {
   transcript: "transcript",
   compaction: "compaction",
   rollout: "Codex rollout",
+  extension: "pi extension",
+  plugin: "opencode plugin",
+  screen: "pi's footer",
 };
 
 // → { big: { used, of, percent, sev }, rows: [{ label, value, extra, kind }], notes: [text] }, or null.
@@ -30,6 +33,9 @@ export function cardModel(reading, { agent, hint = null } = {}) {
     else row("Over", tokens(-free), "beyond the window", "warn");
   } else if (hasUsed) {
     big = { used: tokens(reading.used), of: "in use · window unknown", percent: "", sev: "ok" };
+  } else if (hasWindow) {
+    // A share of a window without the tokens (pi's footer): no tokens worked back from it.
+    big = { used: `${approx}${percentText(reading.percent)}`, of: `of ${approx}${tokens(reading.window)}`, percent: "", sev: severity(reading.percent) };
   } else {
     big = { used: `~${percentText(reading.percent)}`, of: "in use", percent: "", sev: severity(reading.percent) };
   }
@@ -41,7 +47,8 @@ export function cardModel(reading, { agent, hint = null } = {}) {
     row("Idle compact", `~${clock(hint)}`, "estimate", "warn");
     notes.push("Expected about 55 min after the last answer, as observed on this machine");
   }
-  if (reading.windowRounded) notes.push("Window from this session's /context, which rounds it");
+  if (reading.source === "screen") notes.push("Rounded, as pi's footer shows it. For pi's own number: scripts/agent-integrations.sh install pi");
+  else if (reading.windowRounded) notes.push("Window from this session's /context, which rounds it");
   if (!hasWindow && agent === "claude") notes.push("Switch on the status line integration for its window: scripts/agent-integrations.sh install claude (or type /context)");
   if (agent === "codex") notes.push("The raw share of the window: Codex's /status takes a 12k baseline off");
   if (reading.setting) notes.push(`${reading.setting} moves the auto-compact threshold`);

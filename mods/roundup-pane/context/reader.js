@@ -12,7 +12,8 @@
 //   whose stat and content it couldn't both get (UNSURE) is read again on the next look.
 //   Nothing found, or a failed read: tried again with a backoff, not on every render. Read without
 //   a number (NO_READING): no backoff, the schedule above; read again when a file changed, or on
-//   every look where the strategy can't tell that from a failed read (keepsNoReading false).
+//   every look where the strategy can't tell that from a failed read (keepsNoReading false). A
+//   source without a file to compare (`fresh`, pi's footer) is read on every look.
 // - Module code is shared by the copies: one queue lets two reads run at once, not all panes'.
 
 import { STRATEGIES, strategyFor } from "./registry.js";
@@ -258,7 +259,9 @@ export class ContextReader {
     const seen = src.observed ?? {};
     const stats = await Promise.all(src.files.map((f) => (Object.hasOwn(seen, f) ? seen[f] : io.stat(f))));
     if (gen !== this.gen) return false;
-    const sure = !stats.includes(UNSURE);
+    // A source whose value locate() took from no file (`fresh`: pi's footer on screen) has nothing
+    // to compare: read on every look, and nothing kept, as with UNSURE.
+    const sure = !src.fresh && !stats.includes(UNSURE);
     // Nothing new: the reading stands (key is kept only beside a reading, or after NO_READING of
     // a strategy that keeps it: then the meter stays empty).
     if (sure && key === this.key && sameStats(stats, this.stats)) return false;
