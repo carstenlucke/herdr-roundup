@@ -18,7 +18,9 @@ const NOW = Date.UTC(2026, 10, 15, 12, 0);
 const R = { used: 76_500, window: 1_000_000, at: NOW, source: "status-line", exact: true, model: "claude-fable-5-2" };
 const five = (used, gone = 150, at = NOW) => ({ minutes: 300, used, resetsAt: NOW + (300 - gone) * MIN, at });
 const week = (used, goneDays = 5, at = NOW) => ({ minutes: 10080, used, resetsAt: NOW + (7 - goneDays) * DAY, at });
-const L = (windows, extra = {}) => ({ at: Math.max(...windows.map((w) => w.at)), plan: null, source: "status-line", rev: 1, windows, ...extra });
+// A reading as store.get() gives it: as old as its oldest window, null as soon as one's time is unknown.
+const oldest = (windows) => (windows.some((w) => !Number.isFinite(w.at)) ? null : Math.min(...windows.map((w) => w.at)));
+const L = (windows, extra = {}) => ({ at: oldest(windows), plan: null, source: "status-line", rev: 1, windows, ...extra });
 const all = (el) => [...walk(el)];
 const words = (el) => texts(el).join(" ");
 const trigger = (card) => card.style("trigger")[0];
@@ -119,6 +121,7 @@ test("limits alone keep a window down to the narrowest step: the tighter one wha
   assert.equal(words(pill(calm, "percent")), "8%");
   // What counts as a context part: a share of a window, or tokens alone.
   assert.deepEqual([null, R, { ...R, window: null }, { at: NOW }, { ...R, used: null, window: null }].map(hasContext), [false, true, true, false, false]);
+  assert.deepEqual([{ used: 0, window: 200_000 }, { used: null, window: 200_000, percent: 0 }, { used: null, window: null, percent: 40 }].map(hasContext), [true, true, false], "0 % is a share; a percent without a window none");
 });
 
 test("a reading whose time is unknown: dimmed like an old one, and the card says so", () => {

@@ -247,35 +247,22 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
     exactly). Without it Claude Code shows its window only after a
     `/context`, Codex only in direct mode (`codex --no-daemon`), pi the
     rounded percent of its footer, opencode nothing.
-- **Plan limits** (the 5-hour and the weekly window, by their percent
-  used): `muted` below 70%; from 70% `foreground` with an alert mark in
-  `working`, from 90% in `blocked`, at 100% a no-entry mark. They are the
-  account's (the agent's config folder), so every pane of an agent shows
-  the same, as of the last answer in any of them: the newest reading
-  counts, a lower one too. An agent that has just started shows them
-  before its first answer, from what the account's other sessions on this
-  computer left.
-  - Narrow headers drop the context's tokens first, then the looser limit
-    (the tighter stays from 70%), then both but for a mark from 90%.
-    Limits without a context number stand alone, and keep the tighter
-    window down to the narrowest step.
-  - A reading older than 15 min, or one whose age isn't known yet (Claude
-    Code until its next answer), is dimmed; a window whose reset has
-    passed since reads `–`; no reading (no answer yet, pi, opencode)
-    leaves the pill as it is.
-  - A pane whose own session isn't on the plan shows none: Claude Code on
-    Bedrock, Vertex, Foundry or another endpoint, or answering without
-    limits (an API key); Codex whose last answers carry none of the
-    account's pool (an API key, a model with a bucket of its own).
-  - The card adds "Limits" (280px wide then): the plan where the agent
-    names it (Codex), "as of 19:28", per window a row (`5-hour`, `78%`,
-    "resets in 1h 35m", from a day on "resets Tue 08:48") and a 4px bar
-    with a tick where the window's time stands. From 50% used, a fill
-    ahead of the tick adds "At this pace the 5-hour limit runs out about
-    20:35, 37m before it resets" in `working`; at 100% when the agent
-    answers again.
-  - Claude Code needs its status line integration for them (the same as
-    for its window); Codex needs nothing.
+- **Plan limits** (the 5-hour and the weekly window, percent used):
+  `muted` below 70%, from 70% an alert mark in `working`, from 90% in
+  `blocked`, at 100% a no-entry mark. They are the account's (the agent's
+  config folder): every pane of it shows the newest reading of any, also
+  before its own first answer. Claude Code needs its status line
+  integration, Codex nothing.
+  - Narrow headers drop the tokens first, then the looser limit, then both
+    but for a mark from 90%; limits alone keep the tighter window.
+  - Older than 15 min or of unknown age: dimmed; a window that has reset
+    since reads `–`.
+  - None where the pane's own session isn't on the plan: Claude Code on
+    Bedrock, Vertex or Foundry, or answering without limits (an API key,
+    another endpoint); Codex whose last answers carry none of the pool.
+  - The card adds "Limits": the plan (Codex), the time, per window a row
+    with its reset and a bar with a tick for the time gone; from 50% a
+    pace warning, at 100% when the agent answers again.
 - **Closing** asks first as its kind's choice says: the tab menu's for tabs,
   the terminal menu's for panes; both stay after a restart. A tab closes by
   its ×, its menu's Close or `cmd-w`; a pane by its header's ×, Close pane

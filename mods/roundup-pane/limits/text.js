@@ -83,11 +83,6 @@ export const whenClock = (ms, now) => (ms - now < 1440 * MIN ? clock(ms) : dayCl
 // moved it. A reading is as old as its oldest window: it is shown dimmed as a whole.
 export const staleWindow = (w, now) => !Number.isFinite(w.at) || now - w.at > STALE_MS;
 export const stale = (reading, now) => Boolean(reading?.windows?.length) && reading.windows.some((w) => staleWindow(w, now));
-// When the reading is from: its oldest window's time, or null as soon as one is unknown.
-export function readAt(reading) {
-  const ats = (reading?.windows ?? []).map((w) => (Number.isFinite(w.at) ? w.at : null));
-  return !ats.length || ats.includes(null) ? null : Math.min(...ats);
-}
 
 // What of the limits the pill shows, as one string: the header draws again when it changes (a
 // reading going stale, a window passing its reset), and each minute while `live` (hovered: the

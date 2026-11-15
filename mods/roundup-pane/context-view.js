@@ -37,19 +37,24 @@ export function barColor(t, sev) {
 const limitColor = (t, sev) => (sev === "tight" ? t.working : t.blocked);
 const limitMark = (sev) => (sev === "reached" ? "mods/roundup-pane/ban.svg" : "mods/roundup-pane/alert.svg");
 
-// The context's part of the pill, as its children, or null: nothing of the context to show.
+// The share of a window the bar shows, or null: a reading with a window (a percent alone draws no
+// bar). 0 is a share.
+function windowShare(reading) {
+  if (!reading || !(Number.isFinite(reading.window) && reading.window > 0)) return null;
+  const p = share(reading);
+  return Number.isFinite(p) ? p : null;
+}
+
 // Whether a reading gives the pill a context part: a share of a window, or tokens alone. The
 // header picks its tiers by it (main.js): limits beside a context part need the wider ones.
 export function hasContext(reading) {
-  if (!reading) return false;
-  return (Number.isFinite(reading.window) && reading.window > 0 && Number.isFinite(share(reading))) || Number.isFinite(reading.used);
+  return windowShare(reading) !== null || Number.isFinite(reading?.used);
 }
 
+// The context's part of the pill, as its children, or null: nothing of the context to show.
 function contextPart(t, reading, tier) {
-  if (!hasContext(reading)) return null;
-  const p = share(reading);
-  const hasWindow = Number.isFinite(reading.window) && reading.window > 0 && Number.isFinite(p);
-  if (!hasWindow) return [div().flex_none().text_color(t.muted).child(tokens(reading.used))];
+  const p = windowShare(reading);
+  if (p === null) return Number.isFinite(reading?.used) ? [div().flex_none().text_color(t.muted).child(tokens(reading.used))] : null;
   const sev = severity(p);
   const color = barColor(t, sev);
   const loud = sev !== "ok";
