@@ -17,7 +17,7 @@
 import base64, json, os, re, sys
 from html import escape
 
-SCENES = ["spaces", "quicklook", "files", "files-changed", "search", "symlink", "pane-header", "context", "context-pi",
+SCENES = ["spaces", "quicklook", "files", "files-changed", "search", "symlink", "pane-header", "context", "context-pi", "limits",
           "rename", "close-menu", "close-confirm", "update", "preview-tab", "float"]
 if sys.argv[1:] == ["--scenes"]:
     print("\n".join(SCENES))
@@ -79,6 +79,7 @@ ICON = {
 # roundup-pane's and roundup-preview's own icons, drawn on a 16px grid.
 ICON16 = {
     "alert": '<path d="M8 2.2 14.2 13H1.8Z"/><path d="M8 6.4v3"/><path d="M8 11.4v.1"/>',
+    "ban": '<circle cx="8" cy="8" r="5.8"/><path d="M3.9 3.9l8.2 8.2"/>',
     "rename": '<path d="M10.5 3.2l2.3 2.3L6 12.3l-2.9.6.6-2.9z"/><path d="M9.2 4.5l2.3 2.3"/>',
     "split-right": '<rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M8 3v10"/>',
     "split-down": '<rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 8h12"/>',
@@ -450,13 +451,20 @@ def tokens(n):
 
 METERS = {}  # address -> (right edge, top) of its context meter, where its hover card hangs
 
-def pane(x, w, prog, name, address, status, focus, lines, bottom, hover=False, y=PY, h=PH, meter=None):
+def limit_sev(used):
+    """A plan limit's level, as roundup-pane/limits/text.js: None below 70 %, then its color and its mark."""
+    u = round(used)
+    return None if u < 70 else ("working", "alert") if u < 90 else ("blocked", "ban" if u >= 100 else "alert")
+
+def pane(x, w, prog, name, address, status, focus, lines, bottom, hover=False, y=PY, h=PH, meter=None, limits=None):
     """A pane: roundup-pane's header (icon, name, id chip, folder, context meter, status), then the
     terminal. `lines` run from the top, `bottom` sits on the last rows. `hover`: the pointer is on
     the header, on its pencil, so the header shows rename, split right, split down, zoom and close.
     `y`, `h`: its top and height, the tab's whole height unless it is split. `meter`: the agent's
     context as (used, window) tokens: a 30 x 4px bar, the percent and the tokens; (None, window,
-    percent) is a share without tokens, as pi's footer gives it: the bar and "~34%", no tokens."""
+    percent) is a share without tokens, as pi's footer gives it: the bar and "~34%", no tokens.
+    `limits`: the account's plan limits after the context, as (short name, percent used) each:
+    a 1px divider, then "5h 21%  wk 40%", from 70 % with a mark and the number in foreground."""
     PY, PH = y, h
     rect(x, PY, w, PH, "background", rx=10)
     frame(x, PY, w, PH, "accent" if focus else "border", rx=10)
@@ -470,7 +478,6 @@ def pane(x, w, prog, name, address, status, focus, lines, bottom, hover=False, y
     rect(hx, PY + 6, chip, 18, "hover", rx=4)
     text(hx + 5, PY + 18.5, address, 10.5, "dim", family=MONO)
     hx += chip + 8
-    text(hx, PY + 19.5, "~/code/atlas-search-filters", 12, "dim")
     right = x + w - 10
     # Right to left: the status, the meter, then (on hover) the buttons, which roundup-pane puts
     # before the meter so the meter and the status don't move.
@@ -483,9 +490,20 @@ def pane(x, w, prog, name, address, status, focus, lines, bottom, hover=False, y
         sev = "blocked" if round(pct) >= 80 else "working" if round(pct) >= 65 else "accent"
         loud = sev != "accent"
         words = "" if used is None else f"{tokens(used)} / {tokens(window)}"
+        # With the limits beside it the tokens show only from 660px (context/text.js, LIMIT_TIERS).
+        if limits and w - 2 < 660:
+            words = ""
         ptxt = ("~" if used is None else "") + f"{round(pct)}%"
         pw_ = max(26, tw(ptxt, 11.5, 500 if loud else 400) + (13 if loud else 0))
         pill = 7 + 30 + 6 + pw_ + (6 + tw(words, 11.5) if words else 0) + 7
+        # The limits: the divider (1px, 1px margin each side) and the windows 8px apart, each its
+        # short name (10.5px), 4px, then the number with its mark (10px, 3px before the number).
+        lim_w = 0
+        for i, (short, used_) in enumerate(limits or []):
+            loud_ = limit_sev(used_) is not None
+            lim_w += (8 if i else 0) + tw(short, 10.5) + 4 + (13 if loud_ else 0) + tw(f"{round(used_)}%", 11.5, 500 if loud_ else 400)
+        if lim_w:
+            pill += 6 + 3 + 6 + lim_w
         px_ = mx - pill
         METERS[address] = (mx, PY)
         frame(px_, PY + 5, pill, 20, "border", rx=5)
@@ -498,6 +516,20 @@ def pane(x, w, prog, name, address, status, focus, lines, bottom, hover=False, y
         text(nx, PY + 19, ptxt, 11.5, "foreground" if loud else "muted", 500 if loud else 400)
         if words:
             text(px_ + 7 + 30 + 6 + pw_ + 6, PY + 19, words, 11.5, "dim")
+        if lim_w:
+            lx_ = mx - 7 - lim_w
+            rect(lx_ - 6 - 2, PY + 10, 1, 10, "border")
+            for i, (short, used_) in enumerate(limits):
+                sev_ = limit_sev(used_)
+                lx_ += 8 if i else 0
+                text(lx_, PY + 19, short, 10.5, "dim")
+                lx_ += tw(short, 10.5) + 4
+                if sev_:
+                    icon(sev_[1], lx_, PY + 10, 10, sev_[0], sw=1.8)
+                    lx_ += 13
+                ptxt_ = f"{round(used_)}%"
+                text(lx_, PY + 19, ptxt_, 11.5, "foreground" if sev_ else "muted", 500 if sev_ else 400)
+                lx_ += tw(ptxt_, 11.5, 500 if sev_ else 400)
         mx = px_ - 8
     if hover:
         # 20px buttons (3px padding round a 14px icon), 8px apart, as the header's gap.
@@ -507,6 +539,12 @@ def pane(x, w, prog, name, address, status, focus, lines, bottom, hover=False, y
             if i == 0:
                 rect(bx_, PY + 5, 20, 20, "hover", rx=4)
             icon(glyph, bx_ + 3, PY + 8, 14, "foreground" if i == 0 else "dim", sw=1.3)
+        mx = bx0 - 8
+    # The folder takes the room that is left and is cut with "…", as the header's truncate() does.
+    folder = "~/code/atlas-search-filters"
+    while len(folder) > 1 and tw(folder, 12) > mx - hx:
+        folder = folder[:-2].rstrip() + "…"
+    text(hx, PY + 19.5, folder, 12, "dim")
     if status == "working":
         spinner(right - 6, PY + 15, "working", 5)
     elif status == "done":
@@ -573,7 +611,8 @@ pane(LX, LW, "claude", "Claude Code", "t4", "working", True, [
     [("› ", M, 400)],
     [],
     [("  ? for shortcuts", D, 400)],
-], meter=(412_300, 1_000_000))
+], meter=(412_300, 1_000_000), # The context scene shows the meter by itself, as with an API key: no plan limits beside it.
+   limits=[("5h", 78), ("wk", 41)] if SCENE == "limits" else None if SCENE == "context" else [("5h", 21), ("wk", 40)])
 # The prompt's box and cursor.
 pb = TOP + LH * (ROWS - 3)
 for ry_ in (pb - 15 - LH, pb - 15 + LH):
@@ -623,7 +662,7 @@ else:
     [("› ", M, 400), ("Ask for a follow-up", D, 400)],
     [],
     [("  ⏎ send   ⌃J newline", D, 400)],
-], hover=SCENE == "pane-header", h=CH, meter=(88_200, 475_000))
+], hover=SCENE == "pane-header", h=CH, meter=(88_200, 475_000), limits=[("5h", 34), ("wk", 12)])
 
 # Below it a shell in the same folder: the files the agents changed, as the side panel shows them.
 pane(RX, RW, "shell", "zsh", "t8", None, False, [
@@ -1200,14 +1239,22 @@ if SCENE == "quicklook" or POSTER:
 # (the mockup's): 260px, 9 x 11px padding, rounded 8; the pane's icon, name and id chip; the tokens
 # in use big with the window and the percent; rows of label, value and a dim extra, 20px each.
 # Notes (11px, dim) wrap to the card's width, 3px apart, 5px below the rows.
-CARD_W = 260
-
-def context_card(address, prog, name, used, of, pct, rows_, notes=()):
+# With the plan limits (`limits`: plan, age, rows of (label, percent used, reset text, the share of
+# the window's time gone), notes in the working color) the card is 280px wide: a rule, "Limits" with
+# the time read, and per window a row and a 4px bar with a tick where the window's time stands.
+def context_card(address, prog, name, used, of, pct, rows_, notes=(), limits=None):
+    CARD_W = 280 if limits else 260
     mr, mt = METERS[address]
     notes_ = [wrap(n, 11, CARD_W - 22) for n in notes]
     NOTE_LH = 14
     notes_h = (5 + sum(len(n) * NOTE_LH for n in notes_) + 3 * (len(notes_) - 1)) if notes_ else 0
-    card_h = 9 + 16 + 6 + 20 + 5 + 20 * len(rows_) + notes_h + 9
+    lnotes_ = [wrap(n, 11, CARD_W - 24) for n in (limits or {}).get("notes", ())]
+    lim_h = 0
+    if limits:
+        lim_h = 7 + 1 + 5 + 20 + (20 + 4 + 5) * len(limits["rows"])
+        if lnotes_:
+            lim_h += 1 + sum(len(n) * NOTE_LH for n in lnotes_) + 3 * (len(lnotes_) - 1)
+    card_h = 9 + 16 + 6 + 20 + 5 + 20 * len(rows_) + notes_h + lim_h + 9
     card_x, card_y = mr - CARD_W, mt + 30 + 4
     overlay(card_x, card_y, CARD_W, card_h, rx=8)
     x0, y_ = card_x + 11, card_y + 9
@@ -1236,10 +1283,51 @@ def context_card(address, prog, name, used, of, pct, rows_, notes=()):
                 text(x0, y_ + 11, l_, 11, "dim")
                 y_ += NOTE_LH
             y_ += 3
+    if limits:
+        inner = CARD_W - 24
+        y_ += 7
+        rect(x0, y_, inner, 1, "border")
+        y_ += 1 + 5
+        text(x0, y_ + 14, "Limits", 12, "foreground", 600)
+        if limits.get("plan"):
+            px0 = x0 + tw("Limits", 12, 600) + 6
+            rect(px0, y_ + 1, tw(limits["plan"], 10.5) + 10, 18, "hover", rx=4)
+            text(px0 + 5, y_ + 13.5, limits["plan"], 10.5, "dim")
+        text(x0 + inner, y_ + 14, limits["age"], 11, "dim", anchor="end")
+        y_ += 20
+        for label, used_, extra, gone in limits["rows"]:
+            sev_ = limit_sev(used_)
+            color = sev_[0] if sev_ else "accent"
+            text(x0, y_ + 14, label, 12, "muted")
+            vx = x0 + 84 + 8
+            if sev_:
+                icon(sev_[1], vx, y_ + 4, 11, color, sw=1.8)
+                vx += 14
+            text(vx, y_ + 14, f"{round(used_)}%", 12, "foreground", 600)
+            text(x0 + 84 + 8 + 50 + 8, y_ + 14, extra, 12, "dim")
+            y_ += 20
+            rect(x0, y_, inner, 4, color, rx=2, op=0.25)
+            rect(x0, y_, max(1, inner * min(used_, 100) / 100), 4, color, rx=2)
+            rect(x0 + min(inner - 2, round(inner * gone / 100)), y_ - 2, 1.5, 8, "foreground", rx=1, op=0.6)
+            y_ += 4 + 5
+        if lnotes_:
+            y_ += 1
+            for n in lnotes_:
+                for l_ in n:
+                    text(x0, y_ + 11, l_, 11, "working")
+                    y_ += NOTE_LH
+                y_ += 3
 
 if SCENE == "context":
     context_card("t4", "claude", "Claude Code", "412k", "of 1M", "41%",
                  [("Free", "588k", "59%"), ("Model", "claude-opus-5-5", ""), ("Read", "14:02", "status line")])
+# The limits scene: the same card with the account's plan limits below, the 5-hour window tight and
+# ahead of its pace (78 % with 205 of its 300 minutes gone), as limits/card.js words it.
+if SCENE == "limits":
+    context_card("t4", "claude", "Claude Code", "412k", "of 1M", "41%",
+                 [("Free", "588k", "59%"), ("Model", "claude-opus-5-5", ""), ("Read", "14:02", "status line")],
+                 limits={"age": "as of 14:02", "rows": [("5-hour", 78, "resets in 1h 35m", 205 / 3), ("Weekly", 41, "resets Tue 08:48", 71)],
+                         "notes": ["At this pace the 5-hour limit runs out about 15:00, 37m before it resets"]})
 # pi without its extension, as context/card.js words it: a share of a rounded window, no tokens.
 if SCENE == "context-pi":
     context_card("t7", "pi", "pi", "~34%", "of ~272k", "", [("Read", "14:02", "pi's footer")],
@@ -1256,6 +1344,7 @@ CROPS = {
     "pane-header": (RX - 8, 42, RW + 16, 120),
     "context": (LX + LW - 380, 42, 388, 210),
     "context-pi": (RX + RW - 380, 42, 388, 230),
+    "limits": (LX + LW - 400, 42, 408, 320),
     "rename": ((W - RENAME_W) / 2 - 60, (H - RENAME_H) / 2 - 50, RENAME_W + 120, RENAME_H + 100),
     "close-menu": (WX, 0, 520, 290),
     "close-confirm": ((W - CONFIRM_W) / 2 - 60, (H - CONFIRM_H) / 2 - 50, CONFIRM_W + 120, CONFIRM_H + 100),

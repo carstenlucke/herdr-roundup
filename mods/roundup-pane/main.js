@@ -27,6 +27,9 @@ import { ContextReader, sweep } from "./context/reader.js";
 import { headerTier } from "./context/text.js";
 import { makeIo } from "./context-io.js";
 import { meter } from "./context-view.js";
+// The plan limits of the agent's account, beside the context in the same pill (limits/; RECIPE "Limits").
+import { sharedStore } from "./limits/store.js";
+import { shownState } from "./limits/text.js";
 
 // Integration files of ended terminals go once an hour, by whichever header gets there first.
 let lastSweep = 0;
@@ -92,11 +95,18 @@ export default class Pane extends View {
       return;
     }
     // init's cx outlives this call (an AsyncContext): its timer gives hc get a deadline.
-    this.context = new ContextReader(makeIo({ after: (ms, f) => cx.timer.after(ms, f) }));
+    this.context = new ContextReader(makeIo({ after: (ms, f) => cx.timer.after(ms, f), limits: sharedStore }));
     this.width = null;
+    this.limitsShown = "";
     // A header in a hidden tab doesn't render, so render's see() misses the tab going and coming
     // back, and status changes there: this look tells the reader (no I/O, only panes() and focused()).
-    cx.timer.every(SEE_MS, (cx) => { const p = this.me(); if (p) this.context.see(p, focused()?.tab === p.tab, cx); });
+    // The same look draws the header again when its account's limits changed (another pane read
+    // them into the store), went stale or passed a reset; each minute while hovered, for the card's times.
+    cx.timer.every(SEE_MS, (cx) => {
+      const p = this.me();
+      if (p) this.context.see(p, focused()?.tab === p.tab, cx);
+      if (shownState(this.limits(), Date.now(), this.hovered) !== this.limitsShown) cx.notify();
+    });
     cx.timer.every(10 * 60_000, (cx) => {
       if (Date.now() - lastSweep < 3_600_000) return;
       lastSweep = Date.now();
@@ -113,6 +123,11 @@ export default class Pane extends View {
 
   me() {
     return panes().find((p) => p.pane === props()?.pane);
+  }
+
+  // The plan limits of the account this pane's agent runs on, or null (no agent, no reading).
+  limits() {
+    return this.context?.account ? sharedStore.get(this.context.account) : null;
   }
 
   // --- the header ---
@@ -166,15 +181,19 @@ export default class Pane extends View {
     const pane = p.pane;
     this.context?.see(p, focused()?.tab === p.tab, cx);
     // The tier from the current zoom, so a zoom change re-tiers without a new measurement.
-    this.shownTier = headerTier(this.width, settings()?.zoom);
+    const now = Date.now();
+    const limits = this.limits();
+    this.limitsShown = shownState(limits, now, this.hovered);
+    this.shownTier = headerTier(this.width, settings()?.zoom, Boolean(limits));
     const ctx = this.context && meter(t, { pane, reading: this.context.reading, tier: this.shownTier, agent: this.context.strategy?.id, hint: this.context.hint, covered: covered(),
+      limits, now, program: p.program?.name ?? null,
       // An icon of its own: an element belongs to the one parent it's given (gpui-kit.d.ts).
       head: { pic: icon(p.program, 14, t.dim), name, id: id.shown, font } });
     return h_flex()
       .id(`pane-head-${pane}`)
       .size_full()
       // The width is kept on every change (a later zoom tiers it), but only a new tier re-renders.
-      .on_size_change((size, cx) => { this.width = size.width; if (headerTier(this.width, settings()?.zoom) !== this.shownTier) cx.notify(); })
+      .on_size_change((size, cx) => { this.width = size.width; if (headerTier(this.width, settings()?.zoom, Boolean(this.limits())) !== this.shownTier) cx.notify(); })
       .px(10)
       .gap(8)
       .items_center()

@@ -41,17 +41,24 @@ export function severity(p) {
 // and percent), "percent", or "none". The tokens go first, then the bar; the percent stays longest.
 // Widths are the whole header's, in the mod's px (headerTier converts on_size_change's).
 export const TIERS = { full: 560, bar: 420, percent: 300 };
-export function tier(width) {
+// With the plan limits beside the context (limits/) the pill is wider, and there is a step more:
+// "full" (all), "bar" (without the context's tokens), "narrow" (the context's bar and percent, and
+// only the tighter limit, from 70 %), "percent" (the context's percent, a mark for a limit from 90 %).
+// Set so the folder keeps about the room it has at the context's own thresholds.
+export const LIMIT_TIERS = { full: 660, bar: 540, narrow: 430, percent: 300 };
+export function tier(width, limits = false) {
   if (!Number.isFinite(width)) return "full"; // before the first layout: as wide as it can be
-  if (width >= TIERS.full) return "full";
-  if (width >= TIERS.bar) return "bar";
-  if (width >= TIERS.percent) return "percent";
+  const at = limits ? LIMIT_TIERS : TIERS;
+  if (width >= at.full) return "full";
+  if (width >= at.bar) return "bar";
+  if (limits && width >= at.narrow) return "narrow";
+  if (width >= at.percent) return "percent";
   return "none";
 }
 // The tier of a width as on_size_change measures it: in the window's pixels, which Herdr's zoom
 // makes larger than the mod's (Herdr's picker divides the same way). No width yet stays "full".
-export function headerTier(width, zoom) {
-  return tier(Number.isFinite(width) ? width / (Number(zoom) || 1) : null);
+export function headerTier(width, zoom, limits = false) {
+  return tier(Number.isFinite(width) ? width / (Number(zoom) || 1) : null, limits);
 }
 
 // The meter's words beside the bar: "97.6k / 200k", or tokens alone without a window ("265k").

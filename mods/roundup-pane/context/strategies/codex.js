@@ -12,7 +12,8 @@
 //   one in the same process. A shared daemon's files lie outside the process tree.
 
 import { NO_ANSWER, foreground, processEnv, byTitle, titleIds, byOpenFile, uuid7Time, localParts, parseJson } from "../locate.js";
-import { scanTail, fromEnd, NO_READING } from "../tail.js";
+import { scanTail, fromEnd, completeLines, FIRST, NO_READING } from "../tail.js";
+import { newestCodex } from "../../limits/parse.js";
 
 const ROLLOUT = /\/rollout-[^/]*\.jsonl$/;
 const DAY = 24 * 60 * 60 * 1000;
@@ -88,6 +89,31 @@ export function findRollout(lines, whole) {
   return { ...tc, model: laterModel ?? tcModel };
 }
 
+export const ACCOUNT_FILES = 5;
+export const ACCOUNT_DAYS = 8; // a weekly window, and a day
+
+// The rollouts started last, newest first, at most `n` and none from a day folder older than
+// `days`: sessions/YYYY/MM/DD/rollout-<stamp>-<id>.jsonl sort by their names.
+export async function newestRollouts(io, home, n = ACCOUNT_FILES, days = ACCOUNT_DAYS) {
+  const root = `${home}/sessions`;
+  const sorted = async (dir, re) => ((await io.list(dir)) ?? []).filter((x) => re.test(x)).sort().reverse();
+  const from = localParts(io.now() - days * DAY);
+  const oldest = `${from.y}/${from.mo}/${from.d}`;
+  const files = [];
+  for (const y of await sorted(root, /^\d{4}$/)) {
+    for (const mo of await sorted(`${root}/${y}`, /^\d{2}$/)) {
+      for (const d of await sorted(`${root}/${y}/${mo}`, /^\d{2}$/)) {
+        if (`${y}/${mo}/${d}` < oldest) return files;
+        for (const name of await sorted(`${root}/${y}/${mo}/${d}`, /^rollout-.*\.jsonl$/)) {
+          files.push(`${root}/${y}/${mo}/${d}/${name}`);
+          if (files.length >= n) return files;
+        }
+      }
+    }
+  }
+  return files;
+}
+
 export default {
   id: "codex",
   matches: ["codex"],
@@ -113,7 +139,10 @@ export default {
     const env = await processEnv(io, fg.pid, memo);
     if (env?.HC_TERMINAL_ID && env.HC_TERMINAL_ID !== agent.terminal) return null;
     const home = env?.CODEX_HOME || `${io.home}/.codex`;
-    const base = { id: "codex", terminal: agent.terminal, pid: fg.pid };
+    // The account for the plan limits (limits/store.js): the config folder, known before a rollout is.
+    memo.account = `codex:${home}`;
+    memo.home = home;
+    const base = { id: "codex", terminal: agent.terminal, pid: fg.pid, account: memo.account };
     // A thread id in the title names the thread: then only its rollout counts. `titlePrefix` is
     // what the title said, for the reader's check after the read (the title still says it).
     const prefix = byTitle(fg.title);
@@ -149,8 +178,28 @@ export default {
     return { ...base, file: users[0], thread, titlePrefix: prefix, how: prefix ? "title+open-file" : "open-file", files: [users[0]] };
   },
 
+  // The account's limits from the rollouts started last (the reader asks once when Codex starts in
+  // a pane: a new thread has no rollout or no token_count yet). Every thread of the account
+  // carries them, whoever's it is: the end of each is read, and the store keeps what is newest.
+  async accountLimits(io, memo) {
+    if (!memo.home || !memo.account) return;
+    for (const file of await newestRollouts(io, memo.home)) {
+      const chunk = await io.tail(file, FIRST);
+      if (!chunk || typeof chunk.text !== "string") continue;
+      io.limits.offer(memo.account, newestCodex(fromEnd(completeLines(chunk.text, chunk.whole))));
+    }
+  },
+
   async read(source, io) {
-    const r = await scanTail(io, source.file, findRollout);
+    // The same lines carry the account's plan limits (`rate_limits` of the newest token_count,
+    // also where a compaction after it leaves no context number): offered to the store all headers
+    // share (`io.limits`).
+    let limits = null;
+    const r = await scanTail(io, source.file, (lines, whole) => {
+      limits = newestCodex(fromEnd(lines)) ?? limits;
+      return findRollout(lines, whole);
+    });
+    if (limits) io.limits?.offer(source.account, limits);
     if (r === NO_READING) return NO_READING;
     if (!r) return null;
     return {

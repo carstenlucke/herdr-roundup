@@ -67,7 +67,8 @@ let statForm = null; // "mac" or "gnu", found on the first call
 // It gives hc get a deadline: a slow hc frees its place in the reader's queue after HC_MS and
 // counts as no answer. The race doesn't stop hc itself, whose late answer is dropped. Without
 // `after` (the sweeper, which never asks hc) there is no deadline.
-export function makeIo({ after = null } = {}) {
+// `limits`: the store the strategies offer an account's plan limits to (limits/store.js).
+export function makeIo({ after = null, limits = null } = {}) {
   // One hc call, its JSON answer through `pick`, bounded by HC_MS where there is a timer.
   const ask = async (args, pick) => {
     let timer = null;
@@ -86,6 +87,7 @@ export function makeIo({ after = null } = {}) {
   };
   const io = {
     home: home(),
+    limits,
     now: () => Date.now(),
     terminal: (t) => ask(["get", t, "--json"], (j) => ({ pid: j.foreground?.pid ?? null, created: j.created_ms ?? null, title: j.title ?? "", cwd: j.foreground?.cwd ?? j.cwd ?? null })),
     // The screen only (no history above it): `{ text }` of `hc read`.

@@ -119,6 +119,10 @@ export class ContextReader {
     this.stats = null;
     this.memo = {};
     this.hint = null;
+    // The account the agent runs on (limits/store.js), as the strategy's locate() left it in
+    // `memo.account`: also where it found no source, as limits are the account's, not the session's.
+    this.account = null;
+    this.accountAsked = false;
     this.closed = false;
     this.job = null; // the look in the queue: released at close()
   }
@@ -134,6 +138,8 @@ export class ContextReader {
       this.terminal = terminal;
       this.strategy = strategy;
       this.reading = null;
+      this.account = null;
+      this.accountAsked = false;
       this.key = this.stats = null;
       this.memo = {};
       this.misses = 0;
@@ -213,6 +219,8 @@ export class ContextReader {
       }
       const hint = idleHint(this.reading, this.status, this.io.now());
       if (hint !== this.hint) { this.hint = hint; changed = true; }
+      const account = this.memo.account ?? null;
+      if (account !== this.account) { this.account = account; changed = true; }
       if (changed) cx.notify();
       if (this.again) { this.again = false; this.arm(cx, 0); } else this.arm(cx, this.delay());
     });
@@ -247,6 +255,17 @@ export class ContextReader {
     const { io, strategy, terminal } = this;
     const src = await strategy.locate({ terminal }, io, this.memo);
     if (gen !== this.gen) return false;
+    // An agent has started in this pane (a new pane, or a shell that became one): once, as soon as
+    // its account is known, what the account's other files say goes to the store, so a session
+    // that hasn't answered yet shows its limits. At most once a minute per account (store.due); a
+    // failure costs nothing but the limits.
+    if (!this.accountAsked && this.memo.account && strategy.accountLimits && io.limits) {
+      this.accountAsked = true;
+      if (io.limits.due(this.memo.account, io.now())) {
+        try { await strategy.accountLimits(io, this.memo); } catch {}
+        if (gen !== this.gen) return false;
+      }
+    }
     // No answer from hc proves nothing (as after a read, below): the reading stands, the next look
     // checks again.
     if (src === NO_ANSWER) { this.key = this.stats = null; return false; }

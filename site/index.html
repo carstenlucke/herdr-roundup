@@ -95,10 +95,11 @@
     <a href="#preview"><span>05</span>A preview for every file</a>
     <a href="#panes"><span>06</span>Panes with names</a>
     <a href="#context"><span>07</span>Each agent's context</a>
-    <a href="#closing"><span>08</span>Closing asks when it matters</a>
-    <a href="#updates"><span>09</span>Updates through your agent</a>
-    <a href="#install"><span>10</span>Install</a>
-    <a href="#questions"><span>11</span>Questions</a>
+    <a href="#limits"><span>08</span>Your plan's limits</a>
+    <a href="#closing"><span>09</span>Closing asks when it matters</a>
+    <a href="#updates"><span>10</span>Updates through your agent</a>
+    <a href="#install"><span>11</span>Install</a>
+    <a href="#questions"><span>12</span>Questions</a>
   </nav>
 
   <div class="md">
@@ -182,8 +183,15 @@
       <figure class="crop" style="max-width:388px"><button class="zoom" type="button"><img src="img/context-pi.webp" width="388" height="230" alt="pi's pane header with ~34%, and its card: ~34% of ~272k, read from pi's footer, with a note on how to get pi's own number"></button></figure>
     </section>
 
+    <section id="limits">
+      <h2><i>08</i>Your plan's limits</h2>
+      <p>On a subscription, a Claude Code or Codex pane shows beside the context <b>where the 5-hour and the weekly limit stand</b>: <code>5h 78%</code>, <code>wk 41%</code>. From 70&nbsp;% a warning sign comes before the number, red from 90&nbsp;%, a no-entry sign at 100&nbsp;%. The limits are your account's, so every pane of an agent shows the same, as of the last answer in any of them. <b>Hover</b> for when each window resets, and whether you are ahead of it: the tick on the bar is how much of the window's time has passed.</p>
+      <figure class="crop" style="max-width:408px"><button class="zoom" type="button"><img src="img/limits.webp" width="408" height="320" alt="Claude Code's pane header with 41%, 5h 78% with a warning sign and wk 41%, and its card: below the context, Limits as of 14:02, 5-hour 78% resets in 1h 35m, Weekly 41% resets Tue 08:48, and a note that at this pace the 5-hour limit runs out about 15:00, 37m before it resets"></button></figure>
+      <p style="margin-top:30px">Codex needs nothing for this. Claude Code tells its limits only to its status line, so they come with the same integration as its context window (<code>scripts/agent-integrations.sh install claude</code>). With an API key there are no windows and nothing is shown; pi and opencode don't pass the limits on.</p>
+    </section>
+
     <section id="closing">
-      <h2><i>08</i>Closing asks when it matters</h2>
+      <h2><i>09</i>Closing asks when it matters</h2>
       <p>You choose when closing a tab or a pane asks first: <b>Never</b>, <b>While an agent works</b> (the default) or <b>Always</b>. Tabs have the choice in their right-click menu, panes in the terminal's. <kbd>cmd-w</kbd> closes the tab, <kbd>cmd-shift-w</kbd> the focused pane, both through your choice.</p>
       <div class="stack">
         <figure class="crop"><button class="zoom" type="button"><img src="img/close-menu.webp" width="520" height="290" alt="The tab's right-click menu with Ask before closing a tab: Never, While an agent works, Always"></button></figure>
@@ -193,7 +201,7 @@
     </section>
 
     <section id="updates">
-      <h2><i>09</i>Updates through your agent</h2>
+      <h2><i>10</i>Updates through your agent</h2>
       <div class="side wide">
         <div>
           <p>The installed version sits under the name at the top left. <b>Once a day</b> the layout asks GitHub for its latest release: a plain request with a generic name, so GitHub sees nothing but your IP address.</p>
@@ -205,7 +213,7 @@
     </section>
 
     <section id="install">
-      <h2><i>10</i>Install</h2>
+      <h2><i>11</i>Install</h2>
       <p>Herdr Roundup needs <a href="https://herdr.dev">Herdr App</a>. The easiest way in is your agent: paste this into it.</p>
       <div class="box">
         <div class="line"><code>Read ~/.config/herdr-app/AGENTS.md, then add this layout: https://github.com/carstenlucke/herdr-roundup/tree/main</code><button class="copy" type="button">Copy</button></div>
@@ -220,7 +228,7 @@
     </section>
 
     <section id="questions">
-      <h2><i>11</i>Questions</h2>
+      <h2><i>12</i>Questions</h2>
       <details id="mods"><summary>Which seven mods come with it?</summary>
         <ul>
           <li><code>roundup-workspace-chrome</code>: the sheep, the name and the version at the top left, and the update check.</li>

@@ -118,7 +118,10 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   put. The meter (Claude Code, Codex, pi and opencode panes) is a pill: a
   bar, the percent and the tokens (`4% 18.3k / 475k`), `accent` below 65%,
   `working` from 65%, `blocked` with an alert mark from 80%; without a
-  known window only the tokens, from pi's footer bar and `~` percent only. Terminal padding 14 × 12px. Right-clicking a terminal shows Herdr's
+  known window only the tokens, from pi's footer bar and `~` percent only.
+  Claude Code and Codex on a subscription add the account's plan limits
+  after a 1px `border` divider, each a short name (10.5px `dim`) and its
+  percent: `5h 21% wk 40%`. Terminal padding 14 × 12px. Right-clicking a terminal shows Herdr's
   pane menu (Split right, Split down, Zoom, where right-clicks go, Close
   pane), then "Ask before closing a pane" with the same three choices. A
   terminal outside a tab has no pane: its menu leaves out Split, Zoom and
@@ -244,6 +247,28 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
     exactly). Without it Claude Code shows its window only after a
     `/context`, Codex only in direct mode (`codex --no-daemon`), pi the
     rounded percent of its footer, opencode nothing.
+- **Plan limits** (the 5-hour and the weekly window, by their percent
+  used): `muted` below 70%; from 70% `foreground` with an alert mark in
+  `working`, from 90% in `blocked`, at 100% a no-entry mark. They are the
+  account's (the agent's config folder), so every pane of an agent shows
+  the same, as of the last answer in any of them. An agent that has
+  just started shows them before its first answer, from what the
+  account's other sessions on this computer left.
+  - Narrow headers drop the context's tokens first, then the looser limit
+    (the tighter stays from 70%), then both but for a mark from 90%.
+  - A reading older than 15 min is dimmed; a window whose reset has
+    passed since reads `–`; no reading (an API key, no answer yet, pi,
+    opencode) leaves the pill as it is, and limits without a context
+    number stand alone.
+  - The card adds "Limits" (280px wide then): the plan where the agent
+    names it (Codex), "as of 19:28", per window a row (`5-hour`, `78%`,
+    "resets in 1h 35m", from a day on "resets Tue 08:48") and a 4px bar
+    with a tick where the window's time stands. From 50% used, a fill
+    ahead of the tick adds "At this pace the 5-hour limit runs out about
+    20:35, 37m before it resets" in `working`; at 100% when the agent
+    answers again.
+  - Claude Code needs its status line integration for them (the same as
+    for its window); Codex needs nothing.
 - **Closing** asks first as its kind's choice says: the tab menu's for tabs,
   the terminal menu's for panes; both stay after a restart. A tab closes by
   its ×, its menu's Close or `cmd-w`; a pane by its header's ×, Close pane
@@ -497,6 +522,19 @@ strategy per agent program (`context/strategies/<agent>.js`), `io` from
 - **Adding an agent:** one strategy file and one line in the registry; an
   integration writes `~/.cache/herdr-roundup/context/<agent>/<t>.json`
   with `{v: 1, terminal, pid, at}`.
+- **Plan limits** (`limits/`): no read of their own. Claude's strategy
+  takes `rate_limits` from the status line file it reads anyway, Codex's
+  from the newest `token_count` line of the rollout tail (`parse.js`), and
+  offers them to `store.js`, module state all header copies share, under
+  the account `claude:<CLAUDE_CONFIG_DIR>` or `codex:<CODEX_HOME>` (the
+  strategy leaves it in `memo.account`, the reader in `account`). The
+  header's 2s look draws again when its account's reading changed. A
+  further source is one parser and one `offer`.
+  - The one read of their own: when an agent starts in a pane, the reader
+    calls the strategy's `accountLimits` once (the store allows it once a
+    minute per account). Claude's reads the integration's files of other
+    terminals whose transcript lies under the same config folder, Codex's
+    the ends of the five rollouts started last within eight days.
 
 **`roundup-spaces`** (clone of `spaces` 0.1.14, `place: "none"`, title
 "Spaces"). Reads `spaces()`, `panes()`, `terminals()` (each agent's `turn`),
@@ -814,6 +852,10 @@ of global `tab.close` and `pane.close`.
   pi or two opencode in one folder show their own; pi without its
   extension shows its footer's `~` percent, opencode without its plugin
   nothing.
+- A Claude Code and a Codex pane on a subscription show their account's
+  limits after the context (`5h 21% wk 40%`), the same in every pane of
+  that agent and as `/usage` and `/status` say right after an answer; a
+  shell, a pi and an opencode pane show none.
 - Every pane header shows its terminal's address (`t5j`); double-clicking
   copies it. `hc label t5j roundup-pane.name=Build` shows "Build" within a
   second; so does renaming in the dialog, and an empty name shows the

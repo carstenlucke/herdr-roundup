@@ -9,6 +9,7 @@
 
 import { NO_ANSWER, foreground, processEnv, observeJsonFile, observeTerminalFile, parseJson } from "../locate.js";
 import { scanTail, fromEnd, NO_READING } from "../tail.js";
+import { fromClaude } from "../../limits/parse.js";
 
 export const IDLE_COMPACT_MS = 55 * 60 * 1000; // observed on this machine, see RECIPE
 export const IDLE_COMPACT_FROM = 200_000;
@@ -23,6 +24,7 @@ export const SNAPSHOT_META = '"isMeta"[[:space:]]*:[[:space:]]*true';
 // filtered lines that are no snapshot follow the last one, the window stays unknown (tokens only).
 export const SNAPSHOT_CANDIDATES = 8;
 const COMPACT_ENV = ["CLAUDE_CODE_AUTO_COMPACT_WINDOW", "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE"];
+export const ACCOUNT_FILES = 60; // how many terminals' files accountLimits reads at most
 
 // A folder as Claude Code names its project folder: every character not a letter or digit is "-".
 export const slug = (cwd) => cwd.replace(/[^a-zA-Z0-9]/g, "-");
@@ -134,6 +136,9 @@ export default {
     // The process's environment names its terminal: another one's means another terminal's agent.
     if (env?.HC_TERMINAL_ID && env.HC_TERMINAL_ID !== agent.terminal) return null;
     const home = env?.CLAUDE_CONFIG_DIR || `${io.home}/.claude`;
+    // The account for the plan limits (limits/store.js): the config folder, known before a session is.
+    memo.account = `claude:${home}`;
+    memo.home = home;
     // Each file of the source is observed once per look, here, its stat before its content
     // (locate.js, observeJsonFile): the reader takes these stats (`observed`) and asks none again,
     // so no stat can be newer than what was read. The session file, then the status line file,
@@ -142,6 +147,9 @@ export default {
     const session = checkSession(sessionFile.json, fg);
     if (!session) return null;
     const status = await observeTerminalFile(io, "claude", agent.terminal, fg.pid);
+    // The status line's stdin carries the account's plan limits too: offered to the store all
+    // headers share (`io.limits`; the file is this terminal's and this process's, so this account's).
+    if (status.file) io.limits?.offer(memo.account, fromClaude(status.file));
     const path = status.file?.claude?.session_id === session.sessionId ? status.file.claude.transcript_path : null;
     // The status line's path first, then the slug's: both asked on every look, the folder search
     // (held after a miss) only when neither is there.
@@ -168,6 +176,22 @@ export default {
       files: [sessionFile.path, status.path, transcript?.path].filter(Boolean),
       observed: { [sessionFile.path]: sessionFile.stat, [status.path]: status.stat, ...(transcript && { [transcript.path]: transcript.stat }) },
     };
+  },
+
+  // The account's limits as the integration kept them for other terminals (the reader asks once
+  // when Claude starts in a pane: a session before its first answer has none of its own). A file
+  // counts when its session's transcript lies under this config folder: the same account. Files
+  // of ended terminals count too, until the sweep removes them: the store keeps what is newest.
+  async accountLimits(io, memo) {
+    if (!memo.home || !memo.account) return;
+    const dir = `${io.home}/.cache/herdr-roundup/context/claude`;
+    const names = ((await io.list(dir)) ?? []).filter((n) => /^[A-Za-z0-9_-]+\.json$/.test(n)).slice(0, ACCOUNT_FILES);
+    for (const name of names) {
+      const f = parseJson(await io.readText(`${dir}/${name}`));
+      const path = f?.claude?.transcript_path;
+      if (f?.v !== 1 || typeof path !== "string" || !path.startsWith(`${memo.home}/projects/`)) continue;
+      io.limits.offer(memo.account, fromClaude(f));
+    }
   },
 
   // `memo` is the reader's per-terminal store: the snapshot search runs once per session and then
