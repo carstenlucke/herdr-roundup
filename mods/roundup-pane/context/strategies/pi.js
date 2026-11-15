@@ -66,6 +66,7 @@ export default {
     const ext = await observeTerminalFile(io, "pi", agent.terminal, fg.pid);
     if (ext.file) {
       memo.screenPid = null;
+      memo.footer = null;
       return { ...base, session: ext.file.session ?? null, file: ext.file, how: "extension", files: [ext.path], observed: { [ext.path]: ext.stat } };
     }
     const screen = await io.screen(agent.terminal);
@@ -77,7 +78,12 @@ export default {
       return memo.screenPid === fg.pid ? NO_ANSWER : null;
     }
     memo.screenPid = fg.pid;
-    return { ...base, footer, at: io.now(), how: "screen", files: [], fresh: true };
+    // The time the footer first showed this value (of this process): an unchanged footer gives the
+    // same reading, so the header isn't drawn again on every look.
+    const seen = memo.footer;
+    const same = seen && seen.pid === fg.pid && seen.percent === footer.percent && seen.window === footer.window;
+    if (!same) memo.footer = { pid: fg.pid, percent: footer.percent, window: footer.window, at: io.now() };
+    return { ...base, footer, at: memo.footer.at, how: "screen", files: [], fresh: true };
   },
 
   // Before its first answer pi counts 0 (`0.0%`): its system prompt isn't in that number, so it

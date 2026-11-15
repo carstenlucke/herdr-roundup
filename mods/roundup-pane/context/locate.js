@@ -85,9 +85,14 @@ export async function observeJsonFile(io, path) {
 // `file` only if it is this terminal's and was written by this process: { v: 1, terminal, pid, at,
 // ... }. A file of an ended terminal, of an earlier process in the same terminal, or of another
 // version gives null (with its stat: it was read).
-export async function observeTerminalFile(io, agent, terminal, pid) {
+// `parent`: a file written by a direct child of the foreground process counts too (its `ppid` is
+// that pid), for an agent started through a launcher that stays in the foreground and runs the real
+// program as its child (opencode installed with npm or bun: a node script spawns the binary, and hc
+// reports the script's pid). One level only, from the file: no process tree is asked.
+export async function observeTerminalFile(io, agent, terminal, pid, { parent = false } = {}) {
   const { path, stat, json: f } = await observeJsonFile(io, integrationFile(io, agent, terminal));
-  const own = f && f.v === 1 && f.terminal === terminal && f.pid === pid && Number.isFinite(f.at);
+  const writer = f && (f.pid === pid || (parent && Number.isInteger(f.ppid) && f.ppid > 1 && f.ppid === pid));
+  const own = f && f.v === 1 && f.terminal === terminal && writer && Number.isFinite(f.at);
   return { path, stat, file: own ? f : null };
 }
 

@@ -67,7 +67,8 @@ test("pi's extension file right after a compaction (tokens unknown): no number, 
 });
 
 test("an extension file of another process or terminal doesn't count: then pi's footer", async () => {
-  for (const over of [{ pid: PID + 1 }, { terminal: "t9" }, { v: 2 }]) {
+  // A child's file (its ppid the foreground pid) counts only for opencode's launcher, not for pi.
+  for (const over of [{ pid: PID + 1 }, { pid: PID + 1, ppid: PID }, { terminal: "t9" }, { v: 2 }]) {
     const r = await reading(setup({ files: { [EXT]: file(over) } }));
     assert.equal(r.source, "screen", JSON.stringify(over));
   }
@@ -157,6 +158,32 @@ test("the reader reads pi's footer on every look (no file to compare) and its nu
   assert.equal(reader.key, null, "nothing kept to skip the next look");
 });
 
+test("pi's footer unchanged: the same reading with the time it first showed, so the header isn't drawn again; a new value or another pi: a new time", async () => {
+  const io = setup();
+  const reader = new ContextReader(io, { strategies: [pi], queue: makeQueue(2) });
+  reader.terminal = "t8";
+  reader.strategy = pi;
+  const t0 = io.now();
+  assert.equal(await reader.look(reader.gen), true);
+  io.clock += 15_000;
+  assert.equal(await reader.look(reader.gen), false, "the same footer later: no change");
+  assert.equal(reader.reading.at, t0);
+  io.screens.t8 = FOOTER.replace("8.6%", "9.1%");
+  assert.equal(await reader.look(reader.gen), true);
+  assert.equal(reader.reading.at, t0 + 15_000, "a new value: its own time");
+  // Another pi in the terminal with the same numbers: its own time, not the old process's.
+  const memo = {};
+  const a = setup();
+  await reading(a, memo);
+  const b = setup({ pid: PID + 1 });
+  b.clock += 60_000;
+  assert.equal((await reading(b, memo)).at, b.now());
+  // The extension in between: back on the footer later, the time starts again.
+  const c = setup({ files: { [EXT]: file({ pid: PID + 1 }) }, pid: PID + 1 });
+  await reading(c, memo);
+  assert.equal(memo.footer, null);
+});
+
 // --- the extension, as pi runs it --------------------------------------------------------------
 
 let home;
@@ -196,16 +223,20 @@ test("the extension writes pi's own numbers for its terminal on session start an
   return reading(io).then((r) => { assert.equal(r.used, 97_612); assert.equal(r.source, "extension"); });
 });
 
-test("the extension: a new session in the same process is written at once; quitting removes its file, a /new doesn't", () => {
-  const p = fakePi();
-  extension(p, { env: { HOME: home, HC_TERMINAL_ID: "t8" }, pid: PID, now: () => 1 });
-  p.emit("session_start", { reason: "startup" }, ctxWith({ tokens: 5000, contextWindow: 200_000, percent: 2.5 }));
-  p.emit("session_shutdown", { reason: "new" }, ctxWith(undefined));
-  assert.equal(existsSync(written()), true);
-  p.emit("session_start", { reason: "new" }, ctxWith({ tokens: null, contextWindow: 200_000, percent: null }, { session: "s-2" }));
-  assert.equal(JSON.parse(readFileSync(written(), "utf8")).session, "s-2");
-  p.emit("session_shutdown", { reason: "quit" }, ctxWith(undefined));
-  assert.equal(existsSync(written()), false);
+test("the extension removes its file whenever its session ends (quit, /reload, /new, /resume, /fork); the next session start writes it again at once", () => {
+  for (const reason of ["new", "resume", "fork", "reload"]) {
+    const p = fakePi();
+    extension(p, { env: { HOME: home, HC_TERMINAL_ID: "t8" }, pid: PID, now: () => 1 });
+    p.emit("session_start", { reason: "startup" }, ctxWith({ tokens: 5000, contextWindow: 200_000, percent: 2.5 }));
+    p.emit("session_shutdown", { reason }, ctxWith(undefined));
+    assert.equal(existsSync(written()), false, `${reason}: removed`);
+    // A /reload whose extension is gone (uninstalled) ends here: no file stands frozen.
+    if (reason === "reload") continue;
+    p.emit("session_start", { reason }, ctxWith({ tokens: 5000, contextWindow: 200_000, percent: 2.5 }, { session: "s-2" }));
+    assert.equal(JSON.parse(readFileSync(written(), "utf8")).session, "s-2", `${reason}: written again, the same numbers too`);
+    p.emit("session_shutdown", { reason: "quit" }, ctxWith(undefined));
+    assert.equal(existsSync(written()), false);
+  }
 });
 
 test("the extension leaves another process's file alone, writes nothing headless or outside Herdr, and never throws into pi", () => {

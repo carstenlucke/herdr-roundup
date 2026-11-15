@@ -12,8 +12,10 @@
 // (a temp file, then rename), only when something changed, on session start, at the end of each
 // turn and when the agent settles, after a compaction, a model change or a move in the session
 // tree; not per token (message_update) nor at message_end (pi calls extensions before it saves
-// the message there, so the usage lags). Removed when pi quits. Outside a Herdr terminal, and in
-// pi's headless modes (print, json, rpc), nothing is written.
+// the message there, so the usage lags). Removed whenever its session ends (quit, /reload, /new,
+// /resume, /fork): an extension still loaded writes it again at the next session start, while one
+// uninstalled or broken by a /reload leaves no file that would stand frozen. Outside a Herdr
+// terminal, and in pi's headless modes (print, json, rpc), nothing is written.
 //
 // Plain JavaScript with node's own modules, nothing of pi's imported, so pi loads it as it is and
 // tests/context-pi.test.mjs runs it in node. Nothing here throws into pi.
@@ -57,6 +59,9 @@ export function record(ctx, { terminal, pid, now }) {
 
 // Writes `content` as <dir>/<terminal>.json through a temp file `.<terminal>.<pid>` (the name the
 // pane header's sweep knows). True when written.
+// writeAtomic, removeOwn and TERMINAL are copied into opencode/tui.js, on purpose: pi's loader (jiti,
+// transforming) resolves a relative import from the symlink's path in pi's extensions folder, so it
+// wouldn't reach a shared helper beside this file. A test keeps the copies the same.
 export function writeAtomic(dir, content) {
   const tmp = join(dir, `.${content.terminal}.${content.pid}`);
   try {
@@ -102,7 +107,8 @@ export default function roundupContext(pi, { env = process.env, pid = process.pi
     write(ctx);
   });
   for (const event of EVENTS) on(event, (_event, ctx) => write(ctx));
-  on("session_shutdown", (event) => {
-    if (event?.reason === "quit" && tui) removeOwn(dir, terminal, pid);
+  on("session_shutdown", () => {
+    if (tui) removeOwn(dir, terminal, pid);
+    last = null;
   });
 }

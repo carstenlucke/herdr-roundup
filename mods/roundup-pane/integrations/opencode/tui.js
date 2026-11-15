@@ -5,8 +5,11 @@
 // another terminal's pid. It keeps the numbers of the session the TUI shows, per Herdr terminal:
 //
 //   ~/.cache/herdr-roundup/context/opencode/<HC_TERMINAL_ID>.json
-//     { "v": 1, "terminal": "t7", "pid": <the TUI's pid>, "at": <ms>, "session", "model",
-//       "used", "window", "percent" }
+//     { "v": 1, "terminal": "t7", "pid": <the TUI's pid>, "ppid": <its parent's>, "at": <ms>,
+//       "session", "model", "used", "window", "percent" }
+//
+// `ppid`: installed with npm or bun, opencode runs as the child of a node launcher, and that
+// launcher is the terminal's foreground process; the pane header accepts either.
 //
 // As opencode's own footer and sidebar count it (tui/src/util/session.ts, contextUsage): the last
 // answer with tokens after the last completed compaction, before a revert point, input + output +
@@ -57,19 +60,25 @@ export function usageOf(messages, models, boundary) {
   };
 }
 
-// The file's content for what the TUI shows now.
-export function record(context, { terminal, pid, now }) {
+// The file's content for what the TUI shows now. The models of the session's location, else of the
+// TUI's current one (`context.location`, as opencode's own session route does with
+// `session.location ?? location.ref`): a session whose info isn't loaded yet; neither of them, and
+// the model list falls back to the default location itself.
+export function record(context, { terminal, pid, ppid = null, now }) {
   const route = context.ui.router.current();
   const session = route?.type === "session" && typeof route.sessionID === "string" ? route.sessionID : null;
   let u = null;
   if (session) {
     const info = context.data.session.get(session);
-    u = usageOf(context.data.session.message.list(session), context.data.location.model.list(info?.location), info?.revert?.messageID);
+    let current;
+    try { current = context.location; } catch { current = undefined; }
+    u = usageOf(context.data.session.message.list(session), context.data.location.model.list(info?.location ?? current), info?.revert?.messageID);
   }
   return {
     v: 1,
     terminal,
     pid,
+    ppid: Number.isInteger(ppid) && ppid > 0 ? ppid : null,
     at: u?.at ?? now,
     session,
     model: u?.model ?? null,
@@ -79,6 +88,9 @@ export function record(context, { terminal, pid, now }) {
   };
 }
 
+// writeAtomic, removeOwn and TERMINAL are copies of pi-context.js's, on purpose: pi's loader (jiti,
+// transforming) resolves a relative import from the symlink's path in pi's extensions folder, so it
+// wouldn't reach a shared helper beside the link's target. A test keeps the copies the same.
 export function writeAtomic(dir, content) {
   const tmp = join(dir, `.${content.terminal}.${content.pid}`);
   try {
@@ -99,7 +111,7 @@ export function removeOwn(dir, terminal, pid) {
   } catch {}
 }
 
-export function setup(context, { env = process.env, pid = process.pid, now = () => Date.now() } = {}) {
+export function setup(context, { env = process.env, pid = process.pid, ppid = process.ppid, now = () => Date.now() } = {}) {
   const terminal = env.HC_TERMINAL_ID;
   if (typeof terminal !== "string" || !TERMINAL.test(terminal)) return;
   const dir = contextDir(env);
@@ -108,7 +120,7 @@ export function setup(context, { env = process.env, pid = process.pid, now = () 
     timer = null;
     if (disposed) return;
     try {
-      const content = record(context, { terminal, pid, now: now() });
+      const content = record(context, { terminal, pid, ppid, now: now() });
       // The time alone (home screen, no answer: now) is no change.
       const key = JSON.stringify({ ...content, at: content.used === null ? 0 : content.at });
       if (key !== last && writeAtomic(dir, content)) last = key;

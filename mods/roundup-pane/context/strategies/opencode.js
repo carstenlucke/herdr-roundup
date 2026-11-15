@@ -7,7 +7,9 @@
 // ~/.cache/herdr-roundup/context/opencode/<t>.json for the session it shows: the tokens of its last
 // answer after the last compaction (input + output + reasoning + cache read + cache write) of the
 // model's `limit.context`, as opencode's own footer sums them. On its home screen, or before an
-// answer, the file says no number. It counts only if its pid is the terminal's foreground process.
+// answer, the file says no number. It counts only if its pid, or its parent's (`ppid`), is the
+// terminal's foreground process: opencode installed with npm or bun runs as a child of a node
+// launcher, which hc reports. The source keeps the foreground pid, which the reader checks again.
 
 import { NO_ANSWER, foreground, processEnv, observeTerminalFile, normalizedReading } from "../locate.js";
 import { NO_READING } from "../tail.js";
@@ -22,7 +24,7 @@ export default {
     if (!fg || fg === NO_ANSWER) return fg;
     const env = await processEnv(io, fg.pid, memo);
     if (env?.HC_TERMINAL_ID && env.HC_TERMINAL_ID !== agent.terminal) return null;
-    const plugin = await observeTerminalFile(io, "opencode", agent.terminal, fg.pid);
+    const plugin = await observeTerminalFile(io, "opencode", agent.terminal, fg.pid, { parent: true });
     if (!plugin.file) return null;
     return {
       id: "opencode",

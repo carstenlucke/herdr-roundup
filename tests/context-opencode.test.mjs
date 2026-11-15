@@ -11,7 +11,9 @@ import opencode from "../mods/roundup-pane/context/strategies/opencode.js";
 import { strategyFor } from "../mods/roundup-pane/context/registry.js";
 import { NO_READING } from "../mods/roundup-pane/context/tail.js";
 import { cardModel } from "../mods/roundup-pane/context/card.js";
-import plugin, { usageOf, setup as pluginSetup, SETTLE_MS, ROUTE_MS } from "../mods/roundup-pane/integrations/opencode/tui.js";
+import { ContextReader, makeQueue } from "../mods/roundup-pane/context/reader.js";
+import plugin, { usageOf, record as pluginRecord, setup as pluginSetup, writeAtomic, removeOwn, SETTLE_MS, ROUTE_MS } from "../mods/roundup-pane/integrations/opencode/tui.js";
+import * as piExtension from "../mods/roundup-pane/integrations/pi-context.js";
 import { contextIo } from "./support/context-io.mjs";
 
 const PID = 777;
@@ -41,6 +43,28 @@ test("opencode without its plugin, or a file of another process or terminal: no 
   assert.equal(await reading(setup({ files: { [FILE]: file({ pid: PID + 1 }) } })), null);
   assert.equal(await reading(setup({ files: { [FILE]: file({ terminal: "t6" }) } })), null);
   assert.equal(await reading(setup({ env: { HC_TERMINAL_ID: "t6" } })), null);
+});
+
+test("opencode installed with npm or bun (a node launcher in the foreground runs it as its child): the child's file counts by its ppid", async () => {
+  const child = file({ pid: PID + 5, ppid: PID });
+  const r = await reading(setup({ files: { [FILE]: child } }));
+  assert.equal(r?.used, 42_000);
+  const src = await opencode.locate({ terminal: "t5" }, setup({ files: { [FILE]: child } }), {});
+  assert.equal(src.pid, PID, "the source keeps the foreground pid, which the reader checks again");
+  for (const over of [{ pid: PID + 5, ppid: PID + 6 }, { pid: PID + 5, ppid: null }, { pid: PID + 5, ppid: String(PID) }, { pid: PID + 5, ppid: PID, terminal: "t6" }, { pid: PID + 5, ppid: PID, v: 2 }]) {
+    assert.equal(await reading(setup({ files: { [FILE]: file(over) } })), null, JSON.stringify(over));
+  }
+});
+
+test("the reader keeps the reading of a launcher's child: its last check of the foreground pid passes", async () => {
+  const io = setup({ files: { [FILE]: file({ pid: PID + 5, ppid: PID }) } });
+  const reader = new ContextReader(io, { strategies: [opencode], queue: makeQueue(2) });
+  reader.terminal = "t5";
+  reader.strategy = opencode;
+  assert.equal(await reader.look(reader.gen), true);
+  assert.equal(reader.reading?.used, 42_000);
+  assert.equal(await reader.look(reader.gen), false, "unchanged file: nothing new");
+  assert.equal(reader.reading?.used, 42_000);
 });
 
 test("opencode on its home screen or before an answer: no number; a window unknown: tokens alone", async () => {
@@ -117,8 +141,8 @@ test("the plugin is an opencode 2 TUI plugin: an id and setup", () => {
 
 test("the plugin writes the shown session's numbers a moment after an event, the home screen as no number, and removes its file at cleanup", async () => {
   const { state, context, emit } = fakeContext();
-  const cleanup = pluginSetup(context, { env: { HOME: home, HC_TERMINAL_ID: "t5" }, pid: PID, now: () => 5 });
-  assert.deepEqual(JSON.parse(readFileSync(written(), "utf8")), { v: 1, terminal: "t5", pid: PID, at: 5, session: null, model: null, used: null, window: null, percent: null });
+  const cleanup = pluginSetup(context, { env: { HOME: home, HC_TERMINAL_ID: "t5" }, pid: PID, ppid: 700, now: () => 5 });
+  assert.deepEqual(JSON.parse(readFileSync(written(), "utf8")), { v: 1, terminal: "t5", pid: PID, ppid: 700, at: 5, session: null, model: null, used: null, window: null, percent: null });
   state.route = { type: "session", sessionID: "ses_1" };
   state.sessions.ses_1 = { id: "ses_1", location: {} };
   state.messages.ses_1 = [assistant("a1", T(40_000, 2000))];
@@ -137,6 +161,37 @@ test("the plugin writes the shown session's numbers a moment after an event, the
   await cleanup();
   assert.equal(existsSync(written()), false);
   assert.equal(state.listeners.length, 0, "unsubscribed");
+});
+
+test("the plugin takes the models of the session's location, else of the TUI's current one, else lets the list use its default", () => {
+  const A = { directory: "/a" }, B = { directory: "/b" };
+  const calls = [];
+  const withModels = (sessionInfo, current) => ({
+    ui: { router: { current: () => ({ type: "session", sessionID: "ses_1" }) } },
+    location: current,
+    data: {
+      session: { get: () => sessionInfo, message: { list: () => [assistant("a1", T(50_000))] } },
+      // Only B's list has the model; the default location (A) none.
+      location: { model: { list: (loc) => { calls.push(loc); return (loc ?? A) === B ? MODELS : []; } } },
+    },
+  });
+  const rec = (ctx) => pluginRecord(ctx, { terminal: "t5", pid: PID, now: 1 });
+  assert.equal(rec(withModels(undefined, B)).window, 200_000, "session info not loaded yet: the current location");
+  assert.equal(rec(withModels({ id: "ses_1", location: A }, B)).window, null, "the session's own location first");
+  assert.equal(rec(withModels(undefined, undefined)).window, null, "neither: the list's default");
+  assert.deepEqual(calls, [B, A, undefined]);
+});
+
+test("the plugin's file helpers are pi's extension's, copied on purpose (pi's loader can't import a shared one): the copies stay the same", () => {
+  const src = (f) => Function.prototype.toString.call(f);
+  assert.equal(src(writeAtomic), src(piExtension.writeAtomic));
+  assert.equal(src(removeOwn), src(piExtension.removeOwn));
+  const terminalRe = (path) => {
+    const m = readFileSync(new URL(path, import.meta.url), "utf8").match(/^const TERMINAL = .+;$/m);
+    assert.ok(m?.[0], `${path}: its TERMINAL line`);
+    return m[0];
+  };
+  assert.equal(terminalRe("../mods/roundup-pane/integrations/opencode/tui.js"), terminalRe("../mods/roundup-pane/integrations/pi-context.js"));
 });
 
 test("the plugin notices a route change without an event, within its poll", async () => {
