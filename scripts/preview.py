@@ -1202,17 +1202,6 @@ if SCENE == "quicklook" or POSTER:
 # Notes (11px, dim) wrap to the card's width, 3px apart, 5px below the rows.
 CARD_W = 260
 
-def wrap(words, size, width):
-    lines_, cur = [], ""
-    for w_ in words.split():
-        nxt = f"{cur} {w_}".strip()
-        if cur and tw(nxt, size) > width:
-            lines_.append(cur)
-            cur = w_
-        else:
-            cur = nxt
-    return lines_ + ([cur] if cur else [])
-
 def context_card(address, prog, name, used, of, pct, rows_, notes=()):
     mr, mt = METERS[address]
     notes_ = [wrap(n, 11, CARD_W - 22) for n in notes]

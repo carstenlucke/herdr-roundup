@@ -171,6 +171,11 @@ test("pi's footer unchanged: the same reading with the time it first showed, so 
   io.screens.t8 = FOOTER.replace("8.6%", "9.1%");
   assert.equal(await reader.look(reader.gen), true);
   assert.equal(reader.reading.at, t0 + 15_000, "a new value: its own time");
+  io.clock += 15_000;
+  io.screens.t8 = FOOTER.replace("8.6%/66k", "9.1%/128k");
+  assert.equal(await reader.look(reader.gen), true, "the same percent of another window");
+  assert.equal(reader.reading.window, 128_000);
+  assert.equal(reader.reading.at, t0 + 30_000, "another window: its own time");
   // Another pi in the terminal with the same numbers: its own time, not the old process's.
   const memo = {};
   const a = setup();
