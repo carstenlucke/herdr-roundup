@@ -24,9 +24,8 @@ import { menuView, shortcut } from "./menu.js";
 import { folder, paneId, cutName } from "./header-text.js";
 // Roundup's own: the agent's context meter (context/, context-io.js, context-view.js; RECIPE "Context").
 import { ContextReader, sweep } from "./context/reader.js";
-import { headerTier } from "./context/text.js";
 import { makeIo } from "./context-io.js";
-import { meter, hasContext } from "./context-view.js";
+import { meter, headerTiers, sameTiers } from "./context-view.js";
 // The plan limits of the agent's account, beside the context in the same pill (limits/; RECIPE "Limits").
 import { sharedStore } from "./limits/store.js";
 import { shownState } from "./limits/text.js";
@@ -133,10 +132,11 @@ export default class Pane extends View {
     return this.context?.account ? sharedStore.get(this.context.account) : null;
   }
 
-  // The header's tier. Limits beside a context number take the wider thresholds; limits alone (a
-  // session before its first answer) are narrower than a context part, and keep the context's own.
-  tierNow(limits = this.limits()) {
-    return headerTier(this.width, settings()?.zoom, Boolean(limits) && hasContext(this.context?.reading));
+  // The header's tiers, the context part's and the limit part's (context-view.js, headerTiers):
+  // limits beside a context number take the wider thresholds where they draw something there;
+  // limits alone (a session before its first answer) keep the context's own.
+  tierNow(limits = this.limits(), now = Date.now()) {
+    return headerTiers(this.width, settings()?.zoom, { limits, reading: this.context?.reading, now });
   }
 
   // --- the header ---
@@ -193,7 +193,7 @@ export default class Pane extends View {
     const now = Date.now();
     const limits = this.limits();
     this.limitsShown = shownState(limits, now, this.hovered);
-    this.shownTier = this.tierNow(limits);
+    this.shownTier = this.tierNow(limits, now);
     const ctx = this.context && meter(t, { pane, reading: this.context.reading, tier: this.shownTier, agent: this.context.strategy?.id, hint: this.context.hint, covered: covered(),
       limits, now, program: p.program?.name ?? null,
       // An icon of its own: an element belongs to the one parent it's given (gpui-kit.d.ts).
@@ -202,7 +202,7 @@ export default class Pane extends View {
       .id(`pane-head-${pane}`)
       .size_full()
       // The width is kept on every change (a later zoom tiers it), but only a new tier re-renders.
-      .on_size_change((size, cx) => { this.width = size.width; if (this.tierNow() !== this.shownTier) cx.notify(); })
+      .on_size_change((size, cx) => { this.width = size.width; if (!sameTiers(this.tierNow(), this.shownTier)) cx.notify(); })
       .px(10)
       .gap(8)
       .items_center()

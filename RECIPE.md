@@ -254,12 +254,18 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   before its own first answer. Claude Code needs its status line
   integration, Codex nothing.
   - Narrow headers drop the tokens first, then the looser limit, then both
-    but for a mark from 90%; limits alone keep the tighter window.
+    but for a mark from 90%; where no limit fits, the context keeps its
+    bar. Limits alone keep the tighter window.
   - Older than 15 min or of unknown age: dimmed; a window that has reset
-    since reads `–`.
+    since reads `–` and doesn't count for the age.
   - None where the pane's own session isn't on the plan: Claude Code on
-    Bedrock, Vertex or Foundry, or answering without limits (an API key,
-    another endpoint); Codex whose last answers carry none of the pool.
+    Bedrock, Vertex or Foundry, or answering in this pane without limits
+    (an API key, another endpoint); Codex whose last answers carry none of
+    the pool.
+  - A proxy (`ANTHROPIC_BASE_URL`) on another subscription and a direct
+    pane on one config folder show each other's limits (#49), and a window
+    of the other can stay until its reset: give the proxy a
+    `CLAUDE_CONFIG_DIR` of its own.
   - The card adds "Limits": the plan (Codex), the time, per window a row
     with its reset and a bar with a tick for the time gone; from 50% a
     pace warning, at 100% when the agent answers again.

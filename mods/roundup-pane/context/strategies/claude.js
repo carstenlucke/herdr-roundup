@@ -32,7 +32,8 @@ export const ACCOUNT_AT_ONCE = 4;
 // The process doesn't run on the plan: it is told to use Bedrock, Vertex or Foundry (switched on
 // as Claude Code reads such a switch). An API key, a token or another endpoint (ANTHROPIC_BASE_URL:
 // a pass-through proxy may still carry the subscription) decides nothing: such a pane shows its
-// account's limits until its own first answer says otherwise (noLimits, below).
+// account's limits until its own first answer says otherwise (claudePlan, below). The three keys
+// must be in context-io.js's ENV_KEYS, or the environment never has them.
 const ON = new Set(["1", "true", "yes", "on"]);
 const OFF_PLAN = ["CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY"];
 export const offPlan = (env) => Boolean(env) && (OFF_PLAN.some((k) => ON.has(String(env[k] ?? "").trim().toLowerCase())));
@@ -132,6 +133,28 @@ export function parseSnapshot(line) {
   return { model, window, buffer, at, session: l.sessionId ?? null };
 }
 
+// Whether this process's session runs on the plan, as `memo.plan` keeps it: { pid, key, on }, `key`
+// the session (null: by the environment, offPlan, which locate() sets itself), `on` true or false;
+// null while nothing is known (the pane shows its account's limits). From `prev`, the pid, the
+// session (null: not known yet) and the session's own status line file (`own`, null without one):
+// - another process, or another session of it, starts with nothing known; so does a process whose
+//   environment no longer says it is off the plan;
+// - a status with `rate_limits`: on the plan, for good in this process and session (a later status
+//   without them, a call that brought no limit headers, doesn't hide them);
+// - an answer seen in this process without them: off the plan. Seen means the integration's
+//   `limitsAt` is a number: the script sets it only when the API time grew over its last file of the
+//   same process and session. The API time alone proves nothing: a resumed session gets its old one
+//   back before it answers;
+// - no file of this session (not written yet, not readable this time): what it said before stands.
+export function claudePlan(prev, pid, session, own) {
+  const kept = prev && prev.pid === pid && prev.key !== null && (session === null || prev.key === session) ? prev : null;
+  if (!own || session === null) return kept;
+  if (own.claude?.rate_limits && typeof own.claude.rate_limits === "object") return { pid, key: session, on: true };
+  if (kept?.on) return kept;
+  if (Number.isFinite(own.limitsAt)) return { pid, key: session, on: false };
+  return kept;
+}
+
 export default {
   id: "claude",
   matches: ["claude", "claude-code"],
@@ -148,15 +171,15 @@ export default {
     if (env?.HC_TERMINAL_ID && env.HC_TERMINAL_ID !== agent.terminal) return null;
     const home = folder(env?.CLAUDE_CONFIG_DIR || `${io.home}/.claude`);
     // The account for the plan limits (limits/store.js): the config folder, known before a session is.
-    memo.account = `claude:${home}`;
-    memo.home = home;
-    // Whether this pane shows them is its own matter (`memo.noLimits`, which the reader heeds): the
-    // account stays the other panes'. Kept from look to look for the same process: by its
-    // environment here, by what its own session says below.
-    if (memo.noLimits && memo.noLimits.pid !== fg.pid) memo.noLimits = null;
+    // Only from an environment that was read: where `ps` failed this look, the default folder may not
+    // be this process's, so the account is unknown (nothing shown, offered or asked for) until a look
+    // reads it. The session is still searched for in the default folder.
+    memo.account = env ? `claude:${home}` : null;
+    memo.home = env ? home : null;
+    // Whether this pane shows them is its own matter (`memo.plan`, which the reader heeds): the
+    // account stays the other panes'.
     const byEnv = offPlan(env);
-    if (byEnv) memo.noLimits = { pid: fg.pid, env: true };
-    else if (memo.noLimits?.env) memo.noLimits = null;
+    memo.plan = byEnv ? { pid: fg.pid, key: null, on: false } : claudePlan(memo.plan, fg.pid, null, null);
     // Each file of the source is observed once per look, here, its stat before its content
     // (locate.js, observeJsonFile): the reader takes these stats (`observed`) and asks none again,
     // so no stat can be newer than what was read. The session file, then the status line file,
@@ -167,21 +190,8 @@ export default {
     const status = await observeTerminalFile(io, "claude", agent.terminal, fg.pid);
     // The status line's stdin carries the account's plan limits too: offered to the store all
     // headers share (`io.limits`; the file is this terminal's and this process's, so this account's).
-    if (status.file && !byEnv) io.limits?.offer(memo.account, fromClaude(status.file));
-    // This session's own word: it has answered (its API time counts) and its status has no limits,
-    // so it doesn't run on the plan. Only the file of this very session says so; without it (not
-    // written yet, not readable this time) what the session said before stands. Once its status
-    // carried limits, this process's session is on the plan for good (`memo.onPlan`): a later
-    // status without them (a call that brought no limit headers) doesn't hide them.
-    if (!byEnv) {
-      const own = status.file?.claude?.session_id === session.sessionId ? status.file.claude : null;
-      const limited = Boolean(own?.rate_limits && typeof own.rate_limits === "object");
-      if (memo.onPlan && (memo.onPlan.pid !== fg.pid || memo.onPlan.session !== session.sessionId)) memo.onPlan = null;
-      if (limited) memo.onPlan = { pid: fg.pid, session: session.sessionId };
-      const was = memo.noLimits?.session === session.sessionId;
-      const none = !memo.onPlan && (own ? own.cost?.total_api_duration_ms > 0 && !limited : was);
-      memo.noLimits = none ? { pid: fg.pid, session: session.sessionId } : null;
-    }
+    if (status.file && !byEnv && memo.account) io.limits?.offer(memo.account, fromClaude(status.file));
+    if (!byEnv) memo.plan = claudePlan(memo.plan, fg.pid, session.sessionId, status.file?.claude?.session_id === session.sessionId ? status.file : null);
     const path = status.file?.claude?.session_id === session.sessionId ? status.file.claude.transcript_path : null;
     // The status line's path first, then the slug's: both asked on every look, the folder search
     // (held after a miss) only when neither is there.

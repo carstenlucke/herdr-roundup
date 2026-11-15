@@ -24,6 +24,46 @@ test("parseEnv takes the environment's value, the last of a key (arguments come 
   assert.equal(parseEnv(null), null);
 });
 
+test("Claude's off-plan switches reach the strategy through parseEnv: Bedrock, Vertex and Foundry switched on hide the pane's limits, offer none, ask none", async () => {
+  const { contextIo, fixture } = await import("./support/context-io.mjs");
+  const { makeStore } = await import("../mods/roundup-pane/limits/store.js");
+  const { integrationFile } = await import("../mods/roundup-pane/context/locate.js");
+  const { ContextReader } = await import("../mods/roundup-pane/context/reader.js");
+  const claude = (await import("../mods/roundup-pane/context/strategies/claude.js")).default;
+  const stdin = JSON.parse(fixture("claude-status-stdin.json"));
+  const pid = 52896, started = 1794613515093;
+  // The environment as Herdr's io has it: `ps -wwE`'s text through parseEnv, not a made-up object.
+  const paneIo = (vars) => {
+    const io = contextIo({ terminals: { t7: { pid, created: started - 4000, title: "Claude Code", cwd: "/Users/a/src/demo" } } });
+    io.env = async () => parseEnv(`/opt/claude/bin/claude HC_TERMINAL_ID=t7 ${vars} PATH=/bin\n`);
+    io.files[`/Users/a/.claude/sessions/${pid}.json`] = JSON.stringify({ pid, sessionId: stdin.session_id, cwd: "/Users/a/src/demo", startedAt: started, kind: "interactive" });
+    io.files[integrationFile(io, "claude", "t7")] = JSON.stringify({ v: 1, terminal: "t7", pid, at: 1, limitsAt: 1, claude: stdin });
+    io.limits = makeStore();
+    return io;
+  };
+  for (const k of ["CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY"]) {
+    const io = paneIo(`${k}=1`);
+    const memo = {};
+    assert.ok(await claude.locate({ terminal: "t7" }, io, memo));
+    assert.equal(memo.plan?.on, false, `${k}=1: off the plan`);
+    assert.equal(io.limits.get(memo.account), null, `${k}=1: its file's numbers aren't offered`);
+    // The reader shows no account for it and asks nothing.
+    let asks = 0;
+    const reader = new ContextReader(io, { strategies: [{ ...claude, accountLimits: async () => { asks++; } }], queue: makeQueue(2) });
+    const cx = makeCx();
+    reader.see({ terminal: "t7", program: { key: "claude" }, app: null, status: "idle" }, true, cx);
+    await clock.advance(2000);
+    assert.equal(reader.account, null);
+    assert.equal(asks, 0);
+    reader.close();
+  }
+  const off = paneIo("CLAUDE_CODE_USE_BEDROCK=0");
+  const memo = {};
+  await claude.locate({ terminal: "t7" }, off, memo);
+  assert.notEqual(memo.plan?.on, false, "named, but switched off");
+  assert.ok(off.limits.get(memo.account));
+});
+
 test("parseStat reads macOS' and GNU's size and mtime in ms; parseLsof the open paths", () => {
   assert.deepEqual(parseStat("5280 1794339085.804695647\n"), { size: 5280, mtime: 1794339085805 });
   assert.deepEqual(parseStat("12 1794339085\n"), { size: 12, mtime: 1794339085000 });

@@ -141,18 +141,22 @@ export default {
     if (env?.HC_TERMINAL_ID && env.HC_TERMINAL_ID !== agent.terminal) return null;
     const home = folder(env?.CODEX_HOME || `${io.home}/.codex`);
     // The account for the plan limits (limits/store.js): the config folder, known before a rollout is.
-    memo.account = `codex:${home}`;
-    memo.home = home;
-    // Whether this pane shows them is its own matter (`memo.noLimits`, set by read() from this
-    // session's rollout, heeded by the reader): it holds for the process that said so.
-    if (memo.noLimits && memo.noLimits.pid !== fg.pid) memo.noLimits = null;
+    // Only from an environment that was read: where `ps` failed this look, the default folder may not
+    // be this process's, so the account is unknown (nothing shown, offered or asked for) until a look
+    // reads it; the source then names no account either. The rollout is still searched for in the
+    // default folder.
+    memo.account = env ? `codex:${home}` : null;
+    memo.home = env ? home : null;
+    // Whether this pane shows them is its own matter (`memo.plan`, { pid, key: rollout, on }, set by
+    // read() from this session's rollout, heeded by the reader): it holds for the process that said so.
+    if (memo.plan && memo.plan.pid !== fg.pid) memo.plan = null;
     const base = { id: "codex", terminal: agent.terminal, pid: fg.pid, account: memo.account };
     // A thread id in the title names the thread: then only its rollout counts. `titlePrefix` is
     // what the title said, for the reader's check after the read (the title still says it).
     const prefix = byTitle(fg.title);
-    // The title names another thread than the one that said it has no limits (`/new`, a resume):
-    // that word is not this thread's, also before its rollout is there to say anything.
-    if (prefix && memo.noLimits?.file && !rolloutId(memo.noLimits.file.slice(memo.noLimits.file.lastIndexOf("/") + 1))?.startsWith(prefix)) memo.noLimits = null;
+    // The title names another thread than the one that said it (`/new`, a resume): that word is not
+    // this thread's, also before its rollout is there to say anything.
+    if (prefix && memo.plan?.key && !rolloutId(memo.plan.key.slice(memo.plan.key.lastIndexOf("/") + 1))?.startsWith(prefix)) memo.plan = null;
     if (prefix) {
       const file = await rolloutByPrefix(io, home, prefix, memo);
       if (file === AMBIGUOUS) return null;
@@ -213,10 +217,10 @@ export default {
     // nothing, and what this rollout said before stands. Never from another session's file
     // (accountLimits).
     if (limits?.reading) {
-      io.limits?.offer(source.account, limits.reading);
-      memo.noLimits = null;
-    } else if (r !== null && limits?.events > 0 && (limits.events >= CODEX_EVENTS || limits.whole)) memo.noLimits = { pid: source.pid, file: source.file };
-    else if (memo.noLimits && memo.noLimits.file !== source.file) memo.noLimits = null;
+      if (source.account) io.limits?.offer(source.account, limits.reading);
+      memo.plan = { pid: source.pid, key: source.file, on: true };
+    } else if (r !== null && limits?.events > 0 && (limits.events >= CODEX_EVENTS || limits.whole)) memo.plan = { pid: source.pid, key: source.file, on: false };
+    else if (memo.plan && memo.plan.key !== source.file) memo.plan = null;
     if (r === NO_READING) return NO_READING;
     if (!r) return null;
     return {

@@ -226,9 +226,51 @@ test("the header's tier counts the limits: a width that held the tokens without 
   assert.equal(words(trigger(cardOf(root))), "8% 5h 4% wk 38%", "with limits: the tokens go first");
   const before = cx.notified;
   fire(root, "size_change", { width: 500, height: 28 }, cx);
-  assert.equal(cx.notified, before + 1, "bar -> narrow re-renders");
+  assert.equal(cx.notified, before + 1, "the limits leave the pill: it re-renders");
   assert.equal(words(trigger(cardOf(render()))), "8%", "nothing tight: the context alone");
   view.close();
+});
+
+test("a header too narrow for the limits it would show keeps the context's own tiers: its bar stays, the pill holds no limits, the card still has them", () => {
+  const pillOf = (root) => trigger(cardOf(root));
+  const bars = (root) => all(pillOf(root)).filter((e) => e.style("w")?.[0] === BAR_W).length;
+  const limitIds = (root) => all(pillOf(root)).map((e) => e.elementId).filter((id) => /^ph-lim(-sep)?-p1$/.test(id ?? ""));
+  const at = (width, used5, usedWk, { reading = { ...R, used: 400_000, at: Date.now() }, zoom = 1, gone = false } = {}) => {
+    sharedStore.clear();
+    const l = live(used5, usedWk);
+    if (gone) l.windows[0].resetsAt = Date.now() - MIN;
+    sharedStore.offer(ACC, l);
+    herdr.set({ settings: { zoom, dark: true, font_family: "Menlo", font_size: 13 } });
+    const m = header();
+    m.view.context.reading = reading;
+    fire(m.render(), "size_change", { width: width * zoom, height: 28 }, m.cx);
+    const root = m.render();
+    m.view.close();
+    return root;
+  };
+  // 425 px, the context at 40 %, the limits low: the bar as without limits, no limit part, no divider.
+  let root = at(425, 12, 30);
+  assert.equal(words(pillOf(root)), "40%");
+  assert.equal(bars(root), 1, "the context's bar");
+  assert.deepEqual(limitIds(root), []);
+  assert.match(words(content(cardOf(root))), /5-hour 12% .*Weekly 30%/, "the card still has them");
+  // The narrow step (430..540) with low limits: the same.
+  root = at(480, 12, 30);
+  assert.deepEqual([words(pillOf(root)), bars(root), limitIds(root)], ["40%", 1, []]);
+  // The same at zoom 1.5.
+  root = at(425, 12, 30, { zoom: 1.5 });
+  assert.deepEqual([words(pillOf(root)), bars(root), limitIds(root)], ["40%", 1, []]);
+  // A limit that fits: at 425 px from 90 % its mark, and the context without its bar, as before.
+  root = at(425, 92, 30);
+  assert.deepEqual([words(pillOf(root)), bars(root), limitIds(root)], ["40% 5h", 0, ["ph-lim-sep-p1", "ph-lim-p1"]]);
+  root = at(480, 75, 30);
+  assert.deepEqual([words(pillOf(root)), bars(root)], ["40% 5h 75%", 1], "narrow: the tighter one from 70 %, the context's bar");
+  // A window that has reset counts for nothing: 95 % before its reset fits no step.
+  root = at(425, 95, 30, { gone: true });
+  assert.deepEqual([words(pillOf(root)), bars(root), limitIds(root)], ["40%", 1, []]);
+  // Limits alone keep theirs (PAN-103), below the narrowest step nothing.
+  assert.equal(words(pillOf(at(425, 12, 30, { reading: null }))), "5h 12% wk 30%");
+  assert.equal(cardOf(at(250, 95, 30)), undefined, "none below 300 px");
 });
 
 test("the header's tier for limits alone is the context's own: a session before its first answer shows its limits in a split pane, at any zoom", () => {
@@ -253,7 +295,7 @@ test("the header's tier for limits alone is the context's own: a session before 
   view.context.reading = { ...R, at: Date.now() };
   const before = cx.notified;
   fire(root, "size_change", { width: 480, height: 28 }, cx);
-  assert.equal(cx.notified, before + 1, "bar alone is narrow beside a context number");
+  assert.equal(cx.notified, before + 1, "beside a context number nothing tight fits 480 px: the pill changes");
   assert.equal(words(trigger(cardOf(render()))), "8%", "nothing tight: the context alone");
   view.close();
 });

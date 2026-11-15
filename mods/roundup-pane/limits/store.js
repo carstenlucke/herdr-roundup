@@ -70,16 +70,15 @@ export function makeStore() {
       }
       return changed;
     },
-    // { at, plan, source, rev, windows: [{ minutes, used, resetsAt, at }] } (shortest first), or null.
-    // A window's `at` is null where its time is unknown. The reading's `at` is its oldest window's,
-    // null as soon as one is unknown: it is as old as the oldest of what it shows. `rev` counts the
-    // account's changes.
+    // { plan, source, rev, windows: [{ minutes, used, resetsAt, at }] } (shortest first), or null.
+    // A window's `at` is null where its time is unknown. How old the reading is depends on the time
+    // (a window that has reset doesn't count): limits/text.js, asOf(). `rev` counts the account's
+    // changes.
     get(account) {
       const a = account ? accounts.get(account) : null;
       if (!a || !a.windows.size) return null;
       const windows = [...a.windows.values()].sort((x, y) => x.minutes - y.minutes);
-      const at = windows.some((w) => w.at === null) ? null : Math.min(...windows.map((w) => w.at));
-      return { at, plan: a.plan, source: a.source, rev: a.rev, windows };
+      return { plan: a.plan, source: a.source, rev: a.rev, windows };
     },
     clear() { accounts.clear(); asked.clear(); },
   };

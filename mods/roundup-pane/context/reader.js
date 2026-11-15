@@ -87,7 +87,9 @@ export function valid(r) {
 
 const sameStats = (a, b) => Array.isArray(a) && Array.isArray(b) && a.length === b.length
   && a.every((s, i) => (s === null ? b[i] === null : b[i] !== null && s.size === b[i].size && s.mtime === b[i].mtime));
-const sourceKey = (s) => JSON.stringify([s.id, s.pid, s.session ?? s.thread ?? null, s.files]);
+// The account belongs to it: a strategy that offers limits in read() (Codex) whose account becomes
+// known on a later look (a failed `ps` before) reads again, though its file hasn't changed.
+const sourceKey = (s) => JSON.stringify([s.id, s.pid, s.session ?? s.thread ?? null, s.account ?? null, s.files]);
 // Spreads the first reads of many headers over a moment.
 const jitter = (terminal) => [...String(terminal)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 9973, 7) % 8 * 150;
 
@@ -98,6 +100,10 @@ export function idleHint(reading, status, now) {
   if (!Number.isFinite(at) || status === "working") return null;
   return now <= at + HINT_FOR_MS ? at : null;
 }
+
+// The strategy has said this pane's own session doesn't run on the plan (`memo.plan`, set by its
+// locate() or read()): it shows no limits and asks for none.
+const offPlan = (memo) => memo.plan?.on === false;
 
 export class ContextReader {
   constructor(io, { strategies = STRATEGIES, queue = sharedQueue } = {}) {
@@ -121,10 +127,10 @@ export class ContextReader {
     this.hint = null;
     // The account the agent runs on (limits/store.js), as the strategy's locate() left it in
     // `memo.account`: also where it found no source, as limits are the account's, not the session's.
-    // None while the strategy says this pane's own session has no plan limits (`memo.noLimits`:
-    // an API key, another endpoint): the account is the other panes', the pane shows none.
+    // None while the strategy says this pane's own session has no plan limits (`memo.plan.on`
+    // false: an API key, another endpoint): the account is the other panes', the pane shows none.
     this.account = null;
-    this.accountAsked = false;
+    this.accountAsked = null; // the account the ask went out for
     this.closed = false;
     this.job = null; // the look in the queue: released at close()
     this.side = null; // the ask for the account's kept files, a job of its own: released at close()
@@ -142,7 +148,7 @@ export class ContextReader {
       this.strategy = strategy;
       this.reading = null;
       this.account = null;
-      this.accountAsked = false;
+      this.accountAsked = null;
       // The ask for the last program's account is not this one's: its place in the queue goes
       // (close() could no longer reach it once the next ask takes `side`).
       this.side?.release();
@@ -228,7 +234,7 @@ export class ContextReader {
       }
       const hint = idleHint(this.reading, this.status, this.io.now());
       if (hint !== this.hint) { this.hint = hint; changed = true; }
-      const account = this.memo.noLimits ? null : this.memo.account ?? null;
+      const account = offPlan(this.memo) ? null : this.memo.account ?? null;
       if (account !== this.account) { this.account = account; changed = true; }
       if (changed) cx.notify();
       this.askAccount();
@@ -237,7 +243,8 @@ export class ContextReader {
   }
 
   // An agent has started in this pane (a new pane, or a shell that became one): once, as soon as
-  // its account is known, what the account's other files say goes to the store, so a session that
+  // its account is known (and once more should it run on another account later), what the account's
+  // other files say goes to the store, so a session that
   // hasn't answered yet shows its limits. At most once a minute per account (store.due, noted as the
   // job starts: an ask released while it waits takes no other pane's turn); a failure costs nothing
   // but the limits.
@@ -250,8 +257,12 @@ export class ContextReader {
   // the same.
   askAccount() {
     const { io, strategy, memo } = this;
-    if (this.accountAsked || this.closed || !memo.account || memo.noLimits || !strategy?.accountLimits || !io.limits) return;
-    this.accountAsked = true;
+    if (this.accountAsked === memo.account || this.closed || !memo.account || offPlan(memo) || !strategy?.accountLimits || !io.limits) return;
+    // Another account than the last ask's (another process in the pane, its own config folder): the
+    // last ask's place goes, as in see(), so close() can still reach the one that follows.
+    this.side?.release();
+    this.side = null;
+    this.accountAsked = memo.account;
     const about = { account: memo.account, home: memo.home };
     const gen = this.gen;
     const side = this.queue.enter(async () => {

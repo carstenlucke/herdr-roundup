@@ -151,6 +151,37 @@ test("the status line script stamps limitsAt when Claude's API time grew since i
   assert.deepEqual([k.api, k.limitsAt, k.claude.cost.total_api_duration_ms], [null, null, 950]);
 });
 
+test("a resumed Claude session (its old API time back, no limits yet) shows its account's limits until an answer in this process says otherwise", async () => {
+  const { contextIo } = await import("./support/context-io.mjs");
+  const { makeStore } = await import("../mods/roundup-pane/limits/store.js");
+  const claude = (await import("../mods/roundup-pane/context/strategies/claude.js")).default;
+  const file = join(home, ".cache/herdr-roundup/context/claude/t7.json");
+  const stdin = (api, limits = false) => JSON.stringify({ session_id: "s1", cost: { total_api_duration_ms: api }, ...(limits && { rate_limits: { five_hour: { used_percentage: 43, resets_at: 1794783000 } } }) });
+  const write = (input, pid) => assert.equal(spawnSync("sh", [script], { input, env: { ...env, HC_TERMINAL_ID: "t7", CLAUDE_PID: pid }, encoding: "utf8" }).status, 0);
+  // The script's real file, then the strategy's look at it, for the process 4242 in t7.
+  const io = contextIo({ home, terminals: { t7: { pid: 4242, created: 1000, title: "Claude Code", cwd: "/x" } }, envs: { 4242: { HC_TERMINAL_ID: "t7" } } });
+  io.files[`${home}/.claude/sessions/4242.json`] = JSON.stringify({ pid: 4242, sessionId: "s1", cwd: "/x", startedAt: 2000, kind: "interactive" });
+  io.limits = makeStore();
+  const look = async (memo) => { io.files[file] = readFileSync(file, "utf8"); await claude.locate({ terminal: "t7" }, io, memo); return memo; };
+  // The session ran before in another process of this terminal, then `claude --resume` (4242): its
+  // first status has the old API time back and no limits yet, also after a mode change.
+  write(stdin(3000, true), "1111");
+  write(stdin(4200), "4242");
+  const memo = await look({});
+  assert.equal(memo.plan, null, "the API time it got back is no answer here: the account's limits show");
+  write(stdin(4200), "4242");
+  assert.equal((await look(memo)).plan, null);
+  // Its first answer in this process, without limits: off the plan.
+  write(stdin(5100), "4242");
+  assert.deepEqual((await look(memo)).plan, { pid: 4242, key: "s1", on: false });
+  // A subscriber's resumed session: its first answer brings the limits, on the plan.
+  write(stdin(4200), "4242");
+  const sub = await look({});
+  assert.equal(sub.plan, null);
+  write(stdin(6000, true), "4242");
+  assert.deepEqual((await look(sub)).plan, { pid: 4242, key: "s1", on: true });
+});
+
 test("the status line script writes nothing outside a Herdr terminal or for an odd terminal id, and prints nothing without a previous line", () => {
   for (const id of [undefined, "../x", "t 7"]) {
     const e = { ...env };

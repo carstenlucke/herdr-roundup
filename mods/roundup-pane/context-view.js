@@ -18,7 +18,7 @@
 
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, HoverCard } from "gpui-base";
-import { share, percentText, severity, usedText, tokens } from "./context/text.js";
+import { share, percentText, severity, usedText, tokens, headerTier } from "./context/text.js";
 import { cardModel } from "./context/card.js";
 import { severity as limitSeverity, names, passed, worst, stale, CRITICAL } from "./limits/text.js";
 import { limitsModel } from "./limits/card.js";
@@ -89,26 +89,46 @@ function limitWindow(t, w, now) {
     .child(num);
 }
 
-// The limits' part of the pill, or null: no reading, or nothing of it fits this tier.
+// What the limits' part of the pill shows at a tier: { windows } (each as "5h 78%"), { mark } (the
+// tighter window as a mark and its short name), or null: no reading, or nothing of it fits.
 // `alone`: no context part beside it (a session before its first answer). The tier is then the
 // context's own (TIERS, no "narrow"), and its narrowest step still has room for one window: the
 // tighter one, whatever it stands at, or the first when all have reset, so the pill and its card
-// are there.
+// are there. Beside a context part: all from "bar", the tighter from 70 % at "narrow", a mark from
+// 90 % at "percent" (the rounded percent, as severity() reads it).
+export function limitChoice(limits, tier, now, alone = false) {
+  if (!limits?.windows?.length || tier === "none") return null;
+  if (tier === "full" || tier === "bar") return { windows: limits.windows };
+  if (alone) return { windows: [worst(limits.windows, now) ?? limits.windows[0]] };
+  const w = worst(limits.windows, now);
+  if (tier === "narrow" && w && limitSeverity(w.used) !== "ok") return { windows: [w] };
+  if (tier === "percent" && w && Math.round(w.used) >= CRITICAL) return { mark: w };
+  return null;
+}
+
+// What a header of this width draws: { context, limits }, the context part's tier and the limit
+// part's (null: none in the pill; the card still has them). Limits beside a context part take the
+// wider thresholds (LIMIT_TIERS) only where they draw something there: where the tighter limit is
+// too low for the narrow steps, the context keeps its own tiers (TIERS) and the pill no limits, so
+// its bar doesn't go for nothing. Limits alone take the context's own tiers (limitChoice).
+// `width` as on_size_change measures it, `zoom` Herdr's (headerTier).
+export function headerTiers(width, zoom, { limits = null, reading = null, now = Date.now() } = {}) {
+  const own = headerTier(width, zoom, false);
+  if (!limits?.windows?.length) return { context: own, limits: null };
+  if (!hasContext(reading)) return { context: own, limits: limitChoice(limits, own, now, true) ? own : null };
+  const wide = headerTier(width, zoom, true);
+  return limitChoice(limits, wide, now) ? { context: wide, limits: wide } : { context: own, limits: null };
+}
+export const sameTiers = (a, b) => a?.context === b?.context && a?.limits === b?.limits;
+
+// The limits' part of the pill at its tier, or null.
 function limitPart(t, pane, limits, tier, now, alone = false) {
-  if (!limits?.windows?.length) return null;
-  let kids = [];
-  if (tier === "full" || tier === "bar") kids = limits.windows.map((w) => limitWindow(t, w, now));
-  else if (alone) kids = [limitWindow(t, worst(limits.windows, now) ?? limits.windows[0], now)];
-  else {
-    const w = worst(limits.windows, now);
-    const sev = w ? limitSeverity(w.used) : "ok";
-    if (tier === "narrow" && sev !== "ok") kids = [limitWindow(t, w, now)];
-    else if (tier === "percent" && Math.round(w?.used ?? 0) >= CRITICAL) {
-      kids = [svg(limitMark(sev)).size(10).flex_none().text_color(limitColor(t, sev)),
-        div().flex_none().text_size(10.5).text_color(t.dim).child(names(w.minutes).short)];
-    }
-  }
-  if (!kids.length) return null;
+  const choice = limitChoice(limits, tier, now, alone);
+  if (!choice) return null;
+  const kids = choice.mark
+    ? [svg(limitMark(limitSeverity(choice.mark.used))).size(10).flex_none().text_color(limitColor(t, limitSeverity(choice.mark.used))),
+      div().flex_none().text_size(10.5).text_color(t.dim).child(names(choice.mark.minutes).short)]
+    : choice.windows.map((w) => limitWindow(t, w, now));
   return h_flex().id(`ph-lim-${pane}`).flex_none().gap(tier === "percent" ? 3 : 8).items_center()
     .when(stale(limits, now), (e) => e.opacity(STALE_OPACITY)).children(kids);
 }
@@ -117,10 +137,12 @@ function limitPart(t, pane, limits, tier, now, alone = false) {
 // `head`: { pic, name, id, font } for the card's top line, as the header shows them.
 // `limits`: the account's plan limits (limits/store.js), `now` for their times, `program` the
 // agent program's name for the card's notes.
+// `tier`: headerTiers()'s { context, limits }, or one tier for both.
 export function meter(t, { pane, reading, tier, agent, hint = null, covered = false, head = null, limits = null, now = Date.now(), program = null }) {
-  if (tier === "none") return null;
-  const ctx = contextPart(t, reading, tier);
-  const lim = limitPart(t, pane, limits, tier, now, !ctx);
+  const tiers = typeof tier === "string" ? { context: tier, limits: tier } : tier;
+  if (tiers.context === "none") return null;
+  const ctx = contextPart(t, reading, tiers.context);
+  const lim = tiers.limits ? limitPart(t, pane, limits, tiers.limits, now, !ctx) : null;
   if (!ctx && !lim) return null;
   // The pill of the mockup (variant E): framed, 20 px high, the hover color under the pointer.
   const el = h_flex().id(`ph-ctx-${pane}`).flex_none().h(PILL_H).px(7).gap(6).items_center().rounded(5)

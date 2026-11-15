@@ -21,7 +21,9 @@ const run = async (cmd, args, timeout = T) => {
 };
 // The environment keys a strategy looks at, from `ps -wwE`: the arguments come first, so the
 // last occurrence of a key is the environment's. A value with a space is cut there.
-const ENV_KEYS = ["HC_TERMINAL_ID", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "CLAUDE_CODE_AUTO_COMPACT_WINDOW", "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE"];
+// The keys of claude.js's offPlan() are among them: a key not listed here never reaches it.
+export const ENV_KEYS = ["HC_TERMINAL_ID", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "CLAUDE_CODE_AUTO_COMPACT_WINDOW", "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE",
+  "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY"];
 export function parseEnv(text) {
   if (typeof text !== "string") return null;
   const env = {};

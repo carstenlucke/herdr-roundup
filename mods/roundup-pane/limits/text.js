@@ -80,9 +80,22 @@ export function when(ms, now) {
 export const whenClock = (ms, now) => (ms - now < 1440 * MIN ? clock(ms) : dayClock(ms));
 
 // A window read more than 15 minutes ago, or nobody knows when, is old: usage elsewhere may have
-// moved it. A reading is as old as its oldest window: it is shown dimmed as a whole.
+// moved it. A reading is as old as its oldest window that hasn't reset (`asOf`): it is shown dimmed
+// as a whole. A window that has reset shows no number ("–"), so its age says nothing about what is
+// shown; only when all have reset does their age count.
 export const staleWindow = (w, now) => !Number.isFinite(w.at) || now - w.at > STALE_MS;
-export const stale = (reading, now) => Boolean(reading?.windows?.length) && reading.windows.some((w) => staleWindow(w, now));
+const counted = (reading, now) => {
+  const live = reading.windows.filter((w) => !passed(w, now));
+  return live.length ? live : reading.windows;
+};
+export const stale = (reading, now) => Boolean(reading?.windows?.length) && counted(reading, now).some((w) => staleWindow(w, now));
+// When the reading is from: its oldest window's time among those counted (above), null as soon as
+// one of those has no time (or there are no windows).
+export function asOf(reading, now) {
+  if (!reading?.windows?.length) return null;
+  const ws = counted(reading, now);
+  return ws.every((w) => Number.isFinite(w.at)) ? Math.min(...ws.map((w) => w.at)) : null;
+}
 
 // What of the limits the pill shows, as one string: the header draws again when it changes (a
 // reading going stale, a window passing its reset), and each minute while `live` (hovered: the
