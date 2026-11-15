@@ -590,11 +590,11 @@ test("Claude's strategy: once its own status carried limits, a session stays on 
 });
 
 test("Claude's account and its paths: one config folder however it is spelled", async () => {
-  const { folder } = await import("../mods/roundup-pane/context/locate.js");
-  assert.equal(folder("/Users/a/.claude-work/"), "/Users/a/.claude-work");
-  assert.equal(folder("/Users/a//.claude-work//"), "/Users/a/.claude-work");
-  assert.equal(folder("/"), "/", "the root stays");
-  assert.equal(folder("~/.claude"), "~/.claude", "a tilde stays as written, as the agent takes it");
+  const { normalizeFolder } = await import("../mods/roundup-pane/context/locate.js");
+  assert.equal(normalizeFolder("/Users/a/.claude-work/"), "/Users/a/.claude-work");
+  assert.equal(normalizeFolder("/Users/a//.claude-work//"), "/Users/a/.claude-work");
+  assert.equal(normalizeFolder("/"), "/", "the root stays");
+  assert.equal(normalizeFolder("~/.claude"), "~/.claude", "a tilde stays as written, as the agent takes it");
   const io = claudeIo({ env: { HC_TERMINAL_ID: "t7", CLAUDE_CONFIG_DIR: "/Users/a/.claude-work/" } });
   io.files[`/Users/a/.claude-work/sessions/${CPID}.json`] = JSON.stringify({ pid: CPID, sessionId: SID, cwd: "/Users/a/src/demo", startedAt: STARTED, kind: "interactive" });
   const memo = {};
@@ -615,7 +615,7 @@ test("Claude's account and its paths: one config folder however it is spelled", 
 });
 
 test("Claude's account limits: every file of the folder is read, the account's among many others' too, a few at a time", async () => {
-  const { ACCOUNT_AT_ONCE } = await import("../mods/roundup-pane/context/strategies/claude.js");
+  const { ACCOUNT_AT_ONCE } = await import("../mods/roundup-pane/context/locate.js");
   const io = claudeIo({ status: null });
   const dir = "/Users/a/.cache/herdr-roundup/context/claude";
   for (let i = 0; i < 70; i++) io.files[`${dir}/a${String(i).padStart(2, "0")}.json`] = JSON.stringify({ v: 1, terminal: `a${i}`, pid: 9, at: AT, limitsAt: AT, claude: { ...stdin, transcript_path: "/Users/b/.claude/projects/-x/s.jsonl" } });

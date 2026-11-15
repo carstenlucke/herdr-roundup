@@ -11,7 +11,7 @@
 //   of its descendants holds open (lsof), asked on every look: `/new` or a resume opens another
 //   one in the same process. A shared daemon's files lie outside the process tree.
 
-import { NO_ANSWER, foreground, processEnv, byTitle, titleIds, byOpenFile, uuid7Time, localParts, parseJson, folder, eachLimited } from "../locate.js";
+import { NO_ANSWER, foreground, processEnv, byTitle, titleIds, byOpenFile, uuid7Time, localParts, parseJson, normalizeFolder, eachLimited, ACCOUNT_AT_ONCE } from "../locate.js";
 import { scanTail, fromEnd, completeLines, FIRST, NO_READING } from "../tail.js";
 import { codexLimits, CODEX_EVENTS } from "../../limits/parse.js";
 
@@ -91,7 +91,6 @@ export function findRollout(lines, whole) {
 
 export const ACCOUNT_FILES = 5;
 export const ACCOUNT_DAYS = 8; // a weekly window, and a day
-export const ACCOUNT_AT_ONCE = 4; // rollout ends read at a time
 
 // The rollouts started last, newest first, at most `n` and none from a day folder older than
 // `days`: sessions/YYYY/MM/DD/rollout-<stamp>-<id>.jsonl sort by their names.
@@ -139,7 +138,7 @@ export default {
     if (!fg || fg === NO_ANSWER) return fg;
     const env = await processEnv(io, fg.pid, memo);
     if (env?.HC_TERMINAL_ID && env.HC_TERMINAL_ID !== agent.terminal) return null;
-    const home = folder(env?.CODEX_HOME || `${io.home}/.codex`);
+    const home = normalizeFolder(env?.CODEX_HOME || `${io.home}/.codex`);
     // The account for the plan limits (limits/store.js): the config folder, known before a rollout is.
     // Only from an environment that was read: where `ps` failed this look, the default folder may not
     // be this process's, so the account is unknown (nothing shown, offered or asked for) until a look

@@ -30,7 +30,10 @@ export const integrationFile = (io, agent, terminal) => `${io.home}/.cache/herdr
 // A folder as one spelling: repeated slashes as one, none at the end ("/" stays "/"). An agent's
 // config folder names its account (limits/store.js): `/x/.claude/` and `/x/.claude` are one. A `~`
 // stays as written: the agent takes the variable as it is too.
-export const folder = (p) => (typeof p === "string" ? p.replace(/\/{2,}/g, "/").replace(/(.)\/$/, "$1") : p);
+export const normalizeFolder = (p) => (typeof p === "string" ? p.replace(/\/{2,}/g, "/").replace(/(.)\/$/, "$1") : p);
+
+// How many of an account's kept files the strategies' accountLimits read at a time (eachLimited).
+export const ACCOUNT_AT_ONCE = 4;
 
 // `fn` over `items`, at most `limit` at a time; a failing one costs only its own result (null).
 export async function eachLimited(items, limit, fn) {

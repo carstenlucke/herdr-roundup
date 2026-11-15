@@ -7,7 +7,7 @@
 //   → status line file ~/.cache/herdr-roundup/context/claude/<t>.json, if its pid and session match
 //   → transcript: the status line's transcript_path, else projects/<cwd slug>/<sessionId>.jsonl
 
-import { NO_ANSWER, foreground, processEnv, observeJsonFile, observeTerminalFile, parseJson, folder, eachLimited } from "../locate.js";
+import { NO_ANSWER, foreground, processEnv, observeJsonFile, observeTerminalFile, parseJson, normalizeFolder, eachLimited, ACCOUNT_AT_ONCE } from "../locate.js";
 import { scanTail, fromEnd, NO_READING } from "../tail.js";
 import { fromClaude } from "../../limits/parse.js";
 
@@ -27,7 +27,6 @@ const COMPACT_ENV = ["CLAUDE_CODE_AUTO_COMPACT_WINDOW", "CLAUDE_AUTOCOMPACT_PCT_
 // accountLimits reads every terminal's file, a few at a time, up to a bound only a runaway folder
 // reaches: past it, which files are read is chance (best effort; the sweep keeps live terminals).
 export const ACCOUNT_READS = 500;
-export const ACCOUNT_AT_ONCE = 4;
 
 // The process doesn't run on the plan: it is told to use Bedrock, Vertex or Foundry (switched on
 // as Claude Code reads such a switch). An API key, a token or another endpoint (ANTHROPIC_BASE_URL:
@@ -169,7 +168,7 @@ export default {
     const env = await processEnv(io, fg.pid, memo);
     // The process's environment names its terminal: another one's means another terminal's agent.
     if (env?.HC_TERMINAL_ID && env.HC_TERMINAL_ID !== agent.terminal) return null;
-    const home = folder(env?.CLAUDE_CONFIG_DIR || `${io.home}/.claude`);
+    const home = normalizeFolder(env?.CLAUDE_CONFIG_DIR || `${io.home}/.claude`);
     // The account for the plan limits (limits/store.js): the config folder, known before a session is.
     // Only from an environment that was read: where `ps` failed this look, the default folder may not
     // be this process's, so the account is unknown (nothing shown, offered or asked for) until a look
@@ -230,11 +229,11 @@ export default {
     const dir = `${io.home}/.cache/herdr-roundup/context/claude`;
     const names = ((await io.list(dir)) ?? []).filter((n) => /^[A-Za-z0-9_-]+\.json$/.test(n)).slice(0, ACCOUNT_READS);
     // Normalized as a whole, so a config folder "/" gives "/projects/", not "//projects/".
-    const under = `${folder(`${memo.home}/projects`)}/`;
+    const under = `${normalizeFolder(`${memo.home}/projects`)}/`;
     await eachLimited(names, ACCOUNT_AT_ONCE, async (name) => {
       const f = parseJson(await io.readText(`${dir}/${name}`));
       const path = f?.claude?.transcript_path;
-      if (f?.v !== 1 || typeof path !== "string" || !folder(path).startsWith(under)) return;
+      if (f?.v !== 1 || typeof path !== "string" || !normalizeFolder(path).startsWith(under)) return;
       io.limits.offer(memo.account, fromClaude(f));
     });
   },
