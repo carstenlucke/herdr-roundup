@@ -17,8 +17,8 @@
 import base64, json, os, re, sys
 from html import escape
 
-SCENES = ["spaces", "quicklook", "files", "files-changed", "search", "symlink", "pane-header", "context", "rename",
-          "close-menu", "close-confirm", "update", "preview-tab", "float"]
+SCENES = ["spaces", "quicklook", "files", "files-changed", "search", "symlink", "pane-header", "context", "context-pi",
+          "rename", "close-menu", "close-confirm", "update", "preview-tab", "float"]
 if sys.argv[1:] == ["--scenes"]:
     print("\n".join(SCENES))
     sys.exit()
@@ -455,7 +455,8 @@ def pane(x, w, prog, name, address, status, focus, lines, bottom, hover=False, y
     terminal. `lines` run from the top, `bottom` sits on the last rows. `hover`: the pointer is on
     the header, on its pencil, so the header shows rename, split right, split down, zoom and close.
     `y`, `h`: its top and height, the tab's whole height unless it is split. `meter`: the agent's
-    context as (used, window) tokens: a 30 x 4px bar, the percent and the tokens."""
+    context as (used, window) tokens: a 30 x 4px bar, the percent and the tokens; (None, window,
+    percent) is a share without tokens, as pi's footer gives it: the bar and "~34%", no tokens."""
     PY, PH = y, h
     rect(x, PY, w, PH, "background", rx=10)
     frame(x, PY, w, PH, "accent" if focus else "border", rx=10)
@@ -477,13 +478,14 @@ def pane(x, w, prog, name, address, status, focus, lines, bottom, hover=False, y
     if meter:
         # The pill of the mockup: 20px high, framed in border, rounded 5, 7px padding, 6px gap,
         # 11.5px text; the percent at least 26px wide.
-        used, window = meter
-        pct = used * 100 / window
+        used, window = meter[:2]
+        pct = meter[2] if used is None else used * 100 / window
         sev = "blocked" if round(pct) >= 80 else "working" if round(pct) >= 65 else "accent"
         loud = sev != "accent"
-        words = f"{tokens(used)} / {tokens(window)}"
-        ptxt, pw_ = f"{round(pct)}%", max(26, tw(f"{round(pct)}%", 11.5, 500 if loud else 400) + (13 if loud else 0))
-        pill = 7 + 30 + 6 + pw_ + 6 + tw(words, 11.5) + 7
+        words = "" if used is None else f"{tokens(used)} / {tokens(window)}"
+        ptxt = ("~" if used is None else "") + f"{round(pct)}%"
+        pw_ = max(26, tw(ptxt, 11.5, 500 if loud else 400) + (13 if loud else 0))
+        pill = 7 + 30 + 6 + pw_ + (6 + tw(words, 11.5) if words else 0) + 7
         px_ = mx - pill
         METERS[address] = (mx, PY)
         frame(px_, PY + 5, pill, 20, "border", rx=5)
@@ -494,7 +496,8 @@ def pane(x, w, prog, name, address, status, focus, lines, bottom, hover=False, y
             icon("alert", nx, PY + 10, 10, sev, sw=1.8)
             nx += 13
         text(nx, PY + 19, ptxt, 11.5, "foreground" if loud else "muted", 500 if loud else 400)
-        text(px_ + 7 + 30 + 6 + pw_ + 6, PY + 19, words, 11.5, "dim")
+        if words:
+            text(px_ + 7 + 30 + 6 + pw_ + 6, PY + 19, words, 11.5, "dim")
         mx = px_ - 8
     if hover:
         # 20px buttons (3px padding round a 14px icon), 8px apart, as the header's gap.
@@ -579,7 +582,29 @@ rect(LX + 30, pb - 13, 8, 17, "terminal", op=0.85)
 
 # In the panes scene the reviewer has a name of its own, and the pointer is on its header.
 PANES = SCENE in ("pane-header", "rename")
-pane(RX, RW, "codex", "Reviewer" if PANES else "Codex", "t7", "done", False, [
+# In the context-pi scene pi reviews instead of Codex, without its extension: the meter takes the
+# share from pi's footer at the bottom (rounded, no tokens), as context/strategies/pi.js reads it.
+if SCENE == "context-pi":
+    pane(RX, RW, "pi", "pi", "t7", "done", False, [
+        [("Review src/search/facets.ts: does an empty hit list", F, 400)],
+        [("still return every facet, at zero?", F, 400)],
+        [],
+        [("read ", F, 600), ("src/search/facets.ts", D, 400)],
+        [("read ", F, 600), ("src/search/query.ts", D, 400)],
+        [("bash ", F, 600), ("npm test -- facets", D, 400)],
+        [("13 passed", G, 400)],
+        [],
+        [("facetCounts keeps a field with no hits, but the", F, 400)],
+        [("route drops empty maps before it answers.", F, 400)],
+    ], [
+        [("─" * 200, "raised", 400)],
+        [],
+        [("─" * 200, "raised", 400)],
+        [("~/code/atlas-search-filters (search-filters)", D, 400)],
+        [("↑48k ↓3.1k R41k $0.042 34.2%/272k (auto)", D, 400)],
+    ], h=CH, meter=(None, 272_000, 34.2))
+else:
+  pane(RX, RW, "codex", "Reviewer" if PANES else "Codex", "t7", "done", False, [
     [("› ", M, 400), ("Review src/search/facets.ts: does an empty hit list", F, 400)],
     [("  still return every facet, at zero?", F, 400)],
     [],
@@ -1174,24 +1199,40 @@ if SCENE == "quicklook" or POSTER:
 # top right at the meter's right (anchor top_right), 4px down. The card as context-view.js draws it
 # (the mockup's): 260px, 9 x 11px padding, rounded 8; the pane's icon, name and id chip; the tokens
 # in use big with the window and the percent; rows of label, value and a dim extra, 20px each.
+# Notes (11px, dim) wrap to the card's width, 3px apart, 5px below the rows.
 CARD_W = 260
-if SCENE == "context":
-    mr, mt = METERS["t4"]
-    rows_ = [("Free", "588k", "59%"), ("Model", "claude-opus-5-5", ""), ("Read", "14:02", "status line")]
-    CARD_H = 9 + 16 + 6 + 20 + 5 + 20 * len(rows_) + 9
-    CARD_X, CARD_Y = mr - CARD_W, mt + 30 + 4
-    overlay(CARD_X, CARD_Y, CARD_W, CARD_H, rx=8)
-    x0, y_ = CARD_X + 11, CARD_Y + 9
-    program("claude", x0, y_ + 1, 14, "dim")
-    text(x0 + 14 + 7, y_ + 12, "Claude Code", 12, "foreground", 600)
-    cx_ = x0 + 14 + 7 + tw("Claude Code", 12, 600) + 7
-    chip = mw("t4", 10.5) + 10
+
+def wrap(words, size, width):
+    lines_, cur = [], ""
+    for w_ in words.split():
+        nxt = f"{cur} {w_}".strip()
+        if cur and tw(nxt, size) > width:
+            lines_.append(cur)
+            cur = w_
+        else:
+            cur = nxt
+    return lines_ + ([cur] if cur else [])
+
+def context_card(address, prog, name, used, of, pct, rows_, notes=()):
+    mr, mt = METERS[address]
+    notes_ = [wrap(n, 11, CARD_W - 22) for n in notes]
+    NOTE_LH = 14
+    notes_h = (5 + sum(len(n) * NOTE_LH for n in notes_) + 3 * (len(notes_) - 1)) if notes_ else 0
+    card_h = 9 + 16 + 6 + 20 + 5 + 20 * len(rows_) + notes_h + 9
+    card_x, card_y = mr - CARD_W, mt + 30 + 4
+    overlay(card_x, card_y, CARD_W, card_h, rx=8)
+    x0, y_ = card_x + 11, card_y + 9
+    program(prog, x0, y_ + 1, 14, "dim")
+    text(x0 + 14 + 7, y_ + 12, name, 12, "foreground", 600)
+    cx_ = x0 + 14 + 7 + tw(name, 12, 600) + 7
+    chip = mw(address, 10.5) + 10
     rect(cx_, y_ - 1, chip, 18, "hover", rx=4)
-    text(cx_ + 5, y_ + 11.5, "t4", 10.5, "dim", family=MONO)
+    text(cx_ + 5, y_ + 11.5, address, 10.5, "dim", family=MONO)
     y_ += 16 + 6
-    text(x0, y_ + 15, "412k", 15, "foreground", 600)
-    text(x0 + tw("412k", 15, 600) + 5, y_ + 15, "of 1M", 12, "muted")
-    text(CARD_X + CARD_W - 11, y_ + 15, "41%", 12, "foreground", 600, anchor="end")
+    text(x0, y_ + 15, used, 15, "foreground", 600)
+    text(x0 + tw(used, 15, 600) + 5, y_ + 15, of, 12, "muted")
+    if pct:
+        text(card_x + CARD_W - 11, y_ + 15, pct, 12, "foreground", 600, anchor="end")
     y_ += 20 + 5
     for label, value, extra in rows_:
         text(x0, y_ + 14, label, 12, "muted")
@@ -1199,6 +1240,21 @@ if SCENE == "context":
         if extra:
             text(x0 + 84 + 8 + 50 + 8, y_ + 14, extra, 12, "dim")
         y_ += 20
+    if notes_:
+        y_ += 5
+        for n in notes_:
+            for l_ in n:
+                text(x0, y_ + 11, l_, 11, "dim")
+                y_ += NOTE_LH
+            y_ += 3
+
+if SCENE == "context":
+    context_card("t4", "claude", "Claude Code", "412k", "of 1M", "41%",
+                 [("Free", "588k", "59%"), ("Model", "claude-opus-5-5", ""), ("Read", "14:02", "status line")])
+# pi without its extension, as context/card.js words it: a share of a rounded window, no tokens.
+if SCENE == "context-pi":
+    context_card("t7", "pi", "pi", "~34%", "of ~272k", "", [("Read", "14:02", "pi's footer")],
+                 ["Rounded, as pi's footer shows it. For pi's own number: scripts/agent-integrations.sh install pi"])
 
 # What each scene is cropped to: x, y, width, height. A fourth argument "full" keeps the window.
 CROPS = {
@@ -1210,6 +1266,7 @@ CROPS = {
     "symlink": (PX - 8, LINK_Y - 107, W - PX + 8, 200),
     "pane-header": (RX - 8, 42, RW + 16, 120),
     "context": (LX + LW - 380, 42, 388, 210),
+    "context-pi": (RX + RW - 380, 42, 388, 230),
     "rename": ((W - RENAME_W) / 2 - 60, (H - RENAME_H) / 2 - 50, RENAME_W + 120, RENAME_H + 100),
     "close-menu": (WX, 0, 520, 290),
     "close-confirm": ((W - CONFIRM_W) / 2 - 60, (H - CONFIRM_H) / 2 - 50, CONFIRM_W + 120, CONFIRM_H + 100),
