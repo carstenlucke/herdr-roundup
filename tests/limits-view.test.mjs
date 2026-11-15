@@ -6,7 +6,7 @@ import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { herdr, reset, mount, pane, agentProgram, program, findAll, texts, walk, clock, fire } from "./support/harness.mjs";
 
-const { meter, BAR_W, CARD_W, CARD_W_LIMITS, STALE_OPACITY } = await import("../mods/roundup-pane/context-view.js");
+const { meter, hasContext, BAR_W, CARD_W, CARD_W_LIMITS, STALE_OPACITY } = await import("../mods/roundup-pane/context-view.js");
 const { sharedStore } = await import("../mods/roundup-pane/limits/store.js");
 const { LIMIT_TIERS, TIERS, tier, headerTier } = await import("../mods/roundup-pane/context/text.js");
 const Pane = (await import("../mods/roundup-pane/main.js")).default;
@@ -101,6 +101,32 @@ test("limits without a context reading: the pill holds the limits alone, the car
   assert.equal(meter(t, { pane: "p1", reading: null, tier: "full", limits: null, now: NOW }), null, "neither: no pill");
   // Tokens alone (Claude without a window) beside limits: both.
   assert.equal(words(pill(L([five(4), week(38)]), "full", { ...R, window: null })), "76.5k 5h 4% wk 38%");
+});
+
+test("limits alone keep a window down to the narrowest step: the tighter one whatever it stands at, the first when all have reset", () => {
+  const alone = (limits, tierName) => { const m = meter(t, { pane: "p1", reading: null, tier: tierName, limits, now: NOW }); return m && words(trigger(m)); };
+  const calm = L([five(4), week(38)]);
+  assert.equal(alone(calm, "full"), "5h 4% wk 38%");
+  assert.equal(alone(calm, "bar"), "5h 4% wk 38%");
+  assert.equal(alone(calm, "percent"), "wk 38%", "nothing tight, and still there: no context number stands for it");
+  assert.equal(alone(L([five(78), week(41)]), "percent"), "5h 78%");
+  assert.equal(alone(L([{ ...five(96), resetsAt: NOW - MIN }, week(41)]), "percent"), "wk 41%", "a window that has reset isn't the tighter one");
+  const gone = L([{ ...five(61), resetsAt: NOW - MIN }, { ...week(38), resetsAt: NOW - MIN }]);
+  assert.equal(alone(gone, "percent"), "5h –", "all have reset: the first, so the pill and its card are there");
+  assert.equal(alone(gone, "bar"), "5h – wk –");
+  assert.equal(alone(calm, "none"), null);
+  // Beside a context part the narrow steps are as they were: nothing tight, the context alone.
+  assert.equal(words(pill(calm, "percent")), "8%");
+  // What counts as a context part: a share of a window, or tokens alone.
+  assert.deepEqual([null, R, { ...R, window: null }, { at: NOW }, { ...R, used: null, window: null }].map(hasContext), [false, true, true, false, false]);
+});
+
+test("a reading whose time is unknown: dimmed like an old one, and the card says so", () => {
+  const unknown = L([{ ...five(31), at: null }, { ...week(38), at: null }]);
+  assert.equal(byId(pill(unknown), "ph-lim-p1").style("opacity")[0], STALE_OPACITY);
+  const sec = byId(content(meter(t, { pane: "p1", reading: R, tier: "full", limits: unknown, now: NOW, program: "Claude Code" })), "ph-lim-card");
+  assert.match(words(sec), /^Limits age unknown 5-hour 31% resets .* As Claude Code last reported them: how old shows with its next answer$/);
+  assert.equal(byId(sec, "ph-lim-age").style("text_color")[0], "working");
 });
 
 test("the card's section: Limits, the plan and the time; per window a row and a bar with its fill and the tick; notes below", () => {
@@ -199,6 +225,53 @@ test("the header's tier counts the limits: a width that held the tokens without 
   fire(root, "size_change", { width: 500, height: 28 }, cx);
   assert.equal(cx.notified, before + 1, "bar -> narrow re-renders");
   assert.equal(words(trigger(cardOf(render()))), "8%", "nothing tight: the context alone");
+  view.close();
+});
+
+test("the header's tier for limits alone is the context's own: a session before its first answer shows its limits in a split pane, at any zoom", () => {
+  sharedStore.offer(ACC, live(4, 38));
+  const { view, render, cx } = header();
+  view.context.reading = null; // no answer yet
+  let root = render();
+  fire(root, "size_change", { width: 480, height: 28 }, cx);
+  root = render();
+  assert.equal(words(trigger(cardOf(root))), "5h 4% wk 38%", "480 px: both windows, though nothing is tight");
+  fire(root, "size_change", { width: 350, height: 28 }, cx);
+  root = render();
+  assert.equal(words(trigger(cardOf(root))), "wk 38%", "350 px: the tighter one");
+  herdr.set({ settings: { zoom: 1.5, dark: true, font_family: "Menlo", font_size: 13 } });
+  fire(root, "size_change", { width: 480 * 1.5, height: 28 }, cx);
+  root = render();
+  assert.equal(words(trigger(cardOf(root))), "5h 4% wk 38%", "zoom 1.5: 720 window px are the same 480");
+  herdr.set({ settings: { zoom: 1, dark: true, font_family: "Menlo", font_size: 13 } });
+  fire(root, "size_change", { width: 480, height: 28 }, cx);
+  // Its first answer: a context number beside the limits needs the wider tiers. on_size_change
+  // sees the new tier for the width it has, and the header draws again.
+  view.context.reading = { ...R, at: Date.now() };
+  const before = cx.notified;
+  fire(root, "size_change", { width: 480, height: 28 }, cx);
+  assert.equal(cx.notified, before + 1, "bar alone is narrow beside a context number");
+  assert.equal(words(trigger(cardOf(render()))), "8%", "nothing tight: the context alone");
+  view.close();
+});
+
+test("a header that doesn't render (a hidden tab) asks for one draw per change of its account's limits, not one per look", async () => {
+  clock.reset();
+  const { view, render, cx } = header();
+  render();
+  view.context.cancel(); // no look of its own in this test
+  await clock.advance(2000);
+  const calm = cx.notified;
+  sharedStore.offer(ACC, live(4, 38));
+  await clock.advance(8000); // four looks, and no render between them
+  assert.equal(cx.notified, calm + 1, "once for the change");
+  sharedStore.offer(ACC, live(9, 38));
+  await clock.advance(8000);
+  assert.equal(cx.notified, calm + 2, "once for the next");
+  // Its tab is shown again: it draws what the store has, and asks for nothing more.
+  assert.equal(words(trigger(cardOf(render()))), "8% 76.5k / 1M 5h 9% wk 38%");
+  await clock.advance(6000);
+  assert.equal(cx.notified, calm + 2);
   view.close();
 });
 

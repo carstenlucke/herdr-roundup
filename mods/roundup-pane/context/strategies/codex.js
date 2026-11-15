@@ -13,7 +13,7 @@
 
 import { NO_ANSWER, foreground, processEnv, byTitle, titleIds, byOpenFile, uuid7Time, localParts, parseJson } from "../locate.js";
 import { scanTail, fromEnd, completeLines, FIRST, NO_READING } from "../tail.js";
-import { newestCodex } from "../../limits/parse.js";
+import { codexLimits } from "../../limits/parse.js";
 
 const ROLLOUT = /\/rollout-[^/]*\.jsonl$/;
 const DAY = 24 * 60 * 60 * 1000;
@@ -142,6 +142,9 @@ export default {
     // The account for the plan limits (limits/store.js): the config folder, known before a rollout is.
     memo.account = `codex:${home}`;
     memo.home = home;
+    // Whether this pane shows them is its own matter (`memo.noLimits`, set by read() from this
+    // session's rollout, heeded by the reader): it holds for the process that said so.
+    if (memo.noLimits && memo.noLimits.pid !== fg.pid) memo.noLimits = null;
     const base = { id: "codex", terminal: agent.terminal, pid: fg.pid, account: memo.account };
     // A thread id in the title names the thread: then only its rollout counts. `titlePrefix` is
     // what the title said, for the reader's check after the read (the title still says it).
@@ -186,20 +189,27 @@ export default {
     for (const file of await newestRollouts(io, memo.home)) {
       const chunk = await io.tail(file, FIRST);
       if (!chunk || typeof chunk.text !== "string") continue;
-      io.limits.offer(memo.account, newestCodex(fromEnd(completeLines(chunk.text, chunk.whole))));
+      io.limits.offer(memo.account, codexLimits(completeLines(chunk.text, chunk.whole)).reading, io.now());
     }
   },
 
-  async read(source, io) {
-    // The same lines carry the account's plan limits (`rate_limits` of the newest token_count,
-    // also where a compaction after it leaves no context number): offered to the store all headers
-    // share (`io.limits`).
+  async read(source, io, memo = {}) {
+    // The same lines carry the account's plan limits (`rate_limits` of the newest token_counts,
+    // also where a compaction after them leaves no context number): offered to the store all
+    // headers share (`io.limits`). A larger end holds all of a smaller one, so the last walk counts.
     let limits = null;
     const r = await scanTail(io, source.file, (lines, whole) => {
-      limits = newestCodex(fromEnd(lines)) ?? limits;
+      limits = codexLimits(lines);
       return findRollout(lines, whole);
     });
-    if (limits) io.limits?.offer(source.account, limits);
+    // This session's own word (parse.js, codexLimits): events without default-pool limits mean
+    // it has none, and the pane shows none; limits mean it has; no event says nothing, and what
+    // this rollout said before stands. Never from another session's file (accountLimits).
+    if (limits?.reading) {
+      io.limits?.offer(source.account, limits.reading, io.now());
+      memo.noLimits = null;
+    } else if (limits?.events > 0) memo.noLimits = { pid: source.pid, file: source.file };
+    else if (memo.noLimits && memo.noLimits.file !== source.file) memo.noLimits = null;
     if (r === NO_READING) return NO_READING;
     if (!r) return null;
     return {

@@ -2,7 +2,7 @@
 // since the reading, the pace, and the times. Pure, so tests/limits.test.mjs runs it in node.
 //
 // A window: { minutes, used, resetsAt, at }: its length, the percent used (0..100 and more), when
-// it resets and when that was read (ms since the epoch).
+// it resets and about when that is from (ms since the epoch; `at` null: unknown, limits/parse.js).
 
 import { clock } from "../context/text.js";
 
@@ -50,9 +50,9 @@ export function elapsed(w, now) {
 
 // At the pace so far the window is empty before it resets: in how many ms from `now`. Null when
 // it lasts, below PACE_FROM, at 100 %, or after its reset. The pace is the window's own (used by
-// the time gone at the reading), counted on from the reading.
+// the time gone at the reading), counted on from the reading: none for a reading without a time.
 export function pace(w, now) {
-  if (passed(w, now) || !(w.used >= PACE_FROM) || w.used >= 100) return null;
+  if (!Number.isFinite(w.at) || passed(w, now) || !(w.used >= PACE_FROM) || w.used >= 100) return null;
   const gone = w.at - (w.resetsAt - w.minutes * MIN);
   if (!(gone > 0)) return null;
   const emptyAt = w.at + ((100 - w.used) / w.used) * gone;
@@ -79,8 +79,15 @@ export function when(ms, now) {
 // A time ahead as a clock: within a day "20:35", from a day on "Tue 08:48".
 export const whenClock = (ms, now) => (ms - now < 1440 * MIN ? clock(ms) : dayClock(ms));
 
-// A reading older than 15 minutes is shown dimmed: usage elsewhere may have moved it.
-export const stale = (reading, now) => Boolean(reading) && now - reading.at > STALE_MS;
+// A window read more than 15 minutes ago, or nobody knows when, is old: usage elsewhere may have
+// moved it. A reading is as old as its oldest window: it is shown dimmed as a whole.
+export const staleWindow = (w, now) => !Number.isFinite(w.at) || now - w.at > STALE_MS;
+export const stale = (reading, now) => Boolean(reading?.windows?.length) && reading.windows.some((w) => staleWindow(w, now));
+// When the reading is from: its oldest window's time, or null as soon as one is unknown.
+export function readAt(reading) {
+  const ats = (reading?.windows ?? []).map((w) => (Number.isFinite(w.at) ? w.at : null));
+  return !ats.length || ats.includes(null) ? null : Math.min(...ats);
+}
 
 // What of the limits the pill shows, as one string: the header draws again when it changes (a
 // reading going stale, a window passing its reset), and each minute while `live` (hovered: the

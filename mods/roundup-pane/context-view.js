@@ -38,11 +38,18 @@ const limitColor = (t, sev) => (sev === "tight" ? t.working : t.blocked);
 const limitMark = (sev) => (sev === "reached" ? "mods/roundup-pane/ban.svg" : "mods/roundup-pane/alert.svg");
 
 // The context's part of the pill, as its children, or null: nothing of the context to show.
+// Whether a reading gives the pill a context part: a share of a window, or tokens alone. The
+// header picks its tiers by it (main.js): limits beside a context part need the wider ones.
+export function hasContext(reading) {
+  if (!reading) return false;
+  return (Number.isFinite(reading.window) && reading.window > 0 && Number.isFinite(share(reading))) || Number.isFinite(reading.used);
+}
+
 function contextPart(t, reading, tier) {
-  if (!reading) return null;
+  if (!hasContext(reading)) return null;
   const p = share(reading);
   const hasWindow = Number.isFinite(reading.window) && reading.window > 0 && Number.isFinite(p);
-  if (!hasWindow) return Number.isFinite(reading.used) ? [div().flex_none().text_color(t.muted).child(tokens(reading.used))] : null;
+  if (!hasWindow) return [div().flex_none().text_color(t.muted).child(tokens(reading.used))];
   const sev = severity(p);
   const color = barColor(t, sev);
   const loud = sev !== "ok";
@@ -78,10 +85,15 @@ function limitWindow(t, w, now) {
 }
 
 // The limits' part of the pill, or null: no reading, or nothing of it fits this tier.
-function limitPart(t, pane, limits, tier, now) {
+// `alone`: no context part beside it (a session before its first answer). The tier is then the
+// context's own (TIERS, no "narrow"), and its narrowest step still has room for one window: the
+// tighter one, whatever it stands at, or the first when all have reset, so the pill and its card
+// are there.
+function limitPart(t, pane, limits, tier, now, alone = false) {
   if (!limits?.windows?.length) return null;
   let kids = [];
   if (tier === "full" || tier === "bar") kids = limits.windows.map((w) => limitWindow(t, w, now));
+  else if (alone) kids = [limitWindow(t, worst(limits.windows, now) ?? limits.windows[0], now)];
   else {
     const w = worst(limits.windows, now);
     const sev = w ? limitSeverity(w.used) : "ok";
@@ -103,7 +115,7 @@ function limitPart(t, pane, limits, tier, now) {
 export function meter(t, { pane, reading, tier, agent, hint = null, covered = false, head = null, limits = null, now = Date.now(), program = null }) {
   if (tier === "none") return null;
   const ctx = contextPart(t, reading, tier);
-  const lim = limitPart(t, pane, limits, tier, now);
+  const lim = limitPart(t, pane, limits, tier, now, !ctx);
   if (!ctx && !lim) return null;
   // The pill of the mockup (variant E): framed, 20 px high, the hover color under the pointer.
   const el = h_flex().id(`ph-ctx-${pane}`).flex_none().h(PILL_H).px(7).gap(6).items_center().rounded(5)

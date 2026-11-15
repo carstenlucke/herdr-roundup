@@ -251,15 +251,22 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   used): `muted` below 70%; from 70% `foreground` with an alert mark in
   `working`, from 90% in `blocked`, at 100% a no-entry mark. They are the
   account's (the agent's config folder), so every pane of an agent shows
-  the same, as of the last answer in any of them. An agent that has
-  just started shows them before its first answer, from what the
-  account's other sessions on this computer left.
+  the same, as of the last answer in any of them: the newest reading
+  counts, a lower one too. An agent that has just started shows them
+  before its first answer, from what the account's other sessions on this
+  computer left.
   - Narrow headers drop the context's tokens first, then the looser limit
     (the tighter stays from 70%), then both but for a mark from 90%.
-  - A reading older than 15 min is dimmed; a window whose reset has
-    passed since reads `–`; no reading (an API key, no answer yet, pi,
-    opencode) leaves the pill as it is, and limits without a context
-    number stand alone.
+    Limits without a context number stand alone, and keep the tighter
+    window down to the narrowest step.
+  - A reading older than 15 min, or one whose age isn't known yet (Claude
+    Code until its next answer), is dimmed; a window whose reset has
+    passed since reads `–`; no reading (no answer yet, pi, opencode)
+    leaves the pill as it is.
+  - A pane whose own session isn't on the plan shows none: Claude Code on
+    Bedrock, Vertex, Foundry or another endpoint, or answering without
+    limits (an API key); Codex whose last answers carry none of the
+    account's pool (an API key, a model with a bucket of its own).
   - The card adds "Limits" (280px wide then): the plan where the agent
     names it (Codex), "as of 19:28", per window a row (`5-hour`, `78%`,
     "resets in 1h 35m", from a day on "resets Tue 08:48") and a 4px bar
@@ -522,19 +529,9 @@ strategy per agent program (`context/strategies/<agent>.js`), `io` from
 - **Adding an agent:** one strategy file and one line in the registry; an
   integration writes `~/.cache/herdr-roundup/context/<agent>/<t>.json`
   with `{v: 1, terminal, pid, at}`.
-- **Plan limits** (`limits/`): no read of their own. Claude's strategy
-  takes `rate_limits` from the status line file it reads anyway, Codex's
-  from the newest `token_count` line of the rollout tail (`parse.js`), and
-  offers them to `store.js`, module state all header copies share, under
-  the account `claude:<CLAUDE_CONFIG_DIR>` or `codex:<CODEX_HOME>` (the
-  strategy leaves it in `memo.account`, the reader in `account`). The
-  header's 2s look draws again when its account's reading changed. A
+- **Plan limits** (`limits/`): how they are read, merged and timed is in
+  the header comments of `limits/store.js` and `limits/parse.js`. A
   further source is one parser and one `offer`.
-  - The one read of their own: when an agent starts in a pane, the reader
-    calls the strategy's `accountLimits` once (the store allows it once a
-    minute per account). Claude's reads the integration's files of other
-    terminals whose transcript lies under the same config folder, Codex's
-    the ends of the five rollouts started last within eight days.
 
 **`roundup-spaces`** (clone of `spaces` 0.1.14, `place: "none"`, title
 "Spaces"). Reads `spaces()`, `panes()`, `terminals()` (each agent's `turn`),

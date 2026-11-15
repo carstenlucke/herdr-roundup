@@ -16,7 +16,8 @@ Each agent pane now shows in its header how full the agent's context window is a
 - **A warning sign** from 70 %, in the blocked color from 90 %, a no-entry sign at 100 %.
 - **In the hover card:** when each window resets, a bar with a tick for how much of the window's time has passed, and, when you are ahead of that, when the limit would run out.
 - **Claude Code** needs its integration for them (`install claude`, the same one as for the context window). **Codex** needs nothing.
-- **Not shown:** with an API key (there are no windows), and for Pi Agent and OpenCode (they don't pass the limits on).
+- **Dimmed** when the numbers are older than 15 minutes. Claude Code's are also dimmed, with "age unknown" in the card, until its next answer after a start or after this update: only then is it known how old they are.
+- **Not shown:** with an API key (there are no windows), for Claude Code on Bedrock, Vertex, Foundry or another endpoint, for a Codex model with a limit of its own, and for Pi Agent and OpenCode (they don't pass the limits on). A Claude Code pane with an API key shows the account's limits until its first answer.
 
 ## Also
 

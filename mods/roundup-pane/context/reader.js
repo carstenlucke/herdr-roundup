@@ -121,10 +121,13 @@ export class ContextReader {
     this.hint = null;
     // The account the agent runs on (limits/store.js), as the strategy's locate() left it in
     // `memo.account`: also where it found no source, as limits are the account's, not the session's.
+    // None while the strategy says this pane's own session has no plan limits (`memo.noLimits`:
+    // an API key, another endpoint): the account is the other panes', the pane shows none.
     this.account = null;
     this.accountAsked = false;
     this.closed = false;
     this.job = null; // the look in the queue: released at close()
+    this.side = null; // the ask for the account's kept files, a job of its own: released at close()
   }
 
   // From the header's render: its pane as panes() has it, and whether its tab is on screen.
@@ -182,6 +185,8 @@ export class ContextReader {
     this.cancel();
     this.job?.release();
     this.job = null;
+    this.side?.release();
+    this.side = null;
   }
 
   arm(cx, ms) {
@@ -219,11 +224,31 @@ export class ContextReader {
       }
       const hint = idleHint(this.reading, this.status, this.io.now());
       if (hint !== this.hint) { this.hint = hint; changed = true; }
-      const account = this.memo.account ?? null;
+      const account = this.memo.noLimits ? null : this.memo.account ?? null;
       if (account !== this.account) { this.account = account; changed = true; }
       if (changed) cx.notify();
+      this.askAccount();
       if (this.again) { this.again = false; this.arm(cx, 0); } else this.arm(cx, this.delay());
     });
+  }
+
+  // An agent has started in this pane (a new pane, or a shell that became one): once, as soon as
+  // its account is known, what the account's other files say goes to the store, so a session that
+  // hasn't answered yet shows its limits. At most once a minute per account (store.due); a failure
+  // costs nothing but the limits.
+  // After the pane's own look is out (also one that found no source), as a job of its own in the
+  // queue: the pane's own number never waits for it, and the header's 2 s look draws what it
+  // brings. It works on the account and folder as they are now, not on `memo`, which belongs to
+  // whatever runs in the pane later; it tells the store only, and nothing about this pane.
+  askAccount() {
+    const { io, strategy, memo } = this;
+    if (this.accountAsked || this.closed || !memo.account || memo.noLimits || !strategy?.accountLimits || !io.limits) return;
+    this.accountAsked = true;
+    if (!io.limits.due(memo.account, io.now())) return;
+    const about = { account: memo.account, home: memo.home };
+    const side = this.queue.enter(async () => { try { await strategy.accountLimits(io, about); } catch {} return false; });
+    this.side = side;
+    side.promise.catch(() => {}).finally(() => { if (this.side === side) this.side = null; });
   }
 
   // How long until the next look: a backoff only after misses (nothing found, a failed read).
@@ -255,17 +280,6 @@ export class ContextReader {
     const { io, strategy, terminal } = this;
     const src = await strategy.locate({ terminal }, io, this.memo);
     if (gen !== this.gen) return false;
-    // An agent has started in this pane (a new pane, or a shell that became one): once, as soon as
-    // its account is known, what the account's other files say goes to the store, so a session
-    // that hasn't answered yet shows its limits. At most once a minute per account (store.due); a
-    // failure costs nothing but the limits.
-    if (!this.accountAsked && this.memo.account && strategy.accountLimits && io.limits) {
-      this.accountAsked = true;
-      if (io.limits.due(this.memo.account, io.now())) {
-        try { await strategy.accountLimits(io, this.memo); } catch {}
-        if (gen !== this.gen) return false;
-      }
-    }
     // No answer from hc proves nothing (as after a read, below): the reading stands, the next look
     // checks again.
     if (src === NO_ANSWER) { this.key = this.stats = null; return false; }

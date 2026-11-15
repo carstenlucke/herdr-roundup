@@ -26,6 +26,14 @@ export const SNAPSHOT_CANDIDATES = 8;
 const COMPACT_ENV = ["CLAUDE_CODE_AUTO_COMPACT_WINDOW", "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE"];
 export const ACCOUNT_FILES = 60; // how many terminals' files accountLimits reads at most
 
+// The process doesn't run on the plan: it is told to use Bedrock, Vertex or Foundry (switched on
+// as Claude Code reads such a switch), or another endpoint. An API key or a token in the
+// environment decides nothing (Claude Code may still use the subscription): such a pane shows its
+// account's limits until its own first answer says otherwise (noLimits, below).
+const ON = new Set(["1", "true", "yes", "on"]);
+const OFF_PLAN = ["CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY"];
+export const offPlan = (env) => Boolean(env) && (OFF_PLAN.some((k) => ON.has(String(env[k] ?? "").trim().toLowerCase())) || Boolean(String(env.ANTHROPIC_BASE_URL ?? "").trim()));
+
 // A folder as Claude Code names its project folder: every character not a letter or digit is "-".
 export const slug = (cwd) => cwd.replace(/[^a-zA-Z0-9]/g, "-");
 
@@ -139,6 +147,13 @@ export default {
     // The account for the plan limits (limits/store.js): the config folder, known before a session is.
     memo.account = `claude:${home}`;
     memo.home = home;
+    // Whether this pane shows them is its own matter (`memo.noLimits`, which the reader heeds): the
+    // account stays the other panes'. Kept from look to look for the same process: by its
+    // environment here, by what its own session says below.
+    if (memo.noLimits && memo.noLimits.pid !== fg.pid) memo.noLimits = null;
+    const byEnv = offPlan(env);
+    if (byEnv) memo.noLimits = { pid: fg.pid, env: true };
+    else if (memo.noLimits?.env) memo.noLimits = null;
     // Each file of the source is observed once per look, here, its stat before its content
     // (locate.js, observeJsonFile): the reader takes these stats (`observed`) and asks none again,
     // so no stat can be newer than what was read. The session file, then the status line file,
@@ -149,7 +164,16 @@ export default {
     const status = await observeTerminalFile(io, "claude", agent.terminal, fg.pid);
     // The status line's stdin carries the account's plan limits too: offered to the store all
     // headers share (`io.limits`; the file is this terminal's and this process's, so this account's).
-    if (status.file) io.limits?.offer(memo.account, fromClaude(status.file));
+    if (status.file && !byEnv) io.limits?.offer(memo.account, fromClaude(status.file), io.now());
+    // This session's own word: it has answered (its API time counts) and its status has no limits,
+    // so it doesn't run on the plan. Only the file of this very session says so; without it (not
+    // written yet, not readable this time) what the session said before stands.
+    if (!byEnv) {
+      const own = status.file?.claude?.session_id === session.sessionId ? status.file.claude : null;
+      const was = memo.noLimits?.session === session.sessionId;
+      const none = own ? own.cost?.total_api_duration_ms > 0 && !(own.rate_limits && typeof own.rate_limits === "object") : was;
+      memo.noLimits = none ? { pid: fg.pid, session: session.sessionId } : null;
+    }
     const path = status.file?.claude?.session_id === session.sessionId ? status.file.claude.transcript_path : null;
     // The status line's path first, then the slug's: both asked on every look, the folder search
     // (held after a miss) only when neither is there.
@@ -190,7 +214,7 @@ export default {
       const f = parseJson(await io.readText(`${dir}/${name}`));
       const path = f?.claude?.transcript_path;
       if (f?.v !== 1 || typeof path !== "string" || !path.startsWith(`${memo.home}/projects/`)) continue;
-      io.limits.offer(memo.account, fromClaude(f));
+      io.limits.offer(memo.account, fromClaude(f), io.now());
     }
   },
 

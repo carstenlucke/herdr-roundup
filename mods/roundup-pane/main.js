@@ -26,7 +26,7 @@ import { folder, paneId, cutName } from "./header-text.js";
 import { ContextReader, sweep } from "./context/reader.js";
 import { headerTier } from "./context/text.js";
 import { makeIo } from "./context-io.js";
-import { meter } from "./context-view.js";
+import { meter, hasContext } from "./context-view.js";
 // The plan limits of the agent's account, beside the context in the same pill (limits/; RECIPE "Limits").
 import { sharedStore } from "./limits/store.js";
 import { shownState } from "./limits/text.js";
@@ -105,7 +105,10 @@ export default class Pane extends View {
     cx.timer.every(SEE_MS, (cx) => {
       const p = this.me();
       if (p) this.context.see(p, focused()?.tab === p.tab, cx);
-      if (shownState(this.limits(), Date.now(), this.hovered) !== this.limitsShown) cx.notify();
+      // Kept here, not only in render(): a header in a hidden tab doesn't render, and would ask
+      // for a draw on every look from the first change on.
+      const shown = shownState(this.limits(), Date.now(), this.hovered);
+      if (shown !== this.limitsShown) { this.limitsShown = shown; cx.notify(); }
     });
     cx.timer.every(10 * 60_000, (cx) => {
       if (Date.now() - lastSweep < 3_600_000) return;
@@ -128,6 +131,12 @@ export default class Pane extends View {
   // The plan limits of the account this pane's agent runs on, or null (no agent, no reading).
   limits() {
     return this.context?.account ? sharedStore.get(this.context.account) : null;
+  }
+
+  // The header's tier. Limits beside a context number take the wider thresholds; limits alone (a
+  // session before its first answer) are narrower than a context part, and keep the context's own.
+  tierNow(limits = this.limits()) {
+    return headerTier(this.width, settings()?.zoom, Boolean(limits) && hasContext(this.context?.reading));
   }
 
   // --- the header ---
@@ -184,7 +193,7 @@ export default class Pane extends View {
     const now = Date.now();
     const limits = this.limits();
     this.limitsShown = shownState(limits, now, this.hovered);
-    this.shownTier = headerTier(this.width, settings()?.zoom, Boolean(limits));
+    this.shownTier = this.tierNow(limits);
     const ctx = this.context && meter(t, { pane, reading: this.context.reading, tier: this.shownTier, agent: this.context.strategy?.id, hint: this.context.hint, covered: covered(),
       limits, now, program: p.program?.name ?? null,
       // An icon of its own: an element belongs to the one parent it's given (gpui-kit.d.ts).
@@ -193,7 +202,7 @@ export default class Pane extends View {
       .id(`pane-head-${pane}`)
       .size_full()
       // The width is kept on every change (a later zoom tiers it), but only a new tier re-renders.
-      .on_size_change((size, cx) => { this.width = size.width; if (headerTier(this.width, settings()?.zoom, Boolean(this.limits())) !== this.shownTier) cx.notify(); })
+      .on_size_change((size, cx) => { this.width = size.width; if (this.tierNow() !== this.shownTier) cx.notify(); })
       .px(10)
       .gap(8)
       .items_center()
