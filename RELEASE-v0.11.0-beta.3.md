@@ -14,10 +14,6 @@ Third beta of 0.11.0: Claude Code and Codex panes on a subscription now show, be
 - **Not shown:** with an API key (there are no windows), for Claude Code on Bedrock, Vertex, Foundry or another endpoint, for a Codex model with a limit of its own, and for Pi Agent and OpenCode (they don't pass the limits on). A Claude Code pane with an API key, or with Bedrock, Vertex or Foundry switched on in its settings' `env`, may show the account's limits at first, until the integration has seen one of its own answers come without them.
 - **README:** a section "Agent integrations": what each one changes, and what shows without it.
 
-## Coming next
-
-- **0.11.0:** the integrations switched on and off from the logo menu, with a hint in the pane's hover card and one notification after an install.
-
 ## Before you update
 
 - `scripts/sync.sh` replaces the layout, every `roundup-*` mod, the repo's themes and the `layout:Herdr-Roundup` section of `keys.json`. Global keys, other layouts and Herdr's own mods stay untouched.
