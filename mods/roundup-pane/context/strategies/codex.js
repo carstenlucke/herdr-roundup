@@ -11,7 +11,7 @@
 //   of its descendants holds open (lsof), asked on every look: `/new` or a resume opens another
 //   one in the same process. A shared daemon's files lie outside the process tree.
 
-import { NO_ANSWER, foreground, processEnv, byTitle, titleIds, byOpenFile, uuid7Time, localParts, parseJson, normalizeFolder, eachLimited, ACCOUNT_AT_ONCE } from "../locate.js";
+import { NO_ANSWER, foreground, forgetProcess, processEnv, byTitle, titleIds, byOpenFile, uuid7Time, localParts, parseJson, normalizeFolder, eachLimited, ACCOUNT_AT_ONCE } from "../locate.js";
 import { scanTail, fromEnd, completeLines, FIRST, NO_READING } from "../tail.js";
 import { codexLimits, CODEX_EVENTS } from "../../limits/parse.js";
 
@@ -92,10 +92,22 @@ export function findRollout(lines, whole) {
 export const ACCOUNT_FILES = 5;
 export const ACCOUNT_DAYS = 8; // a weekly window, and a day
 
-// The rollouts started last, newest first, at most `n` and none from a day folder older than
-// `days`: sessions/YYYY/MM/DD/rollout-<stamp>-<id>.jsonl sort by their names.
+// The rollouts written last, newest first, at most `n`, none written more than `days` ago. A
+// thread's rollout stays in the folder of the day it started, also when it is resumed weeks later:
+// one find over all of sessions/ gives each file's mtime (io.recentFiles), and the newest writes
+// count, whatever their names (equal times: the later name first). Where that fails (no find, a
+// folder it can't read: null), the day folders of the last `days` are walked by name instead, which
+// goes by the start: sessions/YYYY/MM/DD/rollout-<stamp>-<id>.jsonl sort by their names.
 export async function newestRollouts(io, home, n = ACCOUNT_FILES, days = ACCOUNT_DAYS) {
   const root = `${home}/sessions`;
+  const recent = (await io.recentFiles?.(root, "rollout-*.jsonl", days * 1440)) ?? null;
+  if (Array.isArray(recent)) {
+    const name = (p) => p.slice(p.lastIndexOf("/") + 1);
+    const later = (a, b) => (a > b ? -1 : a < b ? 1 : 0);
+    return recent.filter((f) => /^rollout-.*\.jsonl$/.test(name(f.path)))
+      .sort((a, b) => b.mtime - a.mtime || later(name(a.path), name(b.path)))
+      .slice(0, n).map((f) => f.path);
+  }
   const sorted = async (dir, re) => ((await io.list(dir)) ?? []).filter((x) => re.test(x)).sort().reverse();
   const from = localParts(io.now() - days * DAY);
   const oldest = `${from.y}/${from.mo}/${from.d}`;
@@ -135,9 +147,11 @@ export default {
   // `memo`: the reader's per-terminal store (empty again for another terminal or program).
   async locate(agent, io, memo = {}) {
     const fg = await foreground(io, agent.terminal);
-    if (!fg || fg === NO_ANSWER) return fg;
+    if (fg === NO_ANSWER) return fg;
+    if (!fg) { forgetProcess(memo); return null; }
     const env = await processEnv(io, fg.pid, memo);
-    if (env?.HC_TERMINAL_ID && env.HC_TERMINAL_ID !== agent.terminal) return null;
+    // Another terminal's agent: its account and plan aren't this pane's.
+    if (env?.HC_TERMINAL_ID && env.HC_TERMINAL_ID !== agent.terminal) { forgetProcess(memo); return null; }
     const home = normalizeFolder(env?.CODEX_HOME || `${io.home}/.codex`);
     // The account for the plan limits (limits/store.js): the config folder, known before a rollout is.
     // Only from an environment that was read: where `ps` failed this look, the default folder may not

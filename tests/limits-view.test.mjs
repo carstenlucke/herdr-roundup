@@ -371,3 +371,34 @@ test("a Claude Code session before its first answer: no context yet, but its acc
   reader.close();
   assert.deepEqual(cx.errors, []);
 });
+
+// --- review 4 of #45 ---
+
+test("limits that have all reset don't cost the context its tokens: beside a context part they draw nothing, one live window is enough, alone they stay", () => {
+  const pillOf = (root) => trigger(cardOf(root));
+  const at = (width, gone, reading = { ...R, used: 400_000, at: Date.now() }) => {
+    sharedStore.clear();
+    const l = live(12, 30);
+    for (const i of gone) l.windows[i].resetsAt = Date.now() - MIN;
+    sharedStore.offer(ACC, l);
+    const m = header();
+    m.view.context.reading = reading;
+    fire(m.render(), "size_change", { width, height: 28 }, m.cx);
+    const root = m.render();
+    m.view.close();
+    return root;
+  };
+  let root = at(600, [0, 1]);
+  assert.equal(words(pillOf(root)), "40% 400k / 1M", "both reset: the context's full tier, its tokens, no limit part");
+  assert.match(words(content(cardOf(root))), /5-hour – has reset since .*Weekly – has reset since/, "the card still has them");
+  assert.equal(words(pillOf(at(600, [0]))), "40% 5h – wk 30%", "one live window: the limits as before");
+  assert.equal(words(pillOf(at(600, [0, 1], null))), "5h – wk –", "limits alone: the pill stays for its card");
+});
+
+test("a limit's number keeps the context number's least width, so 9 % to 10 % doesn't move what follows", async () => {
+  const { PCT_MIN_W } = await import("../mods/roundup-pane/context-view.js");
+  const lim = byId(pill(L([five(9), week(41)])), "ph-lim-p1");
+  const nums = all(lim).filter((e) => e.style("min_w")?.[0] === PCT_MIN_W);
+  assert.equal(nums.length, 2, "both windows' numbers");
+  assert.deepEqual(nums.map((e) => words(e)), ["9%", "41%"]);
+});

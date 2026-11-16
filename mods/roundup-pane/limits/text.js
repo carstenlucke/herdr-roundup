@@ -49,10 +49,11 @@ export function elapsed(w, now) {
 }
 
 // At the pace so far the window is empty before it resets: in how many ms from `now`. Null when
-// it lasts, below PACE_FROM, at 100 %, or after its reset. The pace is the window's own (used by
-// the time gone at the reading), counted on from the reading: none for a reading without a time.
+// it lasts, below PACE_FROM, once reached (the rounded 100 % severity() reads, which the pill and
+// the card show), or after its reset. The pace is the window's own (used by the time gone at the
+// reading), counted on from the reading: none for a reading without a time.
 export function pace(w, now) {
-  if (!Number.isFinite(w.at) || passed(w, now) || !(w.used >= PACE_FROM) || w.used >= 100) return null;
+  if (!Number.isFinite(w.at) || passed(w, now) || !(w.used >= PACE_FROM) || severity(w.used) === "reached") return null;
   const gone = w.at - (w.resetsAt - w.minutes * MIN);
   if (!(gone > 0)) return null;
   const emptyAt = w.at + ((100 - w.used) / w.used) * gone;
@@ -72,11 +73,17 @@ const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 // "Tue 08:48", in the machine's own zone.
 export const dayClock = (ms) => `${DAYS[new Date(ms).getDay()]} ${clock(ms)}`;
 
-// A time ahead: within a day "in 2h 02m", from a day on "Tue 08:48".
+// A time ahead: within a day "in 2h 02m", from a day on "Tue 08:48", but on today's weekday (six
+// days and more ahead: a weekly reset soon after its start) "in 6d 22h", which "Tue 08:48" on a
+// Tuesday would read as today.
 export function when(ms, now) {
-  return ms - now < 1440 * MIN ? `in ${duration(ms - now)}` : dayClock(ms);
+  if (ms - now < 1440 * MIN || new Date(ms).getDay() === new Date(now).getDay()) return `in ${duration(ms - now)}`;
+  return dayClock(ms);
 }
-// A time ahead as a clock: within a day "20:35", from a day on "Tue 08:48".
+// A time ahead as a clock: within a day "20:35", from a day on "Tue 08:48". Only for the pace note
+// ("runs out about …"), which with a 5-hour or weekly window never lies on today's weekday a week
+// ahead: a pace needs half the window used, and that much within the week's first day runs out
+// within about two. A window that could would need when()'s rule, in words that fit the note.
 export const whenClock = (ms, now) => (ms - now < 1440 * MIN ? clock(ms) : dayClock(ms));
 
 // A window read more than 15 minutes ago, or nobody knows when, is old: usage elsewhere may have

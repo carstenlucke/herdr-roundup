@@ -223,3 +223,42 @@ test("lastLinesWith through the real awk: the last n of the lines with the text 
   assert.deepEqual(all.map((l) => JSON.parse(l).n), [5, 3, 2, 1], "the plain mention and the escaped copy never match");
   assert.deepEqual(await io.lastLinesWith(f, "## nothing", SNAPSHOT_META, 150, 8), []);
 });
+
+test("parseRecent reads find's mtime and path lines, macOS' and GNU's, a path with spaces whole; junk is skipped", async () => {
+  const { parseRecent } = await import("../mods/roundup-pane/context-io.js");
+  assert.deepEqual(parseRecent("1794850000.123456789 /a/b c/rollout-1.jsonl\n1794850001 /a/r.jsonl\njunk\n\n"), [
+    { path: "/a/b c/rollout-1.jsonl", mtime: 1794850000123 }, { path: "/a/r.jsonl", mtime: 1794850001000 }]);
+  assert.deepEqual(parseRecent(""), []);
+  assert.equal(parseRecent(null), null);
+});
+
+test("recentFiles: one find under the root, files only, by name and write time, a linked root followed; none is [], a failed find null", async () => {
+  const { utimesSync, mkdirSync, symlinkSync } = await import("node:fs");
+  const root = join(dir, "codex home", "sessions");
+  const now = Date.now() / 1000;
+  const put = (rel, ageDays) => {
+    const p = join(root, rel);
+    mkdirSync(join(p, ".."), { recursive: true });
+    writeFileSync(p, "{}\n");
+    utimesSync(p, now - ageDays * 86400, now - ageDays * 86400);
+    return p;
+  };
+  const old = put("2026/10/01/rollout-2026-10-01T09-00-00-a.jsonl", 0.01); // started long ago, written now
+  const fresh = put("2026/11/15/rollout-2026-11-15T09-00-00-b.jsonl", 1);
+  put("2026/11/01/rollout-2026-11-01T09-00-00-c.jsonl", 10); // written ten days ago
+  put("2026/11/15/notes.txt", 0);
+  mkdirSync(join(root, "2026/11/15/rollout-dir.jsonl"), { recursive: true }); // a folder by that name
+  const io = makeIo();
+  const got = await io.recentFiles(root, "rollout-*.jsonl", 8 * 1440);
+  assert.deepEqual(got.map((f) => f.path).sort(), [old, fresh].sort());
+  const byPath = Object.fromEntries(got.map((f) => [f.path, f.mtime]));
+  assert.ok(Math.abs(byPath[old] - (now - 0.01 * 86400) * 1000) < 2000, "the write time in ms");
+  // A root that is a link.
+  const link = join(dir, "linked-sessions");
+  symlinkSync(root, link);
+  assert.equal((await io.recentFiles(link, "rollout-*.jsonl", 8 * 1440)).length, 2);
+  assert.deepEqual(await io.recentFiles(root, "nothing-*.jsonl", 8 * 1440), [], "none: an answer");
+  assert.equal(await io.recentFiles(join(dir, "missing"), "rollout-*.jsonl", 8 * 1440), null, "find fails: null");
+  herdr.failExec("find");
+  assert.equal(await io.recentFiles(root, "rollout-*.jsonl", 8 * 1440), null, "no find: null");
+});

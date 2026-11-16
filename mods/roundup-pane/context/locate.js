@@ -12,6 +12,9 @@
 //   io.tail(path, bytes)          { text, whole } of the file's last bytes, or null
 //   io.head(path, bytes)          its first bytes as text, or null
 //   io.list(dir)                  the names in a folder, or null
+//   io.recentFiles(root, name, minutes)
+//                                 the files below root named like the find pattern, written within
+//                                 the last minutes, as [{ path, mtime }]: [] for none, null on failure
 //   io.openFiles(pid)             paths the process and its descendants hold open (`lsof`), or null
 //   io.screen(address)            the terminal's screen as text (`hc read <t> --json`), or null
 //   io.lastLinesWith(path, text, re, maxLength, n)
@@ -67,6 +70,16 @@ export async function foreground(io, terminal) {
   const t = await io.terminal(terminal);
   if (!t) return NO_ANSWER;
   return Number.isInteger(t.pid) && t.pid > 0 ? t : null;
+}
+
+// What a strategy's locate() left in the reader's `memo` about the process it took for the agent
+// (the plan limits' account, its config folder, whether its session runs on the plan) goes once
+// that process proves not to be it: no foreground process, another terminal's environment, another
+// pid by the end of the look. Not on NO_ANSWER: a failed `hc get` proves nothing.
+export function forgetProcess(memo) {
+  memo.account = null;
+  memo.home = null;
+  memo.plan = null;
 }
 
 // The environment of the terminal's process (`ps -wwE`), which never changes while it runs: kept

@@ -17,7 +17,7 @@
 // - Module code is shared by the copies: one queue lets two reads run at once, not all panes'.
 
 import { STRATEGIES, strategyFor } from "./registry.js";
-import { NO_ANSWER, UNSURE } from "./locate.js";
+import { NO_ANSWER, UNSURE, forgetProcess } from "./locate.js";
 import { NO_READING } from "./tail.js";
 
 export const WORKING_MS = 15_000;
@@ -334,7 +334,10 @@ export class ContextReader {
     if (gen !== this.gen) return false;
     // No answer from hc (slow, failed) proves nothing: the reading stands, the next look checks again.
     if (!fg) { this.key = this.stats = null; return false; }
-    if (fg.pid !== src.pid || strategy.stillSame?.(src, fg) === false) { this.key = this.stats = null; return this.set(null, gen); }
+    // Another pid: the process located is gone, and with it what locate() said of it (its account,
+    // its plan). Another thread of the same process (stillSame) keeps them: its config folder is the same.
+    if (fg.pid !== src.pid) { forgetProcess(this.memo); this.key = this.stats = null; return this.set(null, gen); }
+    if (strategy.stillSame?.(src, fg) === false) { this.key = this.stats = null; return this.set(null, gen); }
     // Read without a number: the meter goes, with no backoff; its stats are kept only where the
     // strategy says the file alone decides (then read again only when a file changes).
     if (r === NO_READING) {

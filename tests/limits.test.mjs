@@ -1158,3 +1158,127 @@ test("two panes of an account starting at once ask once, though both asks run si
   a.close(); b.close();
   assert.deepEqual(cx.errors, []);
 });
+
+// --- review 4 of #45 ---
+
+test("a window at a rounded 100 % is reached: no pace beside it, one note that says when the agent answers again", () => {
+  assert.notEqual(pace(five(99.49, 180), NOW), null, "99.49 % reads 99 %: the pace still counts");
+  for (const used of [99.5, 99.6, 100]) assert.equal(pace(five(used, 180), NOW), null, `${used} % reads 100 %: reached, no pace`);
+  const card = limitsModel(reading([five(99.6, 180), week(41)]), NOW, { agent: "Claude Code" });
+  assert.equal(card.rows[0].sev, "reached");
+  assert.deepEqual(card.notes, [{ kind: "plain", text: "5-hour limit reached: Claude Code answers again in 2h 00m" }]);
+});
+
+test("a reset about a week ahead on today's weekday reads as a duration, not as a time today; another day keeps its weekday", () => {
+  const tue = new Date(2026, 10, 17, 10, 0).getTime(); // a Tuesday in the machine's zone
+  assert.equal(new Date(tue).getDay(), 2);
+  const nextTue = new Date(2026, 10, 24, 8, 48).getTime();
+  assert.equal(when(nextTue, tue), "in 6d 22h");
+  assert.equal(when(new Date(2026, 10, 23, 11, 0).getTime(), tue), "Mon 11:00");
+  assert.equal(when(tue + DAY - MIN, tue), "in 23h 59m", "within a day: a duration");
+  assert.equal(when(tue + DAY, tue), "Wed 10:00", "a day on: the weekday");
+  const card = limitsModel(reading([{ minutes: 10080, used: 12, resetsAt: nextTue, at: tue }]), tue, {});
+  assert.equal(card.rows[0].extra, "resets in 6d 22h");
+  const reached = limitsModel(reading([{ minutes: 10080, used: 100, resetsAt: nextTue, at: tue }]), tue, { agent: "Codex" });
+  assert.equal(reached.notes[0].text, "Weekly limit reached: Codex answers again in 6d 22h");
+});
+
+test("Codex's account limits: the rollouts written last, whenever they started, by one find; equal times by name; a failed find walks the day folders", async () => {
+  const { newestRollouts } = await import("../mods/roundup-pane/context/strategies/codex.js");
+  const now = Date.parse("2026-11-15T16:00:00Z");
+  const io = codexIo(null);
+  io.clock = now;
+  const root = "/Users/a/.codex/sessions";
+  const name = (i) => `${root}/2026/11/15/rollout-2026-11-15T${String(i % 24).padStart(2, "0")}-${String(i).padStart(2, "0")}-00-n${i}.jsonl`;
+  // An old thread resumed today behind 55 newer-named ones written earlier.
+  const resumed = `${root}/2026/10/01/rollout-2026-10-01T09-00-00-old.jsonl`;
+  let asked = null;
+  io.recentFiles = async (r, pattern, minutes) => {
+    asked = [r, pattern, minutes];
+    return [...Array.from({ length: 55 }, (_, i) => ({ path: name(i), mtime: now - (60 + i) * MIN })), { path: resumed, mtime: now - MIN }];
+  };
+  const got = await newestRollouts(io, "/Users/a/.codex");
+  assert.deepEqual(asked, [root, "rollout-*.jsonl", 8 * 1440]);
+  assert.deepEqual(got, [resumed, name(0), name(1), name(2), name(3)]);
+  // Equal times: the later name first; a path that isn't a rollout by name is left out.
+  io.recentFiles = async () => [{ path: `${root}/x/rollout-a.jsonl`, mtime: 5 }, { path: `${root}/x/rollout-b.jsonl`, mtime: 5 }, { path: `${root}/x/other.jsonl`, mtime: 9 }];
+  assert.deepEqual(await newestRollouts(io, "/Users/a/.codex"), [`${root}/x/rollout-b.jsonl`, `${root}/x/rollout-a.jsonl`]);
+  // None written within the time: none, and no walk.
+  io.recentFiles = async () => [];
+  io.files[`${root}/2026/11/15/rollout-2026-11-15T09-00-00-w.jsonl`] = "{}\n";
+  assert.deepEqual(await newestRollouts(io, "/Users/a/.codex"), []);
+  // find failed: the day folders by name, as before.
+  io.recentFiles = async () => null;
+  assert.deepEqual(await newestRollouts(io, "/Users/a/.codex"), [`${root}/2026/11/15/rollout-2026-11-15T09-00-00-w.jsonl`]);
+  // accountLimits reads the ends of those it gives.
+  io.recentFiles = async () => [{ path: `${root}/2026/11/15/rollout-2026-11-15T09-00-00-w.jsonl`, mtime: now }];
+  io.files[`${root}/2026/11/15/rollout-2026-11-15T09-00-00-w.jsonl`] = JSON.stringify(tokenCount) + "\n";
+  await codex.accountLimits(io, { account: "codex:/Users/a/.codex", home: "/Users/a/.codex" });
+  assert.equal(io.limits.get("codex:/Users/a/.codex").windows[0].used, 87);
+});
+
+test("a process that proves not to be the pane's agent takes its account and plan along: nothing shown or asked; a failed hc get keeps them", async () => {
+  const cases = [
+    ["claude", () => claudeIo(), "t7", CPID, "claude:/Users/a/.claude"],
+    ["codex", () => codexIo(fixture("codex-rollout.jsonl") + JSON.stringify(tokenCount) + "\n"), "t8", XPID, "codex:/Users/a/.codex"],
+  ];
+  for (const [key, make, t, pid, account] of cases) {
+    for (const how of ["no foreground", "another terminal's", "no answer"]) {
+      const io = make();
+      io.now = () => clock.now;
+      const base = io.terminal;
+      let fg = "same";
+      io.terminal = async (x) => {
+        const real = await base(x);
+        if (fg === "same") return real;
+        if (fg === "none") return { ...real, pid: null };
+        if (fg === "other") return { ...real, pid: pid + 1 };
+        return null;
+      };
+      const env = io.env;
+      io.env = async (p) => (p === pid + 1 ? { HC_TERMINAL_ID: "t99" } : env(p));
+      const asked = [];
+      const strategy = (await import("../mods/roundup-pane/context/registry.js")).STRATEGIES.find((s) => s.id === key);
+      const reader = new ContextReader(io, { strategies: [{ ...strategy, accountLimits: async (_io, about) => { asked.push(about.account); } }], queue: makeQueue(2) });
+      const cx = makeCx();
+      reader.see({ terminal: t, program: { key }, app: null, status: "idle" }, true, cx);
+      await clock.advance(2000);
+      assert.equal(reader.account, account, `${key}: the account after the first look`);
+      assert.deepEqual(asked, [account]);
+      fg = how === "no foreground" ? "none" : how === "another terminal's" ? "other" : "silent";
+      await clock.advance(5 * 60_000);
+      if (how === "no answer") {
+        assert.equal(reader.account, account, `${key}, ${how}: proves nothing, the account stays`);
+      } else {
+        assert.equal(reader.account, null, `${key}, ${how}: no account`);
+        assert.equal(reader.memo.plan, null, `${key}, ${how}: no plan`);
+        assert.equal(reader.reading, null);
+      }
+      assert.deepEqual(asked, [account], "no other ask");
+      reader.close();
+      assert.deepEqual(cx.errors, []);
+    }
+  }
+});
+
+test("a look whose process is gone by its end forgets that process's account and plan; another thread of the same process keeps them", async () => {
+  for (const [endPid, still, expect] of [[11, undefined, null], [10, () => false, "fake:/a"]]) {
+    const io = contextIo({ terminals: { t1: { pid: endPid, created: 0, title: "" } } });
+    io.now = () => clock.now;
+    const strategy = {
+      id: "fake", matches: ["fake"],
+      async locate(_a, _io, memo) { memo.account = "fake:/a"; memo.home = "/a"; memo.plan = { pid: 10, key: "s", on: true }; return { id: "fake", terminal: "t1", pid: 10, files: [] }; },
+      async read() { return { used: 5, window: 100, at: 0 }; },
+      ...(still && { stillSame: still }),
+    };
+    const reader = new ContextReader(io, { strategies: [strategy], queue: makeQueue(2) });
+    const cx = makeCx();
+    reader.see({ terminal: "t1", program: { key: "fake" }, app: null, status: "idle" }, true, cx);
+    await clock.advance(2000);
+    assert.equal(reader.reading, null, "the late answer is dropped");
+    assert.equal(reader.account, expect);
+    assert.equal(reader.memo.plan?.pid ?? null, expect ? 10 : null);
+    reader.close();
+    assert.deepEqual(cx.errors, []);
+  }
+});

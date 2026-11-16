@@ -38,6 +38,19 @@ export function parseStat(text) {
   const m = /^(\d+) (\d+(?:\.\d+)?)\s*$/.exec(text ?? "");
   return m ? { size: Number(m[1]), mtime: Math.round(Number(m[2]) * 1000) } : null;
 }
+// `find … -exec stat -f '%Fm %N' {} +` (macOS) or `find … -printf '%T@ %p\n'` (GNU): one line per
+// file, its mtime in seconds (with a fraction), a space, its path (which may hold spaces) →
+// [{ path, mtime }] with mtime in ms. A line of another form is skipped; no text: null.
+export function parseRecent(text) {
+  if (typeof text !== "string") return null;
+  const files = [];
+  for (const line of text.split("\n")) {
+    const m = /^(\d+(?:\.\d+)?) (.+)$/.exec(line);
+    const mtime = m ? Math.round(Number(m[1]) * 1000) : NaN;
+    if (Number.isFinite(mtime)) files.push({ path: m[2], mtime });
+  }
+  return files;
+}
 // `lsof -Fn`: one "n<path>" line per open file.
 export const parseLsof = (text) => (typeof text === "string" ? text.split("\n").filter((l) => l.startsWith("n/")).map((l) => l.slice(1)) : null);
 
@@ -107,6 +120,19 @@ export function makeIo({ after = null, limits = null } = {}) {
       const out = await run("stat", ["-c", "%s %.9Y", p]);
       if (out !== null) statForm = "gnu";
       return parseStat(out);
+    },
+    // The files under `root` named like `name` (a find pattern) written within the last `minutes`,
+    // as [{ path, mtime }] (parseRecent), or null: find failed (a folder it couldn't read too) or its
+    // output was cut. [] is an answer: none. `-H` follows a root that is a link. One find, which on
+    // macOS runs stat on its files in batches; GNU's find prints the times itself. The mac form is
+    // tried first unless stat() found GNU, and the answer sets no form: with no files, macOS's
+    // never ran stat, so it says nothing about it.
+    async recentFiles(root, name, minutes) {
+      const base = ["-H", root, "-type", "f", "-name", name, "-mmin", `-${Math.ceil(minutes)}`];
+      const mac = () => run("find", [...base, "-exec", "stat", "-f", "%Fm %N", "{}", "+"], 10_000);
+      const gnu = () => run("find", [...base, "-printf", "%T@ %p\\n"], 10_000);
+      const out = statForm === "gnu" ? await gnu() : ((await mac()) ?? (await gnu()));
+      return parseRecent(out);
     },
     // `whole` (the text starts at the file's beginning) needs the size before and after: a file
     // that grew past n in between was cut. Growing only after tail ran it wasn't, but counts as cut

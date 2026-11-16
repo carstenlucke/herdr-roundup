@@ -11,7 +11,7 @@ Third beta of 0.11.0: Claude Code and Codex panes on a subscription now show, be
 - **In the hover card:** when each window resets, a bar with a tick for how much of the window's time has passed, and, when you are ahead of that, when the limit would run out.
 - **Claude Code** needs its integration for them (`scripts/agent-integrations.sh install claude`, the same one as for the context window). **Codex** needs nothing.
 - **Dimmed** when the numbers are older than 15 minutes. Claude Code's are also dimmed, with "age unknown" in the card, until its next answer after a start or after this update: only then is it known how old they are.
-- **Not shown:** with an API key (there are no windows), for Claude Code on Bedrock, Vertex, Foundry or another endpoint, for a Codex model with a limit of its own, and for Pi Agent and OpenCode (they don't pass the limits on). A Claude Code pane with an API key shows the account's limits until its first answer.
+- **Not shown:** with an API key (there are no windows), for Claude Code on Bedrock, Vertex, Foundry or another endpoint, for a Codex model with a limit of its own, and for Pi Agent and OpenCode (they don't pass the limits on). A Claude Code pane with an API key, or with Bedrock, Vertex or Foundry switched on in its settings' `env`, shows the account's limits until its first answer.
 - **README:** a section "Agent integrations": what each one changes, and what shows without it.
 
 ## Coming next

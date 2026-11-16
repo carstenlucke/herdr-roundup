@@ -76,12 +76,14 @@ function contextPart(t, reading, tier) {
   return kids;
 }
 
-// One window in the pill: "5h 78%", the mark before a number from 70 %.
+// One window in the pill: "5h 78%", the mark before a number from 70 %. The number with its mark
+// keeps the context number's least width, so 9 % → 10 % doesn't move what follows (a mark and
+// "100%" may still be wider).
 function limitWindow(t, w, now) {
   const gone = passed(w, now);
   const sev = gone ? "ok" : limitSeverity(w.used);
   const loud = sev !== "ok";
-  const num = h_flex().flex_none().gap(3).items_center();
+  const num = h_flex().flex_none().min_w(PCT_MIN_W).gap(3).items_center();
   if (loud) num.child(svg(limitMark(sev)).size(10).flex_none().text_color(limitColor(t, sev)));
   num.child(div().flex_none().text_color(loud ? t.foreground : t.muted).when(loud, (e) => e.font_medium()).child(gone ? "–" : percentText(w.used)));
   return h_flex().flex_none().gap(4).items_center()
@@ -94,15 +96,17 @@ function limitWindow(t, w, now) {
 // `alone`: no context part beside it (a session before its first answer). The tier is then the
 // context's own (TIERS, no "narrow"), and its narrowest step still has room for one window: the
 // tighter one, whatever it stands at, or the first when all have reset, so the pill and its card
-// are there. Beside a context part: all from "bar", the tighter from 70 % at "narrow", a mark from
-// 90 % at "percent" (the rounded percent, as severity() reads it).
+// are there. Beside a context part: all from "bar" (where one hasn't reset: windows that all have
+// would draw only "–", and the context would give its tokens for them), the tighter from 70 % at
+// "narrow", a mark from 90 % at "percent" (the rounded percent, as severity() reads it).
 export function limitChoice(limits, tier, now, alone = false) {
   if (!limits?.windows?.length || tier === "none") return null;
-  if (tier === "full" || tier === "bar") return { windows: limits.windows };
-  if (alone) return { windows: [worst(limits.windows, now) ?? limits.windows[0]] };
   const w = worst(limits.windows, now);
-  if (tier === "narrow" && w && limitSeverity(w.used) !== "ok") return { windows: [w] };
-  if (tier === "percent" && w && Math.round(w.used) >= CRITICAL) return { mark: w };
+  if (!alone && !w) return null;
+  if (tier === "full" || tier === "bar") return { windows: limits.windows };
+  if (alone) return { windows: [w ?? limits.windows[0]] };
+  if (tier === "narrow" && limitSeverity(w.used) !== "ok") return { windows: [w] };
+  if (tier === "percent" && Math.round(w.used) >= CRITICAL) return { mark: w };
   return null;
 }
 

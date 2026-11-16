@@ -7,7 +7,7 @@
 //   → status line file ~/.cache/herdr-roundup/context/claude/<t>.json, if its pid and session match
 //   → transcript: the status line's transcript_path, else projects/<cwd slug>/<sessionId>.jsonl
 
-import { NO_ANSWER, foreground, processEnv, observeJsonFile, observeTerminalFile, parseJson, normalizeFolder, eachLimited, ACCOUNT_AT_ONCE } from "../locate.js";
+import { NO_ANSWER, foreground, forgetProcess, processEnv,observeJsonFile, observeTerminalFile, parseJson, normalizeFolder, eachLimited, ACCOUNT_AT_ONCE } from "../locate.js";
 import { scanTail, fromEnd, NO_READING } from "../tail.js";
 import { fromClaude } from "../../limits/parse.js";
 
@@ -164,10 +164,12 @@ export default {
   // `memo`: the reader's per-terminal store (empty again for another terminal or program).
   async locate(agent, io, memo = {}) {
     const fg = await foreground(io, agent.terminal);
-    if (!fg || fg === NO_ANSWER) return fg;
+    if (fg === NO_ANSWER) return fg;
+    if (!fg) { forgetProcess(memo); return null; }
     const env = await processEnv(io, fg.pid, memo);
-    // The process's environment names its terminal: another one's means another terminal's agent.
-    if (env?.HC_TERMINAL_ID && env.HC_TERMINAL_ID !== agent.terminal) return null;
+    // The process's environment names its terminal: another one's means another terminal's agent,
+    // whose account and plan aren't this pane's.
+    if (env?.HC_TERMINAL_ID && env.HC_TERMINAL_ID !== agent.terminal) { forgetProcess(memo); return null; }
     const home = normalizeFolder(env?.CLAUDE_CONFIG_DIR || `${io.home}/.claude`);
     // The account for the plan limits (limits/store.js): the config folder, known before a session is.
     // Only from an environment that was read: where `ps` failed this look, the default folder may not
