@@ -24,6 +24,29 @@ test("parseEnv takes the environment's value, the last of a key (arguments come 
   assert.equal(parseEnv(null), null);
 });
 
+test("parseEnv keeps a value with spaces whole up to the next variable or the line's end: two config folders with a space stay two accounts", async () => {
+  const ps = (home) => `/opt/codex/bin/codex resume HC_TERMINAL_ID=t7 CODEX_HOME=${home} PATH=/bin:/usr/bin\n`;
+  assert.equal(parseEnv(ps("/Users/a/Codex Personal")).CODEX_HOME, "/Users/a/Codex Personal");
+  assert.equal(parseEnv(ps("/Users/a/Codex Work")).CODEX_HOME, "/Users/a/Codex Work");
+  // The last variable runs to the line's end, trailing blanks aside; an empty value stays empty.
+  assert.deepEqual(parseEnv("claude HC_TERMINAL_ID=t7 CLAUDE_CONFIG_DIR=/Users/a/Claude Work  \n"), { HC_TERMINAL_ID: "t7", CLAUDE_CONFIG_DIR: "/Users/a/Claude Work" });
+  assert.deepEqual(parseEnv("codex CODEX_HOME= HC_TERMINAL_ID=t7\n"), { CODEX_HOME: "", HC_TERMINAL_ID: "t7" });
+  // Through the strategy: the account is the whole folder.
+  const { contextIo } = await import("./support/context-io.mjs");
+  const codex = (await import("../mods/roundup-pane/context/strategies/codex.js")).default;
+  const accounts = [];
+  for (const home of ["/Users/a/Codex Personal", "/Users/a/Codex Work"]) {
+    const io = contextIo({ terminals: { t7: { pid: 4242, created: 0, title: "codex", cwd: "/Users/a/src" } } });
+    io.env = async () => parseEnv(ps(home));
+    const memo = {};
+    await codex.locate({ terminal: "t7" }, io, memo);
+    accounts.push(memo.account);
+    assert.equal(memo.home, home);
+    assert.equal(memo.pid, 4242, "the process the account was read for");
+  }
+  assert.deepEqual(accounts, ["codex:/Users/a/Codex Personal", "codex:/Users/a/Codex Work"]);
+});
+
 test("Claude's off-plan switches reach the strategy through parseEnv: Bedrock, Vertex and Foundry switched on hide the pane's limits, offer none, ask none", async () => {
   const { contextIo, fixture } = await import("./support/context-io.mjs");
   const { makeStore } = await import("../mods/roundup-pane/limits/store.js");

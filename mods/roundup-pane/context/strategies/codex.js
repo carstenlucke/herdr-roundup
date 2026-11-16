@@ -162,6 +162,9 @@ export default {
     // default folder.
     memo.account = env ? `codex:${home}` : null;
     memo.home = env ? home : null;
+    // The process the account was read for: another one (a restart in the pane) asks the account's
+    // files once more (reader.js, askAccount).
+    memo.pid = env ? fg.pid : null;
     // Whether this pane shows them is its own matter (`memo.plan`, { pid, key: rollout, on }, set by
     // read() from this session's rollout, heeded by the reader): it holds for the process that said so.
     if (memo.plan && memo.plan.pid !== fg.pid) memo.plan = null;

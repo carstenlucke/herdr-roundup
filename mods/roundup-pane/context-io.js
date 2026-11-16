@@ -22,14 +22,16 @@ const run = async (cmd, args, timeout = T) => {
 };
 // The environment keys the strategies look at, from `ps -wwE`: HC_TERMINAL_ID (every strategy
 // checks the terminal) and each strategy's own (`envKeys`), so a key a strategy reads is always
-// kept. The arguments come first, so the last occurrence of a key is the environment's. A value
-// with a space is cut there.
+// kept. The arguments come first, so the last occurrence of a key is the environment's. ps joins
+// the variables with spaces, so a value runs to the next ` NAME=` or the line's end: a config
+// folder with a space (`/Users/a/Codex Work`) stays whole, and two such folders stay two accounts.
+// Only a value that itself holds ` NAME=` is cut there.
 export const ENV_KEYS = [...new Set(["HC_TERMINAL_ID", ...STRATEGIES.flatMap((s) => s.envKeys ?? [])])];
 export function parseEnv(text) {
   if (typeof text !== "string") return null;
   const env = {};
   for (const k of ENV_KEYS) {
-    const all = [...text.matchAll(new RegExp(`(?:^|\\s)${k}=(\\S*)`, "g"))];
+    const all = [...text.matchAll(new RegExp(`(?:^|\\s)${k}=([^\\n]*?)(?=\\s+[A-Za-z_]\\w*=|\\s*(?:\\n|$))`, "g"))];
     if (all.length) env[k] = all[all.length - 1][1];
   }
   return env;

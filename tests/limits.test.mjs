@@ -1008,6 +1008,44 @@ test("the reader asks for the account's limits once when an agent starts in its 
   assert.deepEqual(cx.errors, []);
 });
 
+test("an agent restarted in the pane on the same account asks the account's files again, once a minute per account at most", async () => {
+  const io = contextIo({ terminals: { t1: { pid: 10, created: 0, title: "" } } });
+  io.now = () => clock.now;
+  io.limits = makeStore();
+  let pid = 100, asks = 0, looks = 0;
+  const strategy = {
+    id: "fake", matches: ["fake"],
+    async locate(_a, io_, memo) {
+      looks++;
+      // Another pane of the account asked in the same moment (the restart within a minute of it).
+      if (pid === 102) io_.limits.due("fake:/Users/a/.fake", clock.now);
+      memo.account = "fake:/Users/a/.fake"; memo.home = "/Users/a/.fake"; memo.pid = pid;
+      return null;
+    },
+    async read() { return null; },
+    async accountLimits() { asks++; },
+  };
+  const reader = new ContextReader(io, { strategies: [strategy], queue: makeQueue(2) });
+  const cx = makeCx();
+  reader.see({ terminal: "t1", program: { key: "fake" }, app: null, status: "idle" }, true, cx);
+  await clock.advance(2000);
+  assert.equal(asks, 1);
+  await clock.advance(5 * 60_000);
+  assert.equal(asks, 1, "the same process: not again");
+  // Restarted between two looks (the program never changed as panes() has it): another pid.
+  pid = 101;
+  await clock.advance(5 * 60_000);
+  assert.equal(asks, 2, "another process on the account: asked again");
+  // Another restart, the account asked by another pane just before: the store's throttle holds.
+  pid = 102;
+  const before = looks;
+  while (looks === before) await clock.advance(1000);
+  await clock.advance(1000);
+  assert.equal(asks, 2, "within a minute of the account's last ask: not again");
+  reader.close();
+  assert.deepEqual(cx.errors, []);
+});
+
 test("the ask for the account's limits is a job of its own after the pane's look: the pane's own number and its header don't wait for it", async () => {
   const io = contextIo({ terminals: { t1: { pid: 10, created: 0, title: "" } } });
   io.now = () => clock.now;

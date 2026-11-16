@@ -73,12 +73,13 @@ export async function foreground(io, terminal) {
 }
 
 // What a strategy's locate() left in the reader's `memo` about the process it took for the agent
-// (the plan limits' account, its config folder, whether its session runs on the plan) goes once
+// (the plan limits' account, its config folder, its pid, whether its session runs on the plan) goes once
 // that process proves not to be it: no foreground process, another terminal's environment, another
 // pid by the end of the look. Not on NO_ANSWER: a failed `hc get` proves nothing.
 export function forgetProcess(memo) {
   memo.account = null;
   memo.home = null;
+  memo.pid = null;
   memo.plan = null;
 }
 

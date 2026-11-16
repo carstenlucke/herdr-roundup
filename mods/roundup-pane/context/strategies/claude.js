@@ -179,6 +179,9 @@ export default {
     // reads it. The session is still searched for in the default folder.
     memo.account = env ? `claude:${home}` : null;
     memo.home = env ? home : null;
+    // The process the account was read for: another one (a restart in the pane) asks the account's
+    // files once more (reader.js, askAccount).
+    memo.pid = env ? fg.pid : null;
     // Whether this pane shows them is its own matter (`memo.plan`, which the reader heeds): the
     // account stays the other panes'.
     const byEnv = offPlan(env);
