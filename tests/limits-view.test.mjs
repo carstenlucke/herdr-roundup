@@ -402,3 +402,20 @@ test("a limit's number keeps the context number's least width, so 9 % to 10 % do
   assert.equal(nums.length, 2, "both windows' numbers");
   assert.deepEqual(nums.map((e) => words(e)), ["9%", "41%"]);
 });
+
+test("size events take the limits of their render: a drag reads nothing from the store, the next render the store's new reading", () => {
+  sharedStore.offer(ACC, live(4, 38));
+  const { view, render, cx } = header();
+  let root = render();
+  const get = sharedStore.get;
+  let gets = 0;
+  sharedStore.get = (...a) => { gets++; return get.apply(sharedStore, a); };
+  try {
+    for (let w = 700; w > 600; w -= 10) fire(root, "size_change", { width: w, height: 28 }, cx);
+    assert.equal(gets, 0, "no store read per size event");
+  } finally { sharedStore.get = get; }
+  sharedStore.offer(ACC, { ...live(75, 38), at: Date.now() + 1 });
+  root = render();
+  assert.match(words(trigger(cardOf(root))), /5h 75%/, "the render takes the store's new reading");
+  view.close();
+});

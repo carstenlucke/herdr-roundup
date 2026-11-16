@@ -224,6 +224,14 @@ test("lastLinesWith through the real awk: the last n of the lines with the text 
   assert.deepEqual(await io.lastLinesWith(f, "## nothing", SNAPSHOT_META, 150, 8), []);
 });
 
+test("every strategy's environment keys reach it through parseEnv, and HC_TERMINAL_ID for all", async () => {
+  const { STRATEGIES } = await import("../mods/roundup-pane/context/registry.js");
+  const keys = [...new Set(["HC_TERMINAL_ID", ...STRATEGIES.flatMap((s) => s.envKeys ?? [])])];
+  assert.ok(keys.includes("CLAUDE_CODE_USE_BEDROCK") && keys.includes("CODEX_HOME") && keys.includes("CLAUDE_CONFIG_DIR"));
+  const ps = `agent ${keys.map((k, i) => `${k}=v${i}`).join(" ")} OTHER=x\n`;
+  assert.deepEqual(parseEnv(ps), Object.fromEntries(keys.map((k, i) => [k, `v${i}`])), "each declared key, nothing else");
+});
+
 test("parseRecent reads find's mtime and path lines, macOS' and GNU's, a path with spaces whole; junk is skipped", async () => {
   const { parseRecent } = await import("../mods/roundup-pane/context-io.js");
   assert.deepEqual(parseRecent("1794850000.123456789 /a/b c/rollout-1.jsonl\n1794850001 /a/r.jsonl\njunk\n\n"), [

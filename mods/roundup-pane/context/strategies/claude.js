@@ -31,8 +31,8 @@ export const ACCOUNT_READS = 500;
 // The process doesn't run on the plan: it is told to use Bedrock, Vertex or Foundry (switched on
 // as Claude Code reads such a switch). An API key, a token or another endpoint (ANTHROPIC_BASE_URL:
 // a pass-through proxy may still carry the subscription) decides nothing: such a pane shows its
-// account's limits until its own first answer says otherwise (claudePlan, below). The three keys
-// must be in context-io.js's ENV_KEYS, or the environment never has them.
+// account's limits until its own first answer says otherwise (claudePlan, below). The strategy
+// names the keys it reads (`envKeys`): context-io.js's parseEnv keeps those, so this list is the one.
 const ON = new Set(["1", "true", "yes", "on"]);
 const OFF_PLAN = ["CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY"];
 export const offPlan = (env) => Boolean(env) && (OFF_PLAN.some((k) => ON.has(String(env[k] ?? "").trim().toLowerCase())));
@@ -157,6 +157,8 @@ export function claudePlan(prev, pid, session, own) {
 export default {
   id: "claude",
   matches: ["claude", "claude-code"],
+  // The environment keys locate() reads (context-io.js builds parseEnv's list from these).
+  envKeys: ["CLAUDE_CONFIG_DIR", ...COMPACT_ENV, ...OFF_PLAN],
   // No number may also mean the status line file couldn't be read this time (readText gives null
   // for both): the reader reads again on every look then, without a backoff, but keeps no stats.
   keepsNoReading: false,

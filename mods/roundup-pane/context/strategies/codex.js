@@ -129,6 +129,8 @@ export async function newestRollouts(io, home, n = ACCOUNT_FILES, days = ACCOUNT
 export default {
   id: "codex",
   matches: ["codex"],
+  // The environment keys locate() reads (context-io.js builds parseEnv's list from these).
+  envKeys: ["CODEX_HOME"],
   // A rollout read without a number (a compaction or model change after the last count) stays
   // so until the file changes: the reader keeps its stats then, and reads it again only then.
   keepsNoReading: true,

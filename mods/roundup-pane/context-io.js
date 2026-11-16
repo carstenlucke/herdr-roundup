@@ -7,6 +7,7 @@
 
 import { exec, hc, home, readTextFile } from "herdr";
 import * as fs from "fs/promises";
+import { STRATEGIES } from "./context/registry.js";
 
 const T = 5_000;
 export const HC_MS = 5_000;
@@ -19,11 +20,11 @@ const run = async (cmd, args, timeout = T) => {
     return null;
   }
 };
-// The environment keys a strategy looks at, from `ps -wwE`: the arguments come first, so the
-// last occurrence of a key is the environment's. A value with a space is cut there.
-// The keys of claude.js's offPlan() are among them: a key not listed here never reaches it.
-export const ENV_KEYS = ["HC_TERMINAL_ID", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "CLAUDE_CODE_AUTO_COMPACT_WINDOW", "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE",
-  "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY"];
+// The environment keys the strategies look at, from `ps -wwE`: HC_TERMINAL_ID (every strategy
+// checks the terminal) and each strategy's own (`envKeys`), so a key a strategy reads is always
+// kept. The arguments come first, so the last occurrence of a key is the environment's. A value
+// with a space is cut there.
+export const ENV_KEYS = [...new Set(["HC_TERMINAL_ID", ...STRATEGIES.flatMap((s) => s.envKeys ?? [])])];
 export function parseEnv(text) {
   if (typeof text !== "string") return null;
   const env = {};

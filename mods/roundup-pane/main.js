@@ -202,7 +202,9 @@ export default class Pane extends View {
       .id(`pane-head-${pane}`)
       .size_full()
       // The width is kept on every change (a later zoom tiers it), but only a new tier re-renders.
-      .on_size_change((size, cx) => { this.width = size.width; if (!sameTiers(this.tierNow(), this.shownTier)) cx.notify(); })
+      // The limits are this render's: a drag fires many events, and the store's reading changes
+      // only with a redraw (the 2 s timer draws when it does).
+      .on_size_change((size, cx) => { this.width = size.width; if (!sameTiers(this.tierNow(limits), this.shownTier)) cx.notify(); })
       .px(10)
       .gap(8)
       .items_center()
