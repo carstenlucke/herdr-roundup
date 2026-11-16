@@ -267,7 +267,7 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
     of the other can stay until its reset: give the proxy a
     `CLAUDE_CONFIG_DIR` of its own. Bedrock, Vertex or Foundry switched on
     in the settings' `env` (not the process's) shows the folder's limits
-    until the pane answers without them (#49).
+    until the integration sees an answer of its own without them (#49).
   - The card adds "Limits": the plan (Codex), the time, per window a row
     with its reset and a bar with a tick for the time gone; from 50% a
     pace warning, at 100% when the agent answers again.

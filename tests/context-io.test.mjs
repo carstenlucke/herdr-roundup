@@ -270,3 +270,46 @@ test("recentFiles: one find under the root, files only, by name and write time, 
   herdr.failExec("find");
   assert.equal(await io.recentFiles(root, "rollout-*.jsonl", 8 * 1440), null, "no find: null");
 });
+
+test("recentFiles on GNU: the mac form failing gives way to -printf, a known GNU form asks -printf first, an empty answer sets no form, cut output is null", async () => {
+  // A module of its own per case: the stat form is the module's, found once.
+  const fresh = async (tag) => (await import(`../mods/roundup-pane/context-io.js?${tag}`)).makeIo();
+  const root = "/home/a/.codex/sessions";
+  const base = ["-H", root, "-type", "f", "-name", "rollout-*.jsonl", "-mmin", "-11520"];
+  const MAC = [...base, "-exec", "stat", "-f", "%Fm %N", "{}", "+"], GNU = [...base, "-printf", "%T@ %p\\n"];
+  const gnuOut = "1794850000.5 /home/a/.codex/sessions/2026/10/01/rollout a.jsonl\n";
+  const calls = [];
+  // GNU: stat -f is the file system's status, and the mac form's find fails; -printf answers.
+  herdr.onExec((c) => {
+    if (c.command === "find") { calls.push(c.args); return c.args.includes("-printf") ? { code: 0, stdout: gnuOut, stderr: "" } : { code: 1, stdout: "", stderr: "stat: cannot read file system information for '%Fm %N'" }; }
+    if (c.command === "stat") return c.args[0] === "-c" ? { code: 0, stdout: "12 1794850000.000000000\n", stderr: "" } : { code: 1, stdout: "", stderr: "" };
+    return undefined;
+  });
+  let io = await fresh("gnu-unknown");
+  assert.deepEqual(await io.recentFiles(root, "rollout-*.jsonl", 8 * 1440), [{ path: "/home/a/.codex/sessions/2026/10/01/rollout a.jsonl", mtime: 1794850000500 }]);
+  assert.deepEqual(calls, [MAC, GNU], "the mac form first, then GNU's");
+  // Known GNU (stat found it): -printf only.
+  io = await fresh("gnu-known");
+  assert.ok(await io.stat("/x"));
+  calls.length = 0;
+  await io.recentFiles(root, "rollout-*.jsonl", 8 * 1440);
+  assert.deepEqual(calls, [GNU]);
+  // An empty answer of the mac form (no files: stat never ran) is an answer, and sets no form:
+  // stat() still finds GNU's afterwards.
+  reset();
+  const statArgs = [];
+  herdr.onExec((c) => {
+    if (c.command === "find") return { code: 0, stdout: "", stderr: "" };
+    if (c.command === "stat") { statArgs.push(c.args[0]); return c.args[0] === "-c" ? { code: 0, stdout: "12 1794850000.000000000\n", stderr: "" } : { code: 1, stdout: "", stderr: "" }; }
+    return undefined;
+  });
+  io = await fresh("gnu-empty");
+  assert.deepEqual(await io.recentFiles(root, "rollout-*.jsonl", 8 * 1440), []);
+  assert.deepEqual(await io.stat("/x"), { size: 12, mtime: 1794850000000 });
+  assert.deepEqual(statArgs, ["-f", "-c"], "stat tried the mac form first: the empty find had set nothing");
+  // Output cut at exec's limit: null, not part of a list.
+  reset();
+  herdr.onExec((c) => (c.command === "find" ? { code: 0, stdout: `1 /a/rollout-x.jsonl\n`.repeat(8 * 1024 * 1024 / 20), stderr: "" } : undefined));
+  io = await fresh("cut");
+  assert.equal(await io.recentFiles(root, "rollout-*.jsonl", 8 * 1440), null);
+});

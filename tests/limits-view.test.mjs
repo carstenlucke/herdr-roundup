@@ -395,7 +395,7 @@ test("limits that have all reset don't cost the context its tokens: beside a con
   assert.equal(words(pillOf(at(600, [0, 1], null))), "5h – wk –", "limits alone: the pill stays for its card");
 });
 
-test("a limit's number keeps the context number's least width, so 9 % to 10 % doesn't move what follows", async () => {
+test("a limit's number has the context number's least width (PCT_MIN_W), both windows' numbers", async () => {
   const { PCT_MIN_W } = await import("../mods/roundup-pane/context-view.js");
   const lim = byId(pill(L([five(9), week(41)])), "ph-lim-p1");
   const nums = all(lim).filter((e) => e.style("min_w")?.[0] === PCT_MIN_W);
