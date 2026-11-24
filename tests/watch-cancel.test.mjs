@@ -32,6 +32,7 @@ test("FIL-113: the panel cancels the watch of the folder shown before; a watch t
   // Nothing changed (a watch Herdr reclaimed): no refresh, and no new watch at once, which would
   // reclaim another one's; the next timed read watches again.
   await waitFor(() => !view.loading);
+  view.ctx.base = { top: a, prefix: "" }; // as a repo's read leaves it
   const refreshes = herdr.calls("exec").length;
   herdr.change(a, []);
   await waitFor(() => view.watched === null);
@@ -124,13 +125,13 @@ test("CHG-10: the one read comes after the stamp has answered, so a save between
   const view = new Preview();
   const { cx } = mount(class { init(_p, cx) { view.init(_p, cx); } }, { props: { file } });
   await waitFor(() => herdr.watching(a) === 1 && view.loads === 1);
-  // The stamp answers 20 ms late; each read notes whether a stamp had answered by then.
+  // The stamp answers 20 ms late, the same each time; each read notes whether a stamp had answered by then.
   let stamps = 0, answered = 0;
   const readWhen = [];
   herdr.onExec((c) => {
     if (c.command !== "sh" || c.args[2] !== "stamp") return undefined;
     stamps++;
-    return new Promise((r) => setTimeout(r, 20)).then(() => { answered++; return undefined; });
+    return new Promise((r) => setTimeout(r, 20)).then(() => { answered++; return { code: 0, stdout: "1\n" }; });
   });
   herdr.onReadTextFile(() => { readWhen.push(answered); return undefined; });
   herdr.change(a, []);
@@ -149,5 +150,35 @@ test("CHG-10: the one read comes after the stamp has answered, so a save between
   assert.equal(stamps, before, "no stamp for the local file shown before");
   assert.equal(view.poll, null, "and no look every 3 s");
   view.close();
+  assert.deepEqual(cx.errors, []);
+});
+
+test("FIL-116: an older index build that finishes last doesn't replace the index of a newer one", async () => {
+  const a = tempDir("roundup-watch-old-");
+  write(a, { "a.txt": "a\n" });
+  herdr.set({
+    spaces: [space("s1", [tab("tb1", { active: true })], { active: true, folder: a })],
+    panes: [pane("p1", "tb1", { terminal: "t1", cwd: a })],
+    focused: { space: "s1", tab: "tb1", pane: "p1", terminal: "t1", cwd: a },
+  });
+  const { view, cx } = mount(Files, { props: {} });
+  view.sync(cx);
+  await waitFor(() => herdr.watching(a) === 1 && !view.loading);
+  view.setSource("disk", cx);
+  // The first build (the disk's) is held up; the source goes to git and back, which starts two more.
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  herdr.onExec((c) => (c.command === "sh" && String(c.args[1]).includes("find .") ? gate.then(() => undefined) : undefined), { times: 1 });
+  const older = view.ensureIndex(view.ctx);
+  await waitFor(() => herdr.calls("exec").some(([cmd, args]) => cmd === "sh" && String(args[1]).includes("find .")));
+  view.setSource("git", cx);
+  const between = view.ensureIndex(view.ctx);
+  view.setSource("disk", cx);
+  const newer = await view.ensureIndex(view.ctx);
+  await between.catch(() => null);
+  assert.equal(view.index, newer, "the newest build's index");
+  release();
+  await older;
+  assert.equal(view.index, newer, "the older build, done last, is dropped");
   assert.deepEqual(cx.errors, []);
 });

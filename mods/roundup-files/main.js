@@ -445,7 +445,9 @@ export default class Files extends View {
         const index = { dirs: built.dirs, all: built.all, lower: built.all.map((rel) => rel.toLowerCase()), full: built.full, cut: built.cut, files: built.all.length - built.dirs.size, source: ctx.noDisk ? "git" : source, from: fromGit ? "git" : "disk", known: new Set(built.all), added: new Set(), pending: new Set(), checking: false, at: Date.now(), stale: false, held: false, dirty: Boolean(fromGit ? job.changedGit : job.changedDisk) };
         // Git's answer changed during the build (regit): the next search, or the timer, reads it again.
         if (job.regit) { index.stale = true; index.at = 0; }
-        if (this.current(ctx) && this.searchSource() === index.source) this.index = index;
+        // Only the latest build: an older one (the source switched away and back meanwhile) may
+        // finish last, and would replace a newer index with what it read before.
+        if (this.current(ctx) && this.indexing === job && this.searchSource() === index.source) this.index = index;
         return index;
       })()
         .catch((e) => { if (this.current(ctx)) ctx.failed = { source, git: this.git, error: e }; throw e; })
