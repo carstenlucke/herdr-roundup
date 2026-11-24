@@ -47,12 +47,17 @@ test("preview.py: Settings gets the bare window, only poster draws the poster, a
 });
 
 // LAY-22
-test("preview.py: the poster shows the agent quicklook card, Settings' window doesn't", () => {
+test("preview.py: the poster shows its features, the two cut-outs and no card over the window; Settings' window none of it", () => {
   const dir = stubHome();
   try {
     const plain = draw(dir), poster = draw(dir, "poster");
+    for (const f of ["Spaces with git state", "Files with git built in", "A preview for every file", "Agent integrations in the menu",
+      "Every agent, by tab and pane", "Context and plan limits"]) {
+      assert.ok(poster.includes(`>${f}</text>`), f);
+      assert.ok(!plain.includes(`>${f}</text>`), `Settings' window: ${f}`);
+    }
+    assert.doesNotMatch(poster, /id="quicklook"/, "no hover card over the poster's window: the cut-out shows the agents");
     assert.doesNotMatch(plain, /id="quicklook"/, "Settings' window has no hover card open");
-    assert.equal((poster.match(/id="quicklook"/g) ?? []).length, 1, "the poster's window shows the card once");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

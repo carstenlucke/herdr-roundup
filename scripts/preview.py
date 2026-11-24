@@ -6,12 +6,11 @@
 #   python3 scripts/preview.py . layouts/Herdr-Roundup.svg
 #   rsvg-convert -z 2 layouts/Herdr-Roundup.svg -o preview.png
 # Settings shows the SVG: the bare window, as it is without a scene (or with the scene "window").
-# README.md and RECIPE.md show the PNG, drawn from the poster instead:
+# README.md, RECIPE.md and the release notes show the PNG, drawn from the poster instead:
 #   python3 scripts/preview.py . /tmp/poster.svg poster && rsvg-convert -z 2 /tmp/poster.svg -o preview.png
-# The 0.11.0 release notes show the other poster (poster-alt, below), kept as preview-limits.png:
-#   python3 scripts/preview.py . /tmp/alt.svg poster-alt && rsvg-convert -z 2 /tmp/alt.svg -o preview-limits.png
-# The poster puts the window beside name, claim and the main features (FEATURES), the sheep sunk
-# into the background above it; its window shows the quicklook card of search-filters' agents. assets/logo-mark.png is assets/logo.png in grey, 480px, 8 colors;
+# The poster puts name and claim on top, the main features in a small grid to the right of them
+# (FEATURES), the window below on the right, and two numbered cut-outs on its left, the sheep sunk
+# into the background above it. assets/logo-mark.png is assets/logo.png in grey, 480px, 8 colors;
 # a filter turns its dark wool into the light mark. "poster" is no scene: --scenes leaves it out.
 # A third argument draws one of the scenes the project's site shows instead, cropped to what it
 # is about (scripts/site.sh renders them all): SCENES below names them, CROPS at the end crops
@@ -25,13 +24,12 @@ if sys.argv[1:] == ["--scenes"]:
     print("\n".join(SCENES))
     sys.exit()
 REPO, OUT = sys.argv[1], sys.argv[2]
-# "poster": the bare window in its poster, for preview.png. No scene: the bare window, Settings' preview.
+# "poster": the window in its poster, for preview.png: Claude Code beside hunk's diff, no floating
+# preview and no card over a space, and beside it two cut-outs, larger: the agents of a space by tab
+# with their panes' map, and the context and plan limits of Claude Code and Codex. No scene: the
+# bare window, Settings' preview.
 POSTER = sys.argv[3:4] == ["poster"]
-# "poster-alt": another poster, for comparing: the window with Claude Code beside hunk's diff, no
-# floating preview and no card over a space, and beside it two cut-outs, larger: the agents of a
-# space by tab with their panes' map, and the context and plan limits of Claude Code and Codex.
-ALT = sys.argv[3:4] == ["poster-alt"]
-SCENE = sys.argv[3] if len(sys.argv) > 3 and not (POSTER or ALT) else "window"
+SCENE = sys.argv[3] if len(sys.argv) > 3 and not POSTER else "window"
 if SCENE != "window" and SCENE not in SCENES:
     sys.exit(f"preview.py: unknown scene {SCENE!r}; the scenes are: window, {', '.join(SCENES)}")
 LAYOUT = json.load(open(f"{REPO}/layouts/Herdr-Roundup.json"))
@@ -324,7 +322,7 @@ ry = y + 3 + 24 + 2
 for it in inner:
     if it["name"] == "search-filters":
         QB = (cx + 3 + cw - 6 - 8, ry + 22)  # its badge: right edge, middle (the quicklook scene)
-        SPACE_ROW = (cx + 3, ry, cw - 6, 44)  # its row (the other poster marks it)
+        SPACE_ROW = (cx + 3, ry, cw - 6, 44)  # its row (the poster marks it)
     ry += row(cx + 3, ry, cw - 6, **it) + 2
 card_h = ry - 2 + 3 - card_top
 frame(cx, card_top, cw, card_h, "border", rx=10)
@@ -405,8 +403,8 @@ program("claude", WX + 18, 14, 14, "muted")
 text(WX + 38, 25.5, "search-filters", 13, "foreground" if first else "muted", 500 if first else 400)
 if first:
     icon("close", WX + 140, 16, 10, "dim", sw=2.5)
-# The second tab: a shell, or in the other poster Codex's review (its first tab has hunk beside Claude Code).
-TAB2 = ("codex", "review") if ALT else ("shell", "zsh")
+# The second tab: a shell, or in the poster Codex's review (its first tab has hunk beside Claude Code).
+TAB2 = ("codex", "review") if POSTER else ("shell", "zsh")
 program(TAB2[0], WX + 171, 14, 14, "muted")
 text(WX + 189, 25.5, TAB2[1], 13, "muted")
 vx = WX + 189 + round(tw(TAB2[1], 13) + 38 - tw("zsh", 13))
@@ -477,7 +475,7 @@ def pane(x, w, prog, name, address, status, focus, lines, bottom, hover=False, y
     `limits`: the account's plan limits after the context, as (short name, percent used) each:
     a 1px divider, then "5h 21%  wk 40%", from 70 % with a mark and the number in foreground.
     `clip`: the id of its terminal's clip path, for a second pane of the same address. `path`
-    false leaves out the folder (a header alone, in the other poster's cut-out)."""
+    false leaves out the folder (a header alone, in the poster's cut-out)."""
     PY, PH = y, h
     rect(x, PY, w, PH, "background", rx=10)
     frame(x, PY, w, PH, "accent" if focus else "border", rx=10)
@@ -626,7 +624,7 @@ pane(LX, LW, "claude", "Claude Code", "t4", "working", True, [
     [],
     [("  ? for shortcuts", D, 400)],
 ], meter=(412_300, 1_000_000), # The context scene shows the meter by itself, as with an API key: no plan limits beside it.
-   limits=[("5h", 78), ("wk", 41)] if SCENE == "limits" or ALT else None if SCENE == "context" else [("5h", 21), ("wk", 40)])
+   limits=[("5h", 78), ("wk", 41)] if SCENE == "limits" or POSTER else None if SCENE == "context" else [("5h", 21), ("wk", 40)])
 # The prompt's box and cursor.
 pb = TOP + LH * (ROWS - 3)
 for ry_ in (pb - 15 - LH, pb - 15 + LH):
@@ -656,7 +654,7 @@ if SCENE == "context-pi":
         [("~/code/atlas-search-filters (search-filters)", D, 400)],
         [("↑48k ↓3.1k R41k $0.042 34.2%/272k (auto)", D, 400)],
     ], h=CH, meter=(None, 272_000, 34.2))
-elif ALT:
+elif POSTER:
     # hunk (a terminal diff viewer) on the working tree's change, the tab's whole height. Drawn
     # from scripts/preview-hunk.ansi: `hunk patch <patch> --mode unified` in a 76 x 50 tmux window,
     # kept with `tmux capture-pane -p -e`, the title put as `hunk diff` words it ("<repo> working
@@ -719,7 +717,7 @@ else:
 ], hover=SCENE == "pane-header", h=CH, meter=(88_200, 475_000), limits=[("5h", 34), ("wk", 12)])
 
 # Below it a shell in the same folder: the files the agents changed, as the side panel shows them.
-if not ALT: pane(RX, RW, "shell", "zsh", "t8", None, False, [
+if not POSTER: pane(RX, RW, "shell", "zsh", "t8", None, False, [
     [("atlas-search-filters ", "ansi4", 400), ("search-filters ", "ansi5", 400), ("❯ ", G, 400), ("git status --short", F, 400)],
     [(" M ", "ansi3", 400), ("src/search/facets.ts", F, 400)],
     [(" M ", "ansi3", 400), ("src/search/query.ts", F, 400)],
@@ -935,7 +933,7 @@ def viewer_switch(right, y, items):
 # panes' last lines show below it.
 FW, FH = round(W * 0.6), round(H * 0.75)
 FX, FT = (W - FW) // 2, (H - FH) // 2 - 22
-if SCENE in ("window", "float") and not ALT:
+if SCENE in ("window", "float") and not POSTER:
     rect(FX - 6, FT + 14, FW + 12, FH + 10, "#000000", rx=16, op=0.6)
     out[-1] = out[-1].replace("/>", ' filter="url(#shadow)"/>')
     rect(FX, FT, FW, FH, "background", rx=10)
@@ -1105,7 +1103,7 @@ def dialog_head(x, y, w, title):
     text(x + 18, y + 18 + 15, title, 15, "foreground", 600)
     text(x + w - 18, y + 18 + 14, "Esc", 11, "dim", anchor="end")
 
-if SCENE != "window" or POSTER or ALT:
+if SCENE != "window" or POSTER:
     add('<defs><filter id="soft" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="10"/></filter></defs>')
 
 if SCENE == "update":
@@ -1274,7 +1272,7 @@ if SCENE == "preview-tab":
         text(cx_, ty + 16.5, val, 12.5, col, family=MONO)
         ty += 24
 
-if SCENE == "quicklook" or POSTER:
+if SCENE == "quicklook":
     # The pointer rests on search-filters' badge: roundup-spaces' card with its two agents, Claude
     # Code working on the left, Codex done above the shell on the right; Codex's row hovered and
     # its pane lit. Sizes as main.js draws them. The
@@ -1418,7 +1416,7 @@ if SCENE == "context-pi":
     context_card("t7", "pi", "pi", "~34%", "of ~272k", "", [("Read", "14:02", "pi's footer")],
                  ["Rounded, as pi's footer shows it", "For pi's own number, switch on Pi's integration in the Herdr Roundup menu (top left)"])
 
-# The other poster's cut-outs, drawn apart from the window (each from 0, 0) and taken out of it:
+# The poster's cut-outs, drawn apart from the window (each from 0, 0) and taken out of it:
 # CUTS names each one's SVG and size. First the quicklook card of search-filters with both its tabs,
 # as roundup-spaces' quickCard draws it: per tab its number and name, its agents' rows and a 60 x
 # 40px map of its panes (2px apart in a 2px padding), a 1px rule between tabs; the pointer on
@@ -1470,7 +1468,7 @@ def agents_card(groups, lit=None):
         y += tall((0, 0, rows_)) + 4
     return QW, h
 
-if ALT:
+if POSTER:
     # Where the poster marks them in the window: search-filters' row (SPACE_ROW) and Claude Code's meter.
     CLAUDE_PILL = PILLS["t4"]
     mark_ = len(out)
@@ -1519,72 +1517,23 @@ if CROP and not (len(sys.argv) > 4 and sys.argv[4] == "full"):
     out[0] = f'<svg xmlns="http://www.w3.org/2000/svg" width="{cw_}" height="{ch_}" viewBox="{cx_} {cy_} {cw_} {ch_}">'
 add('</g></svg>')
 
-# preview.png's poster: the window, 3/4 size and bleeding off the right, beside name, claim and features.
-FEATURES = [
-    ("Spaces at a glance", "git state and agents, pane by pane"),
-    ("Files with git built in", "all files, or only what changed"),
-    ("A preview for every file", "Markdown, PDF, images, CSV, JSON, code"),
-    ("Context and plan limits", "5-hour and weekly, from each agent"),
-    ("Updates through your agent", "asks before it changes anything"),
-]
-
-def poster(window):
-    inner = window[window.index(">") + 1: window.rindex("</svg>")]
-    # The poster's own tones: amber for the claim, and text a touch softer than the window's.
-    amber, mute, fg, accent = "#e8912a", "#8a8e96", "#f3f3f4", T["accent"]
-    mark = base64.b64encode(open(f"{REPO}/assets/logo-mark.png", "rb").read()).decode()
-    ww, wx, wy = 1440, 700, 372
-    wh = ww * H / W
-    def big(x, y, s, size, fill=fg, weight=700, ls=0):
-        return f'<text x="{x}" y="{y}" font-family="{UI}" font-size="{size}" font-weight="{weight}" fill="{fill}" letter-spacing="{ls}">{escape(s)}</text>'
-    p = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}">',
-         '<defs>'
-         f'<symbol id="window" viewBox="0 0 {W} {H}">{inner}</symbol>'
-         '<filter id="poster-soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="28"/></filter>'
-         # Dark wool becomes white, the cream ground and the faces clear; only inside the picture.
-         '<filter id="poster-mark" x="0" y="0" width="1" height="1" color-interpolation-filters="sRGB">'
-         '<feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  -.85 -.85 -.85 0 1.25"/></filter>'
-         '<linearGradient id="poster-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#121317"/><stop offset="1" stop-color="#0b0c0e"/></linearGradient>'
-         f'<radialGradient id="poster-warm" cx="0%" cy="100%" r="60%"><stop offset="0" stop-color="{amber}" stop-opacity=".20"/><stop offset="1" stop-color="{amber}" stop-opacity="0"/></radialGradient>'
-         f'<radialGradient id="poster-cool" cx="64%" cy="62%" r="55%"><stop offset="0" stop-color="{accent}" stop-opacity=".30"/>'
-         '<stop offset=".5" stop-color="#7f8fc8" stop-opacity=".07"/><stop offset="1" stop-color="#7f8fc8" stop-opacity="0"/></radialGradient>'
-         f'<clipPath id="poster-window"><rect x="{wx}" y="{wy}" width="{ww}" height="{wh}" rx="16"/></clipPath>'
-         '<clipPath id="poster-logo"><rect x="110" y="84" width="96" height="96" rx="23"/></clipPath>'
-         '</defs>',
-         f'<rect width="{W}" height="{H}" fill="url(#poster-bg)"/>',
-         f'<rect width="{W}" height="{H}" fill="url(#poster-warm)"/>',
-         f'<rect width="{W}" height="{H}" fill="url(#poster-cool)"/>',
-         f'<g opacity=".08"><image x="1140" y="-78" width="560" height="560" filter="url(#poster-mark)" href="data:image/png;base64,{mark}"/></g>']
-    # Rings around the herd, one arc of them in amber. The window covers the inner ring below
-    # y = wy (from about -136deg on): the arc starts at -120deg, so all its 180px stay above it.
-    arc = -120
-    for i, rr in enumerate((560, 760, 980)):
-        p.append(f'<circle cx="1420" cy="760" r="{rr}" fill="none" stroke="{accent}" stroke-opacity="{.12 - i * .03:.2f}" stroke-width="2"/>')
-    p.append(f'<circle cx="1420" cy="760" r="560" fill="none" stroke="{amber}" stroke-opacity=".55" stroke-width="3" stroke-dasharray="180 3340" transform="rotate({arc} 1420 760)"/>')
-    p += [f'<rect x="{wx}" y="{wy + 30}" width="{ww}" height="{wh}" rx="16" fill="#000" opacity=".75" filter="url(#poster-soft)"/>',
-          f'<use href="#window" x="{wx}" y="{wy}" width="{ww}" height="{wh}" clip-path="url(#poster-window)"/>',
-          f'<rect x="{wx + .5}" y="{wy + .5}" width="{ww - 1}" height="{wh - 1}" rx="16" fill="none" stroke="#ffffff" stroke-opacity=".13"/>',
-          f'<image x="110" y="84" width="96" height="96" clip-path="url(#poster-logo)" href="data:image/png;base64,{logo}"/>',
-          big(104, 316, "Herdr", 124, ls=-5), big(104, 440, "Roundup", 124, ls=-5),
-          big(110, 520, "Round up the herd.", 46, amber, 600, -1.5),
-          '<path d="M110 586H600" stroke="#ffffff" stroke-opacity=".10" stroke-width="2"/>']
-    y = 652
-    for title, sub in FEATURES:
-        p += [f'<circle cx="122" cy="{y - 9}" r="6" fill="{amber}"/>',
-              big(148, y, title, 30, weight=600, ls=-.5), big(148, y + 36, sub, 23, mute, 400)]
-        y += 104
-    p.append('</svg>')
-    return p
-
-# The other poster: name and claim on top, the window at 0.68 on the right, and on the left the two
+# preview.png's poster: name and claim on top, the window at 0.68 on the right, and on the left the two
 # cut-outs (CUTS) at about twice the window's scale, each under a numbered caption; the same
 # numbers in amber mark where they are in the window: search-filters' row and Claude Code's meter.
+# Right of the name, above the window, the features the cut-outs don't show (FEATURES), two by two,
+# each a dot and a short line: small enough to leave the name and the window the eye's first stops.
+FEATURES = [
+    "Spaces with git state",
+    "Files with git built in",
+    "A preview for every file",
+    "Agent integrations in the menu",
+]
 CAPTIONS = [
     ("Every agent, by tab and pane", "rest on a space's badge"),
     ("Context and plan limits", "Claude Code and Codex, 5-hour and weekly"),
 ]
 
-def poster_alt(window):
+def poster(window):
     inner = window[window.index(">") + 1: window.rindex("</svg>")]
     amber, mute, fg, accent, ink = "#e8912a", "#8a8e96", "#f3f3f4", T["accent"], "#121317"
     mark = base64.b64encode(open(f"{REPO}/assets/logo-mark.png", "rb").read()).decode()
@@ -1629,6 +1578,11 @@ def poster_alt(window):
          f'<rect x="{r(wx + .5)}" y="{wy + .5}" width="{r(ww - 1)}" height="{r(wh - 1)}" rx="14" fill="none" stroke="#ffffff" stroke-opacity=".13"/>',
          ring(*SPACE_ROW, 4, 1),
          ring(*CLAUDE_PILL, 5, 2)]
+    # FEATURES two by two, right-aligned with the window's edge, above the tagline.
+    colw_, x2 = 340, W - 80 - 340
+    for i, f in enumerate(FEATURES):
+        fx, fy = (x2 - colw_ if i % 2 == 0 else x2), 112 + (i // 2) * 44
+        p += [f'<circle cx="{fx + 5}" cy="{fy - 7}" r="5" fill="{amber}"/>', big(fx + 20, fy, f, 21, "#d4d6db", 500, -.2)]
     y = 318
     for n, (key, (title, sub)) in enumerate(zip(["agents", "limits"], CAPTIONS), 1):
         svg, cw_, ch_ = CUTS[key]
@@ -1641,6 +1595,4 @@ def poster_alt(window):
 
 if POSTER:
     out = poster("\n".join(out))
-if ALT:
-    out = poster_alt("\n".join(out))
 open(OUT, "w").write("\n".join(out) + "\n")

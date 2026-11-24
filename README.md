@@ -8,7 +8,7 @@ A layout for [Herdr App](https://herdr.dev), built on Herdr's default layout (`m
 
 The layout is called `Herdr-Roundup`: Herdr's Settings show a layout by its file name, and a name with a space can't be switched to. Its mods keep the short `roundup-` prefix.
 
-[![Herdr-Roundup: name, claim and main features beside the window, with Claude Code working beside Codex (done) and a shell, their space's agent card open, and a README in the floating preview](preview.png)](https://carstenlucke.github.io/herdr-roundup/)
+[![Herdr-Roundup: name, claim and main features above the window, with Claude Code working beside a diff in hunk; beside it a space's agents by tab and pane, and Claude Code's and Codex's context and plan limits](preview.png)](https://carstenlucke.github.io/herdr-roundup/)
 
 ## Contents
 

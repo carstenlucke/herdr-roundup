@@ -11,7 +11,7 @@ share a card.
 Closing a tab or pane asks first while an agent works, and a new release
 installs through an agent. Light and dark themes alike.
 
-![Herdr-Roundup: name, claim and main features beside the window, with Claude Code working beside Codex (done) and a shell, their space's agent card open, and a README in the floating preview](preview.png)
+![Herdr-Roundup: name, claim and main features above the window, with Claude Code working beside a diff in hunk; beside it a space's agents by tab and pane, and Claude Code's and Codex's context and plan limits](preview.png)
 
 ## What you see
 
