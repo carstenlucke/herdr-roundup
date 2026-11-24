@@ -174,14 +174,28 @@ export function nextCommand() {
 }
 
 // Resolves when the test calls harness `change(path, paths)`, rejects on `failWatch(path)`.
+// A FolderWatch (Herdr 0.1.16): the promise of the next change, with cancel(), which resolves this
+// call with [] and releases it; other calls on the folder keep waiting.
 export function watchFolder(path) {
   record("watchFolder", path);
-  return new Promise((resolve, reject) => {
+  let entry;
+  const pending = new Promise((resolve, reject) => {
+    entry = { resolve, reject };
     const list = stub.watchers.get(path) ?? [];
-    list.push({ resolve, reject });
+    list.push(entry);
     stub.watchers.set(path, list);
   });
+  pending.cancel = () => {
+    record("watchFolder.cancel", path);
+    const list = (stub.watchers.get(path) ?? []).filter((w) => w !== entry);
+    if (list.length) stub.watchers.set(path, list); else stub.watchers.delete(path);
+    entry.resolve([]);
+  };
+  return pending;
 }
+
+// True while `herdr-app check` loads the mod (Herdr 0.1.16): herdr.set({ checking: true }).
+export const checking = () => Boolean(value(stub.checking));
 
 // Frame-only feedback functions: present so a module importing them loads; they do nothing.
 export const feedbackPreview = () => ({ body: null, available: false });

@@ -35,13 +35,23 @@ export function badge(statuses) {
   return { top, calm: rank(top) === 0, n, tip };
 }
 
+// A space's avatar keeps the whole leading emoji of its name (Herdr's spaces and picker 0.1.18),
+// skin tones, flags and keycaps included; else the name's first character, upper case.
+// Newer pictographs such as 🖥 may be drawn as emoji without VS16. A trailing selector, modifier or
+// joiner can signal that only part of a glyph matched.
+export const EMOJI = /^(?:[#*0-9]\uFE0F?\u20E3|\p{Regional_Indicator}{2}|(?:\p{Emoji_Presentation}|(?=[\u{1F000}-\u{1FFFF}])\p{Extended_Pictographic}|\p{Extended_Pictographic}(?=\uFE0F)|\p{Emoji_Modifier_Base}(?=\p{Emoji_Modifier}))\uFE0F?[\p{Emoji_Modifier}\u{E0020}-\u{E007F}]*(?:\u200D\p{Extended_Pictographic}\uFE0F?\p{Emoji_Modifier}?)*)(?![\p{Grapheme_Extend}\p{Emoji_Modifier}\u200D])/u;
+export const spaceAvatar = (name) => EMOJI.exec(name)?.[0] ?? ([...name][0]?.toUpperCase() ?? "?");
+
 // The git line's "repo · branch" for git answer `g` under the space `name`: the repo goes when
 // the name already says it (and in a worktree, `tree`, whose card names it); the branch when
 // the space is named after it (a worktree is), and master/main: nearly every space is on one.
 // "" when only ↑ ↓ ± are left to show; null when nothing is.
 export function gitWhere(g, tree, name) {
   const raw = g.branch ?? "detached";
-  const same = (a) => a.toLowerCase() === name.toLowerCase();
+  // A name with an emoji in front ("🚀 api") says its repo or branch by the words after it too.
+  const full = name.toLowerCase(), emoji = EMOJI.exec(name)?.[0];
+  const label = emoji ? name.slice(emoji.length).trim().toLowerCase() : full;
+  const same = (a) => a.toLowerCase() === full || a.toLowerCase() === label;
   const branch = same(raw) || raw === "main" || raw === "master" ? "" : raw;
   const repo = tree || same(g.name) ? "" : g.name;
   const where = [repo, branch].filter(Boolean).join(" \u00b7 ");

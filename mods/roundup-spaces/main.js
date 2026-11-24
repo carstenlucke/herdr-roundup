@@ -7,8 +7,8 @@
 // right-click for its menu, drag to reorder.
 
 import { View, div, svg, image } from "gpui-kit";
-import { v_flex, h_flex, HoverCard } from "gpui-base";
-import { place, alpha, badge, gitWhere, changesTip, rebuilt as isRebuilt } from "./space-text.js";
+import { v_flex, h_flex, HoverCard, ScrollHandle } from "gpui-base";
+import { place, alpha, badge, gitWhere, changesTip, spaceAvatar, rebuilt as isRebuilt } from "./space-text.js";
 import { spaces, machines, panes, terminals, agents, run, openOverlay, exec, hc, theme, settings, shared, setShared, watchFolder, window, layout } from "herdr";
 import { parseStatus, parseRevParse } from "./git-parse.js";
 import { docValue, quicklook, fingerprint } from "./pane-map.js";
@@ -38,6 +38,10 @@ const where = (s, ps) => JSON.stringify([s.machine ?? null, place(s, ps)]);
 // Changes made outside Herdr (an editor's save, a commit in another app): looked
 // for this often, in repos the list shows, while the window is in front.
 const FALLBACK = 60000;
+// Places looked at together (Herdr's spaces 0.1.16). All at once, a few hundred spaces run out of
+// the app's open files (256 when started from the Dock on macOS) or past a machine core's 16
+// running execs, and those spaces wait for FALLBACK. A place runs its two gits one after the other.
+const AT_ONCE = 6;
 // The space in front, more often: a quick command in its shell (`echo x >> f`)
 // ends between two looks at its pane, and Herdr tells no shell's command end.
 const ACTIVE = 10000;
@@ -90,7 +94,7 @@ export default class Spaces extends View {
     this.ready = {}; // machine -> its layout was readable at the last look
     this.at = {}; // space -> its where() at the last look
     this.front = null; // the window was in front at the last look (null: not looked yet)
-    this.watching = new Set(); // local repos' git folders
+    this.watching = new Map(); // local repos' git folders -> their pending folder watch
     // Spaces wait (at most a moment) for their git, so a worktree appears under its
     // repo instead of jumping there. Those there at start show together, so the list
     // doesn't grow and regroup row by row. A cache of the last run's git would show them
@@ -101,6 +105,8 @@ export default class Spaces extends View {
     this.born = {};
     this.pressed = null;
     this.over = null;
+    this.scroll = ScrollHandle.new(); // the list's position: the active space is brought into view through it
+    this.activeAt = -1; // the active space's place among the list's children (headers, notes, cards, rows), -1 when not drawn
     this.machines = [];
     // The quicklook: each machine's core document ("" here) as last read well, the machines being
     // read, those whose last read failed (logged once), the agents (fingerprint) each space's tree
@@ -127,9 +133,12 @@ export default class Spaces extends View {
     this.left = true;
     // roundup-menu.open is the menu's own: a menu open while this mod reloads keeps it. One left by
     // a crash goes with the next menu, which writes its id and clears it on closing.
-    this.reconnecting = JSON.parse(localStorage.getItem("machines.reconnecting") ?? "{}");
-    for (const state of Object.values(this.reconnecting)) state.busy = false;
-    this.folded = new Set(JSON.parse(localStorage.getItem("machines.folded") ?? "[]"));
+    try {
+      this.reconnecting = JSON.parse(localStorage.getItem("machines.reconnecting") ?? "{}");
+      if (!this.reconnecting || typeof this.reconnecting !== "object" || Array.isArray(this.reconnecting)) this.reconnecting = {};
+      for (const state of Object.values(this.reconnecting)) state.busy = false;
+    } catch { this.reconnecting = {}; }
+    try { this.folded = new Set(JSON.parse(localStorage.getItem("machines.folded") ?? "[]")); } catch { this.folded = new Set(); }
     this.refreshMachines(cx);
     cx.timer.every(15000, cx => this.refreshMachines(cx));
     // `git status` walks the whole tree, on another machine a process there:
@@ -155,6 +164,18 @@ export default class Spaces extends View {
     const at = {};
     for (const s of sp) at[s.id] = where(s, ps);
     const keys = new Set(Object.values(at).filter((k) => JSON.parse(k)[1]));
+    // A place no space is in any more is forgotten, and a repo none of the shown places is in
+    // is no longer watched (Herdr's spaces 0.1.16).
+    for (const k of Object.keys(this.git)) if (!keys.has(k)) {
+      delete this.git[k];
+      delete this.checked[k];
+      this.unsure.delete(k);
+    }
+    const repos = new Set(Object.values(this.git).filter(Boolean).map((g) => g.repo));
+    for (const [repo, pending] of this.watching) if (!repos.has(JSON.stringify([null, repo]))) {
+      this.watching.delete(repo);
+      pending.cancel();
+    }
     const due = new Set([...keys].filter((k) => !(k in this.git)));
     for (const [id, k] of Object.entries(at)) if (this.at[id] && this.at[id] !== k && keys.has(k)) due.add(k);
     this.at = at;
@@ -261,10 +282,11 @@ export default class Spaces extends View {
       while (this.pending.size) {
         const keys = [...this.pending];
         this.pending.clear();
-        for (const key of keys) await this.check(key, cx);
+        let next = 0;
+        await Promise.all(Array.from({ length: Math.min(AT_ONCE, keys.length) }, async () => {
+          while (next < keys.length) await this.check(keys[next++], cx);
+        }));
       }
-      const used = new Set(Object.values(this.git).filter(Boolean).map((g) => JSON.parse(g.repo)).filter(([on]) => !on).map(([, repo]) => repo));
-      for (const repo of this.watching) if (!used.has(repo)) this.watching.delete(repo);
       this.refreshing = false;
       cx.notify();
     });
@@ -280,9 +302,12 @@ export default class Spaces extends View {
       // Writes nothing under .git (index lock, fsmonitor cookie): watch() would wake on it.
       const r = await exec("git", ["--no-optional-locks", "-c", "core.fsmonitor=false", "status", "--porcelain=v2", "--branch"], { cwd, on });
       if (r.code !== 0) {
-        // Only git's own "no" is remembered as no repo; anything else is asked again.
-        if (!/not a git repository/i.test(r.stderr)) this.unsure.add(key);
-        this.git[key] = null;
+        // Only git's own "no" is remembered as no repo; anything else is asked again, and keeps
+        // what it knew: one failed look doesn't take a repo's worktrees off their card.
+        if (!/not a git repository/i.test(r.stderr)) {
+          this.unsure.add(key);
+          this.git[key] ??= null;
+        } else this.git[key] = null;
         return;
       }
       // The repo and whether this is a worktree of it, in one process (git-parse.js).
@@ -298,17 +323,27 @@ export default class Spaces extends View {
     }
   }
 
+  // A repo's git folder is watched while a shown place is in it: `watching` keeps the pending
+  // watch, so due() can cancel it (a FolderWatch, Herdr 0.1.16) once no place is.
   watch(repo, cx) {
     if (this.watching.has(repo)) return;
-    this.watching.add(repo);
+    const pending = watchFolder(repo);
+    this.watching.set(repo, pending);
     cx.spawn(async (cx) => {
+      let current = pending;
       try {
-        while (this.watching.has(repo)) {
-          await watchFolder(repo);
+        for (;;) {
+          await current;
+          if (this.watching.get(repo) !== current) return;
           const mine = JSON.stringify([null, repo]);
-          if (this.watching.has(repo)) this.refreshGit(Object.keys(this.git).filter((k) => this.git[k]?.repo === mine), cx);
+          const keys = Object.keys(this.git).filter((k) => this.git[k]?.repo === mine);
+          if (!keys.length) break;
+          this.refreshGit(keys, cx);
+          current = watchFolder(repo);
+          this.watching.set(repo, current);
         }
-      } catch { this.watching.delete(repo); }
+      } catch {}
+      if (this.watching.get(repo) === current) this.watching.delete(repo);
     });
   }
 
@@ -559,6 +594,8 @@ export default class Spaces extends View {
     const one = (r) => (collapsed ? this.compact(r, t) : this.row(r, t, crew[r.w.id] ?? [], tint));
     // A repo and its worktrees: one card, a little apart from the rest. Without a
     // space in the main checkout, the repo's name heads the card.
+    // `draw` also says which of the children it returns holds the active space (-1: none): the
+    // list scrolls by its direct children, and a card is one child.
     const draw = (list) => {
       const groups = [];
       for (const r of list) {
@@ -568,7 +605,7 @@ export default class Spaces extends View {
       }
       // Dragging a card's first row carries the card: the card fades, not the row.
       const away = (g) => this.pressed === g[0].w.id && !g.some((r) => r.w.id === this.over);
-      return groups.map((g) => ((g.length < 2 && !g[0].tree) || collapsed ? g.map(one) : [
+      const items = groups.map((g) => ((g.length < 2 && !g[0].tree) || collapsed ? g.map(one) : [
         v_flex().id(`repo-${g[0].w.id}`).flex_none().my(6).p(3).gap(2).rounded(10).border_1().border_color(t.border)
           .when(away(g), (el) => el.opacity(0.5))
           .when(Boolean(g[0].tree), (el) => el.child(this.draggable(h_flex().id(`repo-head-${g[0].w.id}`)
@@ -577,8 +614,19 @@ export default class Spaces extends View {
             .child(svg("mods/workspace-chrome/folder.svg").size(12).flex_none().text_color(t.dim))
             .child(div().min_w(0).truncate().font_medium().child(g[0].g.name)), g[0].w.id, g[0].w.machine ?? null)))
           .children(g.map(one)),
-      ])).flat();
+      ]));
+      let active = -1, at = 0;
+      groups.forEach((g, i) => {
+        const here = g.findIndex((r) => r.w.active);
+        if (here >= 0) active = at + (items[i].length === 1 ? 0 : here);
+        at += items[i].length;
+      });
+      return { items: items.flat(), active };
     };
+    // Where the active space lands among the children this returns: machine headers, login notes
+    // and loading rows count too.
+    this.activeAt = -1;
+    let before = 0;
     const remote = [...new Set([...rows.map(r => r.w.machine).filter(Boolean), ...this.machines.map(m => m.name), ...Object.keys(this.reconnecting)])].sort();
     const loading = m => {
       const layout = machines().find(k => k.name === m)?.layout;
@@ -586,7 +634,12 @@ export default class Spaces extends View {
         || spaces().some(s => (s.machine ?? null) === m && !this.shown.has(s.id));
     };
     const loadingRow = m => h_flex().id(`machine-loading-${m ?? "local"}`).h(28).flex_none().px(collapsed ? 0 : 8).items_center().when(collapsed, el => el.justify_center()).text_size(12).text_color(t.dim).child(collapsed ? "…" : "Loading…");
-    if (!remote.length) return loading(null) && !rows.length ? [loadingRow(null)] : draw(rows);
+    if (!remote.length) {
+      if (loading(null) && !rows.length) return [loadingRow(null)];
+      const all = draw(rows);
+      this.activeAt = all.active;
+      return all.items;
+    }
     const machineNames = [null, ...remote];
     return machineNames.flatMap((m) => {
       const mine = rows.filter((r) => (r.w.machine ?? null) === m);
@@ -594,12 +647,15 @@ export default class Spaces extends View {
       const machine = this.machines.find(k => k.name === m) ?? repair?.machine;
       const connected = !m || machine?.state === "connected";
       const rebuilt = this.rebuilt(machine) || !!repair;
+      // A machine that needs a login says the command to run (Herdr's spaces 0.1.15).
+      const login = machine?.state === "needs_login" ? `hc machine login ${m}` : null;
       const folded = this.folded.has(m);
       const icon = svg(`mods/workspace-chrome/${m ? "server" : "monitor"}.svg`).size(13).flex_none();
       const dot = div().absolute().right(-3).bottom(-2).size(6).rounded(3).border_1().border_color(t.chrome).bg(repair?.error ? t.blocked : connected ? t.ansi2 : t.dim);
       // On the rail there is no room for "rebuilt · Connect": the tooltip says it and a click
       // connects (Herdr's spaces 0.1.14 only folds there; widening the sidebar was the way).
       const railTip = !m ? "This computer"
+        : login ? `${m} needs a login: run ${login}. Click for Copy.`
         : repair?.busy ? `${m} · connecting…`
         : repair?.error ? `${m} · ${repair.error} · click to try again`
         : rebuilt ? `${m} · rebuilt · click to connect to the new one`
@@ -609,14 +665,18 @@ export default class Spaces extends View {
         .cursor_pointer().hover(s => s.bg(t.hover))
         .on_click((_e, cx) => {
           if (collapsed && rebuilt) return this.reconnect(machine, cx);
+          if (collapsed && login) { run("app.settings", { section: "machines" }); return; }
           folded ? this.folded.delete(m) : this.folded.add(m);
           localStorage.setItem("machines.folded", JSON.stringify([...this.folded]));
           cx.notify();
         })
+        .when(machine?.keeps_running_after_logout === false, el => el.child(div().id(`machine-logout-${m}`)
+          .flex_none().text_color(t.blocked).tooltip("Agents stop when you disconnect. Click for the fix.")
+          .on_click((_e, cx) => { cx.stop_propagation(); openOverlay({ mod: "machine-add", kind: "dialog", width: 560 }); }).child("⚠")))
         .when(!collapsed, el => el.child(icon))
         .when(collapsed, el => el.child(div().relative().flex_none().child(icon).when(Boolean(m), el => el.child(dot))))
         .when(!collapsed, el => el.child(div().flex_1().truncate().child(m ?? "This computer"))
-          .when(!connected && !rebuilt, el => el.child(div().flex_none().child((machine?.state ?? "asleep").replace(/_/g, " "))))
+          .when(!connected && !rebuilt && !login, el => el.child(div().flex_none().child((machine?.state ?? "asleep").replace(/_/g, " "))))
           .when(rebuilt, el => el.child(h_flex().flex_none().gap(3).items_center()
             .child(div().max_w(140).truncate().child(repair?.error || "rebuilt ·"))
             .child(div().id(`machine-connect-${m}`).text_color(repair?.error ? t.blocked : t.muted)
@@ -637,8 +697,20 @@ export default class Spaces extends View {
         .when(!collapsed, el => el.child(svg("mods/workspace-chrome/plus.svg").size(12)).child("New space there"));
       const cell = collapsed ? railCell : (el) => el;
       // A rebuilt machine's spaces are the old core's: only its header, wide and on the rail.
-      if (rebuilt) return [cell(head)];
-      return [cell(head), ...(folded ? [] : mine.length ? draw(mine) : [loading(m) ? loadingRow(m) : cell(empty)])];
+      if (rebuilt) { before += 1; return [cell(head)]; }
+      const guidance = !collapsed && login ? [v_flex().id(`machine-login-${m}`).px(8).pb(6).gap(3).flex_none()
+        .child(div().text_size(11).text_color(t.blocked).child("needs a login: run"))
+        .child(h_flex().gap(5).items_center()
+          .child(div().flex_1().min_w(0).truncate().tooltip(login).text_size(11).text_color(t.muted).child(login))
+          .child(div().id(`machine-login-copy-${m}`).flex_none().px(5).py(2).rounded(4)
+            .text_size(11).text_color(t.foreground).bg(t.raised).cursor_pointer().hover(s => s.bg(t.hover))
+            .on_click((_e, cx) => { cx.stop_propagation(); cx.write_to_clipboard(login); this.copiedLogin = login; cx.notify(); })
+            .child(this.copiedLogin === login ? "Copied" : "Copy")))] : [];
+      const drawn = folded || !mine.length ? null : draw(mine);
+      const items = [cell(head), ...guidance, ...(folded ? [] : drawn ? drawn.items : [loading(m) ? loadingRow(m) : cell(empty)])];
+      if (drawn && drawn.active >= 0) this.activeAt = before + 1 + guidance.length + drawn.active;
+      before += items.length;
+      return items;
     });
   }
 
@@ -823,7 +895,7 @@ export default class Spaces extends View {
           .when(Boolean(tree), el => el.child(h_flex().size(22).flex_none().items_center().justify_center().text_color(t.dim)
             .child(svg("mods/workspace-chrome/branch.svg").size(13))))
           .when(!tree, el => el.child(h_flex().size(22).flex_none().rounded(6).bg(alpha(fill, tint) ?? t.selected)
-            .items_center().justify_center().text_size(11.5).font_bold().text_color(fill).child([...w.name][0]?.toUpperCase() ?? "?")))
+            .items_center().justify_center().text_size(11.5).font_bold().text_color(fill).child(spaceAvatar(w.name))))
           .child(v_flex().flex_1().min_w(0).gap(2)
             .child(div().min_w(0).truncate().font_medium().text_color(t.foreground).child(w.name))
             .when(Boolean(line), el => el.child(line)))
@@ -866,14 +938,24 @@ export default class Spaces extends View {
       changed = true;
     }
     if (changed) setShared("space.colors", kept);
+    const list = this.grouped(t, collapsed);
+    // Bring the active space into view when it, or its place in the list, changes; a row already in view stays put.
+    const active = sp.find(p => p.active)?.id;
+    if (active !== this.revealed || this.activeAt !== this.revealedAt) {
+      this.revealed = active;
+      this.revealedAt = this.activeAt;
+      if (this.activeAt >= 0) this.scroll.scroll_to_item(this.activeAt);
+    }
     return v_flex().size_full().min_h(0).bg(t.chrome).text_size(13)
       .child(h_flex().h(31).pl(16).pr(10).items_center().justify_between().text_size(11.5).text_color(t.dim)
         .when(collapsed, el => el.pl(0).pr(0).justify_center())
         .when(!collapsed, el => el.child("Spaces"))
         .child(div().id("space-new").size(26).flex_none().flex().items_center().justify_center().rounded(6).hover(s => s.bg(t.hover).text_color(t.foreground))
           .on_click(() => run("space.new")).child(svg("mods/workspace-chrome/plus.svg").size(14))))
-      .child(v_flex().flex_1().min_h(0).px(collapsed ? 0 : 8).pb(14).gap(2).overflow_y_scrollbar().mode("always")
+      .child(v_flex().flex_1().min_h(0).px(collapsed ? 0 : 8).pb(14).gap(2).overflow_y_scrollbar().mode("always").track_scroll(this.scroll)
+        // A block above (another mod's) growing, or the window resizing, shrinks this list and can push the active space out.
+        .on_size_change((_size, cx) => { if (this.activeAt >= 0) { this.scroll.scroll_to_item(this.activeAt); cx.notify(); } })
         .on_mouse_up("left", (_e, cx) => { this.pressed = null; this.badgePress = null; cx.notify(); })
-        .children(this.grouped(t, collapsed)));
+        .children(list));
   }
 }

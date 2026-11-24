@@ -30,6 +30,7 @@ function defaults() {
     keys: [],
     window: { platform: "macos", titlebar: "none", buttons: false, maximized: false, fullscreen: false, active: true },
     placement: null,
+    checking: false,
     theme: namedTheme(),
     themes: [],
     fonts: ["Menlo"],
