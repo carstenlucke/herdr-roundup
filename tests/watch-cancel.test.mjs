@@ -182,3 +182,41 @@ test("FIL-116: an older index build that finishes last doesn't replace the index
   assert.equal(view.index, newer, "the older build, done last, is dropped");
   assert.deepEqual(cx.errors, []);
 });
+
+test("FIL-116: an older index build that fails doesn't leave its error for the next search", async () => {
+  const a = tempDir("roundup-watch-fail-");
+  write(a, { "a.txt": "a\n" });
+  herdr.set({
+    spaces: [space("s1", [tab("tb1", { active: true })], { active: true, folder: a })],
+    panes: [pane("p1", "tb1", { terminal: "t1", cwd: a })],
+    focused: { space: "s1", tab: "tb1", pane: "p1", terminal: "t1", cwd: a },
+  });
+  const { view, cx } = mount(Files, { props: {} });
+  view.sync(cx);
+  await waitFor(() => herdr.watching(a) === 1 && !view.loading);
+  view.setSource("disk", cx);
+  // The first build is held up, then fails; the newer one is still running when it does.
+  let release, hold;
+  const gate = new Promise((r) => { release = r; }), later = new Promise((r) => { hold = r; });
+  let finds = 0;
+  herdr.onExec((c) => {
+    if (c.command !== "sh" || !String(c.args[1]).includes("find .")) return undefined;
+    finds++;
+    return finds === 1 ? gate.then(() => new Error("cannot start sh")) : later.then(() => undefined);
+  });
+  const older = view.ensureIndex(view.ctx);
+  await waitFor(() => finds === 1);
+  view.setSource("git", cx);
+  view.ensureIndex(view.ctx).catch(() => null);
+  view.setSource("disk", cx);
+  const newer = view.ensureIndex(view.ctx);
+  await waitFor(() => finds === 3);
+  release();
+  await older.catch(() => null);
+  assert.equal(view.ctx.failed, null, "the older build's error isn't kept");
+  hold();
+  const index = await newer;
+  assert.equal(view.index, index);
+  assert.equal(await view.ensureIndex(view.ctx), index, "the next search gets the newer index");
+  assert.deepEqual(cx.errors, []);
+});

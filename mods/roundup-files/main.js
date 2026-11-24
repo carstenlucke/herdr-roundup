@@ -450,7 +450,7 @@ export default class Files extends View {
         if (this.current(ctx) && this.indexing === job && this.searchSource() === index.source) this.index = index;
         return index;
       })()
-        .catch((e) => { if (this.current(ctx)) ctx.failed = { source, git: this.git, error: e }; throw e; })
+        .catch((e) => { if (this.current(ctx) && this.indexing === job) ctx.failed = { source, git: this.git, error: e }; throw e; })
         .finally(() => { if (this.current(ctx) && this.indexing === job) this.indexing = null; });
       this.indexing = job;
     }
