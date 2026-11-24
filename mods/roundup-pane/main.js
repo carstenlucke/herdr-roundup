@@ -9,8 +9,8 @@
 //   three run Herdr's `pane.rename` (0.1.17), which asks in Herdr's own prompt and keeps the name
 //   with the pane's tab (`panes()[i].name`; a mod pane has one too). An empty name goes back to the
 //   program's name. From outside: `herdr-app do pane.rename --pane <id> --name Build`.
-// - Roundup up to 0.11 kept the name itself (a terminal's label `roundup-pane.name`, shared
-//   `roundup-pane.names` for mod panes): a header that finds one gives it to its pane, then
+// - Roundup 0.11.0-beta.3 and earlier kept the name itself (a terminal's label `roundup-pane.name`,
+//   shared `roundup-pane.names` for mod panes): a header that finds one gives it to its pane, then
 //   removes it (`adopt`; docs/adr/0001-pane-names-in-core-labels.md).
 // - Closing asks first as "Ask before closing a pane" in the terminal's menu says; a tab's only pane
 //   as the tab menu's choice for tabs says (close.js, shared with roundup-tabs). Ways to close: the ×,
@@ -22,7 +22,7 @@ import { h_flex } from "gpui-base";
 import { panes, terminals, props, run, theme, settings, home, hc, shared, setShared, focused, layout } from "herdr";
 import { closePane, givenName, fallbackName } from "./close.js";
 import { menuView, shortcut } from "./menu.js";
-import { folder, paneId, paneFrame, oldName, OLD_LABEL, OLD_NAMES } from "./header-text.js";
+import { folder, paneId, paneFrame, oldName, OLD_LABEL, OLD_NAMES, MOVED } from "./header-text.js";
 // Roundup's own: the agent's context meter (context/, context-io.js, context-view.js; RECIPE "Context").
 import { ContextReader, sweep } from "./context/reader.js";
 import { makeIo } from "./context-io.js";
@@ -34,6 +34,16 @@ import { shownState } from "./limits/text.js";
 // Integration files of ended terminals go once an hour, by whichever header gets there first.
 let lastSweep = 0;
 const SEE_MS = 2000;
+// An old name's label removal (adopt): the terminals with one running, and when each may try next.
+const dropping = new Set(), dropAt = new Map();
+const DROP_MS = 60_000;
+// A terminal into shared MOVED, or out of it; read just before writing, so other headers' entries stay.
+function moved(source, on) {
+  const all = { ...(shared(MOVED) ?? {}) };
+  if (Boolean(all[source]) === on) return;
+  if (on) all[source] = true; else delete all[source];
+  setShared(MOVED, Object.keys(all).length ? all : null);
+}
 // A hover card draws above popups: the meter's stays empty while one of these holds an overlay id.
 // This mod's own menu writes its to OVERLAY and clears only its own (as roundup-menu does);
 // roundup-menu's menus and the close confirmation (close.js) write theirs.
@@ -146,21 +156,35 @@ export default class Pane extends View {
   }
 
   // A name Roundup kept itself before Herdr named panes (header-text.js, oldName) moves over:
-  // given to the pane, and removed once the pane shows a name. Each step once per copy, from the
-  // timer (a hidden tab's header too), so a machine that is away isn't asked every two seconds.
+  // given to the pane once per copy, and removed as soon as the pane shows a name (at once when
+  // the rename shows right away, else at the next look). From the timer, a hidden tab's header too.
   adopt(p) {
     const labels = p.terminal ? terminals().find((t) => t.address === p.terminal)?.labels : null;
-    const old = oldName(p, labels, shared(OLD_NAMES));
-    if (!old || this.moved === old.step) return;
-    this.moved = old.step;
+    const old = oldName(p, labels, shared(OLD_NAMES), shared(MOVED));
+    if (!old) return;
+    if (old.step === "forget") { moved(old.source, false); return; }
     if (old.step === "give") {
-      try { run("pane.rename", { pane: p.pane, name: old.name }); } catch { /* the next start tries again */ }
-    } else if (p.terminal) {
-      hc(["label", p.terminal, `${OLD_LABEL}=`]).catch(() => null);
-    } else {
+      if (this.gave) return;
+      this.gave = true;
+      try { run("pane.rename", { pane: p.pane, name: old.name }); } catch { return; /* the next start tries again */ }
+      if (!this.me()?.name) return;
+    }
+    if (!p.terminal) {
       const { [p.pane]: _moved, ...rest } = shared(OLD_NAMES) ?? {};
       setShared(OLD_NAMES, Object.keys(rest).length ? rest : null);
+      return;
     }
+    // The terminal goes into MOVED before its label is asked to go: from then on its pane is never
+    // given the old name again. One removal at a time per terminal, at most one a minute (a machine
+    // that is away); only hc's code 0 counts, and MOVED keeps it until the label is visibly gone.
+    moved(old.source, true);
+    if (dropping.has(old.source) || Date.now() < (dropAt.get(old.source) ?? 0)) return;
+    dropping.add(old.source);
+    dropAt.set(old.source, Date.now() + DROP_MS);
+    hc(["label", p.terminal, `${OLD_LABEL}=`]).then((r) => r?.code === 0, () => false).then((ok) => {
+      dropping.delete(old.source);
+      if (!ok) dropAt.set(old.source, Date.now() + DROP_MS);
+    });
   }
 
   copyId(cx, id) {

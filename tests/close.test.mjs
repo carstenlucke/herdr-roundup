@@ -305,6 +305,39 @@ test("PAN-122: a mod pane's old name moves the same way, other panes' entries st
   last.view.close();
 });
 
+test("PAN-124: a name the person cleared after the move doesn't come back when the label's removal failed, after a restart neither", async () => {
+  clock.useFakeNow();
+  const Pane = (await import("../mods/roundup-pane/main.js")).default;
+  const named = (name) => herdr.set({ panes: [pane("p9", "tb1", { terminal: "t9", name })] });
+  named(null);
+  herdr.set({ terminals: [terminal("t9", { labels: { "roundup-pane.name": "Build" } })], focused: { tab: "tb1" } });
+  // The rename shows at once; the first removal fails (the machine is away).
+  herdr.onRun(({ name, args }) => { if (name === "pane.rename" && args.name) named(args.name); return undefined; });
+  herdr.onHc(() => ({ code: 1, stderr: "machine away" }), { times: 1 });
+  const first = mount(Pane, { props: { pane: "p9", terminal: "t9" } });
+  await clock.advance(2000);
+  assert.deepEqual(runs(), [{ name: "pane.rename", args: { pane: "p9", name: "Build" } }]);
+  assert.deepEqual(herdr.calls("hc"), [[["label", "t9", "roundup-pane.name="]]], "named at once: the label is asked to go in the same look");
+  assert.deepEqual(herdr.shared("roundup-pane.moved"), { t9: true });
+  named(null); // the person clears the name
+  await clock.advance(10000);
+  assert.equal(runs().length, 1, "not given again");
+  assert.equal(herdr.calls("hc").length, 1, "the next removal waits a minute");
+  assert.deepEqual(first.cx.errors, []);
+  first.view.close();
+  const next = mount(Pane, { props: { pane: "p9", terminal: "t9" } }); // as after a restart
+  await clock.advance(2000);
+  assert.equal(runs().length, 1, "a new copy doesn't give it either");
+  await clock.advance(50000);
+  assert.equal(herdr.calls("hc").length, 2, "a minute after the failed one: tried again");
+  herdr.set({ terminals: [terminal("t9")] }); // the label is gone
+  await clock.advance(2000);
+  assert.equal(herdr.shared("roundup-pane.moved"), null, "the terminal leaves MOVED, the key with its last entry");
+  assert.equal(runs().length, 1);
+  assert.deepEqual(next.cx.errors, []);
+  next.view.close();
+});
+
 test("PAN-123: a header the layout puts below its pane draws its divider above itself", async () => {
   const frame = (position) => ({ id: "root", children: [{ id: "body", content: { tab: "active", pane: { header: { position } } } }] });
   const top = await header({}, { layout: frame("top") });

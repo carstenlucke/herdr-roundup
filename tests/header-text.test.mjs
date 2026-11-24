@@ -2,7 +2,7 @@
 // roundup-pane's header: the folder, the id chip, a name from before pane.rename.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { folder, paneId, paneFrame, oldName, OLD_LABEL, OLD_NAMES } from "../mods/roundup-pane/header-text.js";
+import { folder, paneId, paneFrame, oldName, OLD_LABEL, OLD_NAMES, MOVED } from "../mods/roundup-pane/header-text.js";
 
 test("folder: home is ~, below home ~/…, a sibling that only starts like home stays, null is \"\"", () => {
   assert.equal(folder("/Users/a", "/Users/a"), "~");
@@ -34,11 +34,21 @@ test("PAN-122: an old name is given to a pane without a name, dropped once the p
   assert.equal(oldName(term, {}, { p1: "not a terminal's" }), null);
   assert.equal(oldName(term, undefined, null), null);
   assert.equal(oldName(mod, { [OLD_LABEL]: "not a mod pane's" }, { m2: "Other" }), null);
-  assert.deepEqual(oldName(term, { [OLD_LABEL]: " Build " }, null), { name: "Build", step: "give" });
-  assert.deepEqual(oldName({ ...term, name: "Server" }, { [OLD_LABEL]: "Build" }, null), { name: "Build", step: "drop" }, "the pane's name wins");
-  assert.deepEqual(oldName(term, { [OLD_LABEL]: "  " }, null), { name: "", step: "drop" }, "blank: nothing to give");
-  assert.deepEqual(oldName(mod, null, { m1: "Docs" }), { name: "Docs", step: "give" });
-  assert.deepEqual(oldName({ ...mod, name: "Docs" }, null, { m1: "Docs" }), { name: "Docs", step: "drop" });
+  assert.deepEqual(oldName(term, { [OLD_LABEL]: " Build " }, null), { source: "t1", name: "Build", step: "give" });
+  assert.deepEqual(oldName({ ...term, name: "Server" }, { [OLD_LABEL]: "Build" }, null), { source: "t1", name: "Build", step: "drop" }, "the pane's name wins");
+  assert.deepEqual(oldName(term, { [OLD_LABEL]: "  " }, null), { source: "t1", name: "", step: "drop" }, "blank: nothing to give");
+  assert.deepEqual(oldName(mod, null, { m1: "Docs" }), { source: "m1", name: "Docs", step: "give" });
+  assert.deepEqual(oldName({ ...mod, name: "Docs" }, null, { m1: "Docs" }), { source: "m1", name: "Docs", step: "drop" });
+});
+
+test("PAN-124: a terminal in shared roundup-pane.moved never gets its old name again, and leaves it once the label is gone", () => {
+  assert.equal(MOVED, "roundup-pane.moved");
+  const term = { pane: "p1", terminal: "t1", name: null }, mod = { pane: "m1", terminal: null, name: null };
+  assert.deepEqual(oldName(term, { [OLD_LABEL]: "Build" }, null, { t1: true }), { source: "t1", name: "Build", step: "drop" }, "the name was cleared after the move: only the label goes");
+  assert.deepEqual(oldName(term, { [OLD_LABEL]: "Build" }, null, { t2: true }), { source: "t1", name: "Build", step: "give" }, "another terminal's entry");
+  assert.deepEqual(oldName(term, {}, null, { t1: true }), { source: "t1", step: "forget" });
+  assert.equal(oldName(term, {}, null, { t2: true }), null);
+  assert.deepEqual(oldName(mod, null, { m1: "Docs" }, { m1: true }), { source: "m1", name: "Docs", step: "give" }, "a mod pane's entry goes in the same look: no marker");
 });
 
 test("PAN-123: paneFrame is the layout's first visible tab frame, a stack's active child counting, hidden blocks not", () => {

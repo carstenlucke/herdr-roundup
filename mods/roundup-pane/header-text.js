@@ -16,18 +16,24 @@ export function paneId(p) {
   return { shown: short, copied: p.pane };
 }
 
-// Names from before Herdr could name a pane (Roundup up to 0.11): a terminal's core label
-// `roundup-pane.name`, a mod pane's entry in shared `roundup-pane.names` (pane id -> name).
+// Names from before Herdr could name a pane (Roundup 0.11.0-beta.3 and earlier): a terminal's core
+// label `roundup-pane.name`, a mod pane's entry in shared `roundup-pane.names` (pane id -> name).
 export const OLD_LABEL = "roundup-pane.name";
 export const OLD_NAMES = "roundup-pane.names";
+// Shared: the terminals whose old label is to go (address -> true), written before the label is
+// removed and kept until it is visibly gone. Their pane is never given the old name again, so a
+// removal that failed can't bring back a name the person cleared meanwhile, after a restart neither.
+export const MOVED = "roundup-pane.moved";
 
-// What such a name asks for, or null without one: "give" it to a pane that has no name, "drop" it
-// once the pane has one (or it is blank). Two looks, so a rename that didn't arrive keeps the old name.
-export function oldName(p, labels, names) {
+// What such a name asks for, or null: "give" it to a pane that has no name, "drop" it once the pane
+// has one (or it is blank, or its terminal is in `moved`), "forget" the terminal in `moved` once
+// its label is gone. `source`: the terminal's address, a mod pane's id.
+export function oldName(p, labels, names, moved) {
+  const source = p.terminal ?? p.pane;
   const old = (p.terminal ? labels?.[OLD_LABEL] : names?.[p.pane]) ?? "";
-  if (!old) return null;
+  if (!old) return p.terminal && moved?.[source] ? { source, step: "forget" } : null;
   const name = old.trim();
-  return { name, step: p.name || !name ? "drop" : "give" };
+  return { source, name, step: p.name || !name || (p.terminal && moved?.[source]) ? "drop" : "give" };
 }
 
 // The layout's first visible tab frame (`content.tab` with its `pane`), the active child of a
