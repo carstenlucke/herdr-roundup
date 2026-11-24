@@ -1,6 +1,6 @@
 # Herdr Roundup 0.11.0
 
-Each agent's pane now shows how full its context window is and, on a subscription, where your plan's limits stand. The integrations behind the exact numbers are switched on and off in the menu under the logo. Everything from the four betas of 0.11.0 is in it; the last section is new since 0.11.0-beta.4.
+Each agent's pane now shows how full its context window is and, on a subscription, where your plan's limits stand. The integrations behind the exact numbers are switched on and off in the menu under the logo. This letter describes what changed since 0.10.0.
 
 **Needs Herdr 0.1.17 or later.**
 
@@ -14,19 +14,25 @@ Each agent's pane now shows how full its context window is and, on a subscriptio
   - Claude Code: Roundup's status line in `~/.claude/settings.json` (yours keeps running after it). Codex: `"thread-id"` in `tui.terminal_title` of `~/.codex/config.toml`. Pi and OpenCode: a link to Roundup's extension or plugin. A backup is kept; switching off restores exactly what switching on changed.
   - After the first start with this release, one notification names the installed agents whose integration is off, once per agent.
   - A pane's hover card says when its own agent lacks its integration, or when the session started before it was switched on.
-- **Pane names are Herdr's own** (`pane.rename`): double-click a pane's name, click the pencil, or choose "Rename" in the terminal's menu. Names you gave before move over by themselves.
-- **Brought up to Herdr 0.1.18:** tabs follow their agent's title, the bar scrolls to the active tab; the active space stays in view; code in previews is drawn in your terminal's font; the lists cope better with many watched folders.
+  - Without the menu, the script that comes with the layout does the same: `~/.config/herdr-app/mods/roundup-pane/integrations/agent-integrations.sh install|uninstall|status|where <agent>` (`scripts/agent-integrations.sh` in a clone runs that one). It needs `jq` for Claude Code and Codex.
+- **README:** a section "Agent integrations": what each one changes, and what shows without it.
 
-## New since 0.11.0-beta.4
+## Changed
 
-- The integrations are switched in the logo menu, with the notification and the card's hints above. Before, only `scripts/agent-integrations.sh` from a clone of the repo did it.
-- The script now comes with the layout: `~/.config/herdr-app/mods/roundup-pane/integrations/agent-integrations.sh`. `scripts/agent-integrations.sh` in the repo runs that one and has a new `where`: the file `install` changes, per agent.
+- **Pane names are Herdr's own** (`pane.rename`): double-click a pane's name, click the pencil, or choose the new "Rename" at the top of the terminal's menu. Herdr asks in its own prompt and keeps the name with the pane, also after a restart; a preview pane can be named the same way. Names you gave before move over by themselves, a few seconds after their pane is shown.
+- **Tabs:** a tab you didn't name follows its agent's title, as the agents list does. The bar scrolls to the active tab, and a touchpad swipe moves one tab at a time.
+- **Spaces:** the active space stays in view. A name that starts with an emoji shows the emoji as its avatar. A repository kept as `project/.bare` is named after the project. A machine that needs a login shows the command to run, with Copy; one whose programs stop when you disconnect shows a warning.
+- **Agents:** the list no longer takes a Codex thread id for a name (Codex's title carries it with its integration). A title keeps its own emoji or bracket in front. A sub-agent you kept as a pane shows its own "done". The narrow rail marks the agent you are on.
+- **Files and previews:** code is drawn in your terminal's font and size. The files panel reads nothing while Herdr is behind another app and catches up when it is back; after a slow read on a big repository it waits longer before the next.
+- **Many folders at once:** Herdr watches at most 64 folders for changes and lets go of idle ones when more are asked for. The spaces list no longer runs git over and over when that happens, and a preview whose watch was let go still notices when its file is saved.
+- **Split down** has its own icon in the menus.
 
 ## Before you update
 
-- Update Herdr first if it is older than 0.1.17.
+- Update Herdr first if it is older than 0.1.17: the pane's name, its menu and three mods use what only newer versions have.
 - `scripts/sync.sh` replaces the layout, every `roundup-*` mod, the repo's themes and the `layout:Herdr-Roundup` section of `keys.json`. Global keys, other layouts and Herdr's own mods stay untouched.
-- **From 0.10.x:** one new mod, `roundup-agents` (Herdr's agent list, which doesn't take a Codex thread id for a name), placed by the layout. Every other `roundup-*` mod changes. No key changes. New shared state: `roundup-pane.overlay`, `roundup-pane.moved`, `roundup-workspace-chrome.integrations`, `.integrations.busy`, `.integrations.told`. Names kept in the label `roundup-pane.name` or the shared `roundup-pane.names` move to Herdr's pane names.
-- **From 0.11.0-beta.4:** `roundup-workspace-chrome`, `roundup-pane` and `roundup-confirm` change (the dialog's button can carry its own label). No new mods, no key changes. New shared state: `roundup-workspace-chrome.integrations`, `.integrations.busy`, `.integrations.told`.
-- What the mods run: `roundup-workspace-chrome` runs `sh` with the integrations script to read their state (at start, hourly and when the menu opens) and, only on the person's click and yes, to switch one. Claude Code's and Codex's need `jq`. Not on Windows: the menu says so.
+- One new mod, `roundup-agents` (Herdr's agent list, which doesn't take a Codex thread id for a name), placed by the layout. Every other `roundup-*` mod changes. No key changes. New shared state: `roundup-pane.overlay`, `roundup-pane.moved`, `roundup-workspace-chrome.integrations`, `.integrations.busy`, `.integrations.told`.
+- Pane names: the label `roundup-pane.name` on a terminal and the shared state `roundup-pane.names` are no longer where a name lives. A pane header gives an old name to its pane and then removes it; until a terminal's old label is gone, the terminal is listed in `roundup-pane.moved`, so a name you clear in the meantime doesn't come back. From a script, name a pane with `herdr-app do pane.rename --pane <id> --name Build`. A name now belongs to the pane, not the terminal: a terminal sent back to its parent and kept again starts unnamed.
+- On macOS, File > Close Tab and Close Pane in the menu bar are Herdr's own (since Herdr 0.1.16) and close without asking, whatever "Ask before closing" says. The ×, the menus and the layout's keys ask.
+- What the mods run: `roundup-workspace-chrome` runs `sh` with the integrations script to read their state (at start, hourly and when the menu opens) and, only on the person's click and yes, to switch one. Not on Windows: the menu says so.
 - **To the updating agent:** don't switch integrations on or off, with the script or otherwise: the person does that in the logo menu, and the dialog there names what changes. Ones already on stay on; the sync updates the files they point to.
