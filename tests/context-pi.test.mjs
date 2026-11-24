@@ -85,7 +85,8 @@ test("without the extension: pi's footer, rounded, no tokens and no model; marke
   assert.equal(card.big.of, "of ~66k");
   assert.equal(card.rows.some((row) => row.label === "Free" || row.label === "Model"), false);
   assert.ok(card.rows.some((row) => row.label === "Read" && row.extra === "pi's footer"));
-  assert.ok(card.notes.some((n) => /install pi/.test(n)));
+  assert.ok(card.notes.includes("Rounded, as pi's footer shows it"));
+  assert.ok(card.notes.includes("For pi's own number, switch on Pi's integration in the Herdr Roundup menu (top left)"));
 });
 
 test("pi's footer: its stats line below its folder line, at the screen's end, in every form pi draws it", () => {

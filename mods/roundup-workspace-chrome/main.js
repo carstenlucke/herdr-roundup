@@ -1,9 +1,11 @@
 import { View, div, image, svg } from "gpui-kit";
 import { h_flex, v_flex, HoverCard } from "gpui-base";
-import { theme, run, props, window, shared, setShared, updates, layout, appHome, readTextFile, watchFolder, openOverlay, nextCommand } from "herdr";
+import { theme, run, props, window, shared, setShared, updates, layout, appHome, readTextFile, watchFolder, openOverlay, nextCommand, checking } from "herdr";
 import { get, put, available, due, check, install, openNotes } from "./update.js";
 import { menuView, menuHeight, DETAILS, MENU_OPEN } from "./menu.js";
 import { info } from "./info.js";
+import { STATE, BUSY, refresh, ask, apply, introduce, unsupported } from "./integrate.js";
+import { agentOf, listed } from "./integrations.js";
 import { pressOf, pressMoved, isClick, herdrVersion, subLine, MENU_WIDTH, nameRoom } from "./brand.js";
 
 function find(node, id) {
@@ -51,21 +53,37 @@ export default class WorkspaceChrome extends View {
     // A menu still open when Herdr quit doesn't keep the card away for good, nor a check cut off by it the open menu.
     setShared(MENU_OPEN, false);
     put("checking", false);
+    // Nor an install cut off by a quit the integration rows.
+    setShared(BUSY, null);
     cx.spawn(async (cx) => {
       for (;;) {
-        // `update@0.8.0`, `notes@0.8.0`: the version the menu or toast named.
-        const [command, version] = (await nextCommand()).split("@");
+        // `update@0.8.0`, `notes@0.8.0`: the version the menu or toast named. `integrate@claude`, `install@claude`,
+        // `uninstall@claude`: the agent the menu's row or the dialog named.
+        const [command, arg] = (await nextCommand()).split("@");
         const installed = this.file?.version;
         if (command === "check" && installed) this.check(cx, installed, true);
         // Not awaited: a slow knownAgents() doesn't hold back the next command, and a failure doesn't end the loop.
-        else if (command === "update" && installed) install(installed, version).catch(() => null);
-        else if (command === "notes") openNotes(version);
+        else if (command === "update" && installed) install(installed, arg).catch(() => null);
+        else if (command === "notes") openNotes(arg);
         // Daily chosen again: check now if a day has passed, not at the next hourly tick.
         else if (command === "auto") this.autoCheck(cx);
+        // The integrations: the dialog first, then the script; neither holds back the next command.
+        else if (command === "integrate" && agentOf(arg)) ask(arg);
+        else if ((command === "install" || command === "uninstall") && agentOf(arg)) apply(arg, command).catch(() => null);
+        else if (command === "integrations") refresh().catch(() => null);
+        // The toast after an install or an update: the menu, where the brand is.
+        else if (command === "menu") this.showMenu({ x: left(), y: 40 });
       }
     });
-    // The automatic check: at start once the version is read, then hourly to see whether a day has passed.
-    cx.timer.every(60 * 60 * 1000, (cx) => this.autoCheck(cx));
+    // The automatic check: at start once the version is read, then hourly to see whether a day has passed. The
+    // integrations hourly too, so a change made with the script in a terminal reaches the pane's card.
+    cx.timer.every(60 * 60 * 1000, (cx) => { this.autoCheck(cx); refresh().catch(() => null); });
+    // At start: what each agent's integration is, and once per agent the toast that integrations are there.
+    // Not in `herdr-app check`, which runs init for real.
+    if (!checking() && !unsupported()) cx.spawn(async () => {
+      const state = await refresh().catch(() => null);
+      if (state) introduce(state);
+    });
     cx.spawn(async (cx) => {
       // Read again whenever the layout's file changes (a release via scripts/sync.sh), not only once.
       const dir = `${appHome()}/layouts`;
@@ -118,16 +136,24 @@ export default class WorkspaceChrome extends View {
     this.press = null;
     // A double-click maximizes the window, as in the rest of the row.
     if (!isClick(press, e)) return;
+    // The card stays away until the pointer leaves: its layer is above the popup, and the pointer is still on it.
+    if (this.showMenu()) { this.hot = false; this.quiet = true; }
+  }
+  // The popup, at the pointer (the click) or at `at`. True when it opened.
+  showMenu(at) {
     // Without a version read there is no menu; the card on hover stays, showing "Installed –".
     const installed = this.file?.version;
-    if (!installed) return;
-    // The card stays away until the pointer leaves: its layer is above the popup, and the pointer is still on it.
-    this.hot = false;
-    this.quiet = true;
+    if (!installed) return false;
     // What the popup's height is summed from, fixed while it is open: a check that ends meanwhile doesn't add
-    // rows or a status line the popup has no room for.
-    const menu = { installed, herdr: herdrVersion(this.file), release: available(installed), error: get("error") ?? null };
-    openOverlay({ mod: "roundup-workspace-chrome", kind: "popup", width: MENU_WIDTH, height: menuHeight(menu), props: { menu } });
+    // rows or a status line the popup has no room for, nor a read of the integrations an agent's row.
+    const state = shared(STATE);
+    const menu = { installed, herdr: herdrVersion(this.file), release: available(installed), error: get("error") ?? null,
+      integrations: state ? listed(state) : null };
+    openOverlay({ mod: "roundup-workspace-chrome", kind: "popup", width: MENU_WIDTH, height: menuHeight(menu), props: { menu },
+      ...(at ? { at } : {}) });
+    // Their states again, live in the open menu: one changed with the script in a terminal shows.
+    refresh().catch(() => null);
+    return true;
   }
   // The menu's head as a card, with a hint that a click gives more.
   card(t, installed) {

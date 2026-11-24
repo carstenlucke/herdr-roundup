@@ -1,5 +1,6 @@
 // Asks before something destructive, e.g. "Close tab?". Opened as a
-// dialog with props { title, detail, command: { name, args } }.
+// dialog with props { title, detail, command: { name, args }, yes? }: `yes` labels the
+// button that runs the command (default "Confirm"), e.g. the logo menu's "Switch on".
 // Cloned from Herdr's `confirm`: Cancel is chosen when it opens, so Enter
 // cancels; Tab and Shift-Tab move between Cancel and Confirm, Enter or Space
 // presses the chosen one, Esc cancels.
@@ -70,7 +71,7 @@ export default class Confirm extends View {
           .gap(8)
           .text_size(12)
           .child(button("no", "Cancel", t.raised, t.foreground, t.input))
-          .child(button("yes", "Confirm", t.solid, t.solid_foreground, t.solid)),
+          .child(button("yes", p.yes ?? "Confirm", t.solid, t.solid_foreground, t.solid)),
       );
   }
 }

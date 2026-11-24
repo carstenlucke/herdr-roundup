@@ -15,9 +15,28 @@ const FROM = {
   screen: "pi's footer",
 };
 
+// Where the integrations are switched on (roundup-workspace-chrome's menu, issue #48).
+const MENU = "the Herdr Roundup menu (top left)";
+const NAMES = { claude: "Claude Code", pi: "Pi" };
+
+// What the card says about its own agent's integration when the reading lacks what it would give
+// (`gives`: "its window and plan limits", …). `integration` is the menu's word for it (shared
+// roundup-workspace-chrome.integrations): "on" with such a reading means a session older than it;
+// null (not read yet) counts as off; "windows": the script doesn't run there.
+function integrationNote(agent, integration, gives, without = "") {
+  const name = NAMES[agent] ?? agent, or = without ? `, or ${without}` : "";
+  if (integration === "on") return `Its integration is on: a session started before it shows ${gives} after a restart${or}`;
+  if (integration === "broken") return `${name}'s integration is broken: see ${MENU}`;
+  if (integration === "unknown") return `Whether ${name}'s integration is on can't be told: see ${MENU}`;
+  if (integration === "windows") return without ? `${name}'s integration isn't on Windows yet: ${without}` : null;
+  return `For ${gives}, switch on ${name}'s integration in ${MENU}${or}`;
+}
+
 // → { big: { used, of, percent, sev }, rows: [{ label, value, extra, kind }], notes: [text] }, or null.
 // `kind` is "plain" or "warn"; `big.of` is "of 200k", "in use · window unknown" or "".
-export function cardModel(reading, { agent, hint = null } = {}) {
+// `integration`: the state of this agent's integration (integrationNote); `limits`: whether the card
+// shows plan limits.
+export function cardModel(reading, { agent, hint = null, integration = null, limits = false } = {}) {
   if (!reading) return null;
   const approx = reading.windowRounded ? "~" : "";
   const hasWindow = Number.isFinite(reading.window) && reading.window > 0;
@@ -48,9 +67,18 @@ export function cardModel(reading, { agent, hint = null } = {}) {
     notes.push("Expected about 55 min after the last answer, as observed on this machine");
   }
   if (Number.isFinite(reading.footerWindow) && hasWindow) notes.push(`The window opencode compacts against; its own footer counts of ${tokens(reading.footerWindow)}, which includes room for the answer`);
-  if (reading.source === "screen") notes.push("Rounded, as pi's footer shows it. For pi's own number: scripts/agent-integrations.sh install pi");
-  else if (reading.windowRounded) notes.push("Window from this session's /context, which rounds it");
-  if (!hasWindow && agent === "claude") notes.push("Switch on the status line integration for its window: scripts/agent-integrations.sh install claude (or type /context)");
+  if (reading.source === "screen") {
+    notes.push("Rounded, as pi's footer shows it");
+    const note = integrationNote("pi", integration, "pi's own number");
+    if (note) notes.push(note);
+  } else if (reading.windowRounded) notes.push("Window from this session's /context, which rounds it");
+  // Claude Code tells its window and its plan limits only to its status line: without a reading from
+  // it, the integration is what would give them.
+  if (agent === "claude" && reading.source !== "status-line") {
+    const note = !hasWindow ? integrationNote("claude", integration, "its window and plan limits", "type /context")
+      : !limits ? integrationNote("claude", integration, "exact numbers and the plan limits") : null;
+    if (note) notes.push(note);
+  }
   if (agent === "codex") notes.push("The raw share of the window: Codex's /status takes a 12k baseline off");
   if (reading.setting) notes.push(`${reading.setting} moves the auto-compact threshold`);
   return { big, rows, notes };

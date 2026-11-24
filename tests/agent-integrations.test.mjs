@@ -661,3 +661,68 @@ test("pi follows PI_CODING_AGENT_DIR (with ~), opencode OPENCODE_CONFIG_DIR", ()
   assert.equal(lstatSync(join(home, "pi-home/extensions/roundup-context.js")).isSymbolicLink(), true);
   assert.equal(lstatSync(join(home, "oc/plugins/roundup-context")).isSymbolicLink(), true);
 });
+
+// --- Issue #48: the script is one of roundup-pane's files; the logo menu runs it --------------------
+
+const modTool = () => join(env.HERDR_APP_HOME, "mods/roundup-pane/integrations/agent-integrations.sh");
+const runMod = (...args) => {
+  const r = spawnSync("sh", [modTool(), ...args], { env, encoding: "utf8", cwd: home });
+  return { code: r.status, out: r.stdout.trim(), err: r.stderr.trim() };
+};
+
+test("PAN-126: where names the file install changes, per agent, following the same variables", () => {
+  assert.deepEqual(run("where").out.split("\n"), [
+    `claude: ${settings}`, `codex: ${codex}`,
+    `pi: ${join(home, ".pi/agent/extensions/roundup-context.js")}`, `opencode: ${join(home, ".config/opencode/plugins/roundup-context")}`,
+  ]);
+  Object.assign(env, { CLAUDE_CONFIG_DIR: join(home, "cc"), CODEX_HOME: join(home, "cx"), PI_CODING_AGENT_DIR: "~/pi-home", OPENCODE_CONFIG_DIR: join(home, "oc") });
+  assert.equal(run("where", "claude").out, `claude: ${join(home, "cc/settings.json")}`);
+  assert.equal(run("where", "codex").out, `codex: ${join(home, "cx/config.toml")}`);
+  assert.equal(run("where", "pi").out, `pi: ${join(home, "pi-home/extensions/roundup-context.js")}`);
+  assert.equal(run("where", "opencode").out, `opencode: ${join(home, "oc/plugins/roundup-context")}`);
+  assert.equal(run("where", "nobody").code, 1);
+  assert.equal(existsSync(state), false, "where writes nothing");
+});
+
+test("PAN-127: the installed copy works on its own, from any folder; scripts/agent-integrations.sh only forwards to the repo's", () => {
+  // The mod's copy under the app's folder, as the logo menu runs it (sh, no executable bit needed).
+  chmodSync(modTool(), 0o644);
+  let r = runMod("install", "pi");
+  assert.equal(r.code, 0, r.err);
+  assert.equal(runMod("status", "pi").out, "pi: on");
+  assert.equal(run("status", "pi").out, "pi: on", "the forwarder sees the same install");
+  r = run("uninstall", "pi");
+  assert.equal(r.out, "pi: off");
+  assert.equal(runMod("status").out, run("status").out);
+  const forwarder = readFileSync(tool, "utf8");
+  assert.match(forwarder, /exec sh "\$\(dirname "\$0"\)\/\.\.\/mods\/roundup-pane\/integrations\/agent-integrations\.sh" "\$@"/);
+});
+
+test("PAN-127: every line status prints, in every state, is in the form the logo menu reads", async () => {
+  const { parseStatus } = await import("../mods/roundup-workspace-chrome/integrations.js");
+  const lines = [];
+  const look = () => lines.push(...run("status").out.split("\n"));
+  look(); // all off
+  put(settings, "{}");
+  run("install", "claude"); run("install", "codex"); run("install", "pi");
+  look(); // on
+  writeFileSync(settings, JSON.stringify({ statusLine: { type: "command", command: "echo other" } }));
+  put(opencodeLink(), "mine\n");
+  look(); // claude broken, opencode unknown
+  // A PATH of the system's programs less jq (macOS has one in /usr/bin too).
+  const bin = join(home, "bin-without-jq");
+  mkdirSync(bin);
+  for (const dir of ["/bin", "/usr/bin"]) for (const name of readdirSync(dir)) {
+    if (name !== "jq" && !existsSync(join(bin, name))) symlinkSync(join(dir, name), join(bin, name));
+  }
+  const r = spawnSync("/bin/sh", [tool, "status"], { env: { ...env, PATH: bin }, encoding: "utf8" });
+  assert.match(r.stdout, /^claude: unknown \(jq is needed\)$/m);
+  lines.push(...r.stdout.trim().split("\n")); // unknown (jq is needed)
+  assert.ok(lines.length >= 16);
+  for (const line of lines) {
+    const agent = line.split(":")[0];
+    assert.ok(parseStatus(line)[agent], `not in the menu's form: ${line}`);
+  }
+  const states = new Set(lines.map((l) => Object.values(parseStatus(l))[0].state));
+  assert.deepEqual([...states].sort(), ["broken", "off", "on", "unknown"]);
+});

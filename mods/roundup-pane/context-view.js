@@ -142,7 +142,8 @@ function limitPart(t, pane, limits, tier, now, alone = false) {
 // `limits`: the account's plan limits (limits/store.js), `now` for their times, `program` the
 // agent program's name for the card's notes.
 // `tier`: headerTiers()'s { context, limits }, or one tier for both.
-export function meter(t, { pane, reading, tier, agent, hint = null, covered = false, head = null, limits = null, now = Date.now(), program = null }) {
+// `integration`: the state of this agent's integration, for the card's notes (context/card.js).
+export function meter(t, { pane, reading, tier, agent, hint = null, covered = false, head = null, limits = null, now = Date.now(), program = null, integration = null }) {
   const tiers = typeof tier === "string" ? { context: tier, limits: tier } : tier;
   if (tiers.context === "none") return null;
   const ctx = contextPart(t, reading, tiers.context);
@@ -155,7 +156,7 @@ export function meter(t, { pane, reading, tier, agent, hint = null, covered = fa
   if (ctx && lim) el.child(div().id(`ph-lim-sep-${pane}`).flex_none().w(1).h(10).mx(1).bg(t.border));
   if (lim) el.child(lim);
   return HoverCard.new(`ph-ctx-card-${pane}`).anchor("top_right").open_delay(400).close_delay(150).trigger(el)
-    .content(covered ? div() : card(t, ctx ? cardModel(reading, { agent, hint }) : null, head, limitsModel(limits, now, { agent: program ?? "the agent" })));
+    .content(covered ? div() : card(t, ctx ? cardModel(reading, { agent, hint, integration, limits: Boolean(limits?.windows?.length) }) : null, head, limitsModel(limits, now, { agent: program ?? "the agent" })));
 }
 
 // The card of the mockup: the pane's icon, name and id chip; the tokens in use, big, the window and

@@ -75,5 +75,8 @@ export function brief(installed, release, home) {
     `Read its release notes (${release.url}) and README. Before changing anything, tell me what changes, whether keys in the ` +
     `\`layout:Herdr-Roundup\` section of ${home}/keys.json that I changed myself would be replaced, and whether the ` +
     `installed \`roundup-*\` mods in ${home}/mods differ from tag v${installed} (local edits that would be lost). ` +
-    `Only after I agree, run \`${env}scripts/sync.sh\` in the clone, then confirm \`${env}herdr-app status\` shows no errors.`;
+    `Only after I agree, run \`${env}scripts/sync.sh\` in the clone, then confirm \`${env}herdr-app status\` shows no errors. ` +
+    // Each agent integration changes the person's own agent setup: theirs to switch, in the logo menu (issue #48).
+    `Don't switch agent integrations on or off (agent-integrations.sh): I do that in the Herdr Roundup menu, top left; ` +
+    `ones already on stay on.`;
 }

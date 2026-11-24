@@ -3,7 +3,10 @@
 - **Status:** Accepted
 - **Date:** 2026-11-14
 - **Concerns:** `mods/roundup-pane/context/`, `mods/roundup-pane/integrations/`,
-  `scripts/agent-integrations.sh` (issue #30)
+  `scripts/agent-integrations.sh` (issue #30); since #48 the script is
+  `mods/roundup-pane/integrations/agent-integrations.sh`, switched from
+  the logo menu (`roundup-workspace-chrome/integrate.js`), the one in
+  `scripts/` forwarding to it
 
 ## Context
 

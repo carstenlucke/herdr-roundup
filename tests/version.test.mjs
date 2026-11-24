@@ -93,6 +93,8 @@ test("brief names both versions, the app home's files, the clone at the tag and 
   assert.ok(text.includes('`HERDR_APP_HOME="/Users/me/my herdr" scripts/sync.sh`'), "sync.sh gets the home, quoted");
   assert.ok(text.includes('`HERDR_APP_HOME="/Users/me/my herdr" herdr-app status`'), "status gets the home, quoted");
   assert.ok(!text.includes("pre-release"), "a release isn't called a pre-release");
+  // CHR-59 (#48): the integrations are the person's, switched in the menu, not by the updating agent.
+  assert.ok(text.endsWith("Don't switch agent integrations on or off (agent-integrations.sh): I do that in the Herdr Roundup menu, top left; ones already on stay on."));
   const pre = brief("0.9.1", { version: "0.10.0-beta.1", url: `${PAGE}/tag/v0.10.0-beta.1` }, home);
   assert.ok(pre.includes("to v0.10.0-beta.1. It is a pre-release: say so before you start."), "a pre-release is named one");
   assert.ok(pre.includes("at tag v0.10.0-beta.1"));

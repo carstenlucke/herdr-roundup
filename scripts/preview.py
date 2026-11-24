@@ -18,7 +18,7 @@ import base64, json, os, re, sys
 from html import escape
 
 SCENES = ["spaces", "quicklook", "files", "files-changed", "search", "symlink", "pane-header", "context", "context-pi", "limits",
-          "close-menu", "close-confirm", "update", "preview-tab", "float"]
+          "close-menu", "close-confirm", "update", "integrations", "integrations-confirm", "preview-tab", "float"]
 if sys.argv[1:] == ["--scenes"]:
     print("\n".join(SCENES))
     sys.exit()
@@ -1081,6 +1081,47 @@ if SCENE == "update":
         dict(label="Show details on hover", check=True, sep=True),
     ])
 
+if SCENE == "integrations":
+    # The same menu, no update on offer, ending in "Agent integrations": Claude Code and Codex on,
+    # the pointer on Pi. Its height: padding, the head and its divider, 9 rows, two headings, 4 dividers.
+    MX, MY, MW = 120, 40, 300
+    MH = 10 + 12 + 91 + 9 + 9 * 31 + 2 * 19 + 4 * 9
+    overlay(MX, MY, MW, MH)
+    ix, iy = MX + 5 + 8, MY + 5 + 6
+    text(ix, iy + 12, "Herdr Roundup", 13, "foreground", 600)
+    ky = iy + 16 + 3 + 3
+    for k, v in [("Installed", VERSION), ("Based on", f"Herdr {LAYOUT['cloned_from']['version']}"), ("Latest", VERSION), ("Checked", "today 09:12")]:
+        text(ix, ky + 11.5, k, 12, "dim")
+        text(MX + MW - 5 - 8, ky + 11.5, v, 12, "foreground", anchor="end")
+        ky += 18
+    ry = MY + 5 + 12 + 91
+    line(MX + 5 + 7, ry + 4.5, MX + MW - 5 - 7, ry + 4.5, "border")
+    menu(MX + 5, ry + 9, MW - 10, [
+        dict(label="Check for updates", glyph="refresh"),
+        dict(label="Daily", check=True, sep=True, head="Check for updates"),
+        dict(label="Only when I ask"),
+        dict(label="Include pre-releases", sep=True),
+        dict(label="Show details on hover", check=True, sep=True),
+        dict(label="Claude Code", check=True, sep=True, head="Agent integrations"),
+        dict(label="Codex", check=True),
+        dict(label="Pi", at=True),
+        dict(label="OpenCode"),
+    ])
+
+# The integrations' dialog (integrate.js): wider and taller than the close confirmation.
+INT_W, INT_H = 420, 200
+
+if SCENE == "integrations-confirm":
+    # Pi chosen in the menu: roundup-confirm names the link it adds, Cancel holding the keyboard.
+    dx, dy = (W - INT_W) / 2, (H - INT_H) / 2
+    overlay(dx, dy, INT_W, INT_H, rx=12)
+    dialog_head(dx, dy, INT_W, "Switch on Pi's integration?")
+    ty = dy + 18 + 20 + 12 + 13
+    for l in wrap("A link to Roundup's extension at ~/.pi/agent/extensions/roundup-context.js. No file of yours changes.", 13, INT_W - 36):
+        text(dx + 18, ty, l, 13, "muted")
+        ty += 18
+    buttons(dx + INT_W - 18, dy + INT_H - 18 - 32, [("Cancel", False, True, 12), ("Switch on", True, False, 12)])
+
 if SCENE == "close-menu":
     # A right-click on the first tab: roundup-tabs' menu, ending in when closing asks.
     MX, MY = WX + 96, 30
@@ -1316,7 +1357,7 @@ if SCENE == "limits":
 # pi without its extension, as context/card.js words it: a share of a rounded window, no tokens.
 if SCENE == "context-pi":
     context_card("t7", "pi", "pi", "~34%", "of ~272k", "", [("Read", "14:02", "pi's footer")],
-                 ["Rounded, as pi's footer shows it. For pi's own number: scripts/agent-integrations.sh install pi"])
+                 ["Rounded, as pi's footer shows it", "For pi's own number, switch on Pi's integration in the Herdr Roundup menu (top left)"])
 
 # What each scene is cropped to: x, y, width, height. A fourth argument "full" keeps the window.
 CROPS = {
@@ -1333,6 +1374,8 @@ CROPS = {
     "close-menu": (WX, 0, 520, 290),
     "close-confirm": ((W - CONFIRM_W) / 2 - 60, (H - CONFIRM_H) / 2 - 50, CONFIRM_W + 120, CONFIRM_H + 100),
     "update": (0, 0, MX + MW + 40, MY + MH + 24) if SCENE == "update" else None,
+    "integrations": (0, 0, MX + MW + 40, MY + MH + 24) if SCENE == "integrations" else None,
+    "integrations-confirm": ((W - INT_W) / 2 - 50, (H - INT_H) / 2 - 50, INT_W + 100, INT_H + 100),
     "preview-tab": (WX, 0, PX - WX, 640),
     "float": (FX - 40, FT - 40, FW + 80, FH + 90),
 }
@@ -1348,7 +1391,7 @@ FEATURES = [
     ("Spaces at a glance", "git state and agents, pane by pane"),
     ("Files with git built in", "all files, or only what changed"),
     ("A preview for every file", "Markdown, PDF, images, CSV, JSON, code"),
-    ("Panes with names", "you give them"),
+    ("Each agent's context", "and your plan's limits, in its pane"),
     ("Updates through your agent", "asks before it changes anything"),
 ]
 
