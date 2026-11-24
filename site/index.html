@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Herdr Roundup</title>
-<meta name="description" content="A layout for Herdr App: spaces that show where each repo stands, a files panel with git built in, a preview for every file, panes with names, and updates through your agent.">
+<meta name="description" content="A layout for Herdr App: spaces that show where each repo stands, a files panel with git built in, a preview for every file, each agent's context and your plan's 5-hour and weekly limits, and updates through your agent.">
 <meta property="og:title" content="Herdr Roundup">
 <meta property="og:description" content="A layout for Herdr App, quieter and more telling.">
 <meta property="og:image" content="https://carstenlucke.github.io/herdr-roundup/img/og.png">
@@ -44,7 +44,7 @@
       </nav>
     </div>
     <div>
-      <p class="sub">Herdr Roundup is a layout for <a href="https://herdr.dev">Herdr App</a> that gathers your herd in one window, quieter and more telling. <b>Every space shows where its repo stands</b>, files open in a real preview, panes carry names you give them, and a new release installs through your agent.</p>
+      <p class="sub">Herdr Roundup is a layout for <a href="https://herdr.dev">Herdr App</a> that gathers your herd in one window, quieter and more telling. <b>Every space shows where its repo stands</b>, files open in a real preview, <b>each agent's pane shows how full its context is</b> and, on a subscription, where your 5-hour and weekly limits stand, and a new release installs through your agent.</p>
       <div class="cta">
         <a class="pill" href="#install">Install Herdr Roundup</a>
         <a class="ghost" href="https://github.com/carstenlucke/herdr-roundup">View on GitHub <span class="arrow">→</span></a>
@@ -57,6 +57,7 @@
       <div class="track">
         <figure class="slide" aria-roledescription="slide"><img draggable="false" src="img/window.webp" width="1920" height="1200" alt="The whole window: spaces with git state, two agents beside a shell, a README in the floating preview, the files panel" data-title="The whole window" data-text="Spaces with their git state, two agents beside a shell, a README in the floating preview, the files panel."></figure>
         <figure class="slide" aria-roledescription="slide"><img draggable="false" src="img/hero-quicklook.webp" width="1920" height="1200" alt="The agent card open under the badge of search-filters: Claude Code working on the left, Codex done above a shell on the right, and the card's map of those three panes" data-title="Who works where" data-text="Rest the pointer on a space's agent badge: its agents by tab, with their status and a map of the tab's panes."></figure>
+        <figure class="slide" aria-roledescription="slide"><img draggable="false" src="img/hero-limits.webp" width="1920" height="1200" alt="Claude Code's pane header with 41%, 5h 78% with a warning sign and wk 41%, and its card open: the context in use, the 5-hour and the weekly limit with when each resets" data-title="Context and plan limits" data-text="Each agent's pane shows how full its context is and, on a subscription, your 5-hour and weekly limits: exact, through the agent's integration."></figure>
         <figure class="slide" aria-roledescription="slide"><img draggable="false" src="img/hero-files-changed.webp" width="1920" height="1200" alt="The files panel showing only the changed files" data-title="Only what changed" data-text="The files panel lists exactly what git status lists, with lines added and removed."></figure>
         <figure class="slide" aria-roledescription="slide"><img draggable="false" src="img/hero-preview-tab.webp" width="1920" height="1200" alt="package.json in a preview tab as a JSON tree" data-title="A preview for every file" data-text="Markdown, PDF, pictures, CSV, JSON and code, in a floating window or a tab of their own."></figure>
         <figure class="slide" aria-roledescription="slide"><img draggable="false" src="img/hero-update.webp" width="1920" height="1200" alt="The update menu under the logo, offering the next version" data-title="Updates through your agent" data-text="A new release shows on the logo; your agent installs it after asking you."></figure>
@@ -82,6 +83,7 @@
     <div><b>Spaces with their state</b><span>Repo, branch, ahead and behind, uncommitted changes and how many agents work there. <a href="#spaces">More</a></span></div>
     <div><b>Files with git built in</b><span>All files or only the changed ones, with lines added and removed, and search across folders you haven't opened. <a href="#files">More</a></span></div>
     <div><b>A preview for every file</b><span>Markdown, PDF, pictures, CSV, JSON and code, in a floating window or a tab of their own. <a href="#preview">More</a></span></div>
+    <div><b>Context and plan limits</b><span>How full each agent's context is and, on a subscription, the 5-hour and weekly limits, exact through each agent's integration. <a href="#context">More</a></span></div>
   </div>
 </section>
 
@@ -96,10 +98,11 @@
     <a href="#panes"><span>06</span>Panes with names</a>
     <a href="#context"><span>07</span>Each agent's context</a>
     <a href="#limits"><span>08</span>Your plan's limits</a>
-    <a href="#closing"><span>09</span>Closing asks when it matters</a>
-    <a href="#updates"><span>10</span>Updates through your agent</a>
-    <a href="#install"><span>11</span>Install</a>
-    <a href="#questions"><span>12</span>Questions</a>
+    <a href="#integrations"><span>09</span>Integrations</a>
+    <a href="#closing"><span>10</span>Closing asks when it matters</a>
+    <a href="#updates"><span>11</span>Updates through your agent</a>
+    <a href="#install"><span>12</span>Install</a>
+    <a href="#questions"><span>13</span>Questions</a>
   </nav>
 
   <div class="md">

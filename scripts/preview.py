@@ -1391,7 +1391,7 @@ FEATURES = [
     ("Spaces at a glance", "git state and agents, pane by pane"),
     ("Files with git built in", "all files, or only what changed"),
     ("A preview for every file", "Markdown, PDF, images, CSV, JSON, code"),
-    ("Each agent's context", "and your plan's limits, in its pane"),
+    ("Context and plan limits", "5-hour and weekly, from each agent"),
     ("Updates through your agent", "asks before it changes anything"),
 ]
 
