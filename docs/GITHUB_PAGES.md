@@ -16,7 +16,7 @@ Only by hand. Nothing happens on push, merge or release.
 2. Merge to `main`.
 3. `gh workflow run pages.yml` (or Actions → "Publish site" → Run workflow); `gh run watch` follows it.
 
-`.github/workflows/pages.yml` (`workflow_dispatch` only) uploads `site/` from the branch it runs on and deploys it. The `github-pages` environment takes only `main` by default.
+`.github/workflows/pages.yml` (`workflow_dispatch` only) uploads `site/` from the branch it runs on and deploys it, in two jobs: in one job the deploy can miss the artifact just uploaded. The `github-pages` environment takes only `main` by default.
 
 ## Set up once
 

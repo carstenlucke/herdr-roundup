@@ -15,12 +15,13 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+# Upload and deploy in two jobs, as in GitHub's own Pages workflow: deploy-pages lists the run's
+# artifacts, and right after upload-pages-artifact in the same job that list can still be empty
+# ("No artifacts named github-pages were found", three runs in a row on 2026-11-24). A second
+# job starts only once the first has finished, with the artifact listed.
 jobs:
-  deploy:
+  upload:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/configure-pages@v6
@@ -28,5 +29,13 @@ jobs:
       - uses: actions/upload-pages-artifact@v5
         with:
           path: site
+
+  deploy:
+    needs: upload
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
         uses: actions/deploy-pages@v5
