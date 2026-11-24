@@ -163,7 +163,7 @@ export default class Files extends View {
     // searchSeq++: a search still running for the folder before ends without a word here.
     this.cursor = s?.cursor ?? ""; this.git = emptyGit(); this.index = null; this.indexing = null; this.hits = null; this.searchError = null;
     this.searchSeq++; this.searching = false;
-    this.error = null; this.limited = false; this.loading = false; this.again = false; this.watched = null;
+    this.error = null; this.limited = false; this.loading = false; this.watched = null;
     // The folder shown before is no longer watched (a FolderWatch's cancel(), Herdr 0.1.16).
     this.watchPending?.cancel(); this.watchPending = null;
     this.pace = newPace(Date.now(), this.pace?.front ?? null);
@@ -185,7 +185,9 @@ export default class Files extends View {
 
   refresh(cx) {
     if (!this.root) return;
-    if (this.loading) { this.again = true; return; }
+    // A read asked for while one runs (the timer, the watch) waits as a change for pace.js: once the
+    // hold this read ends with is over, not at once after it.
+    if (this.loading) { this.pace.dirty = true; return; }
     const ctx = this.ctx, pace = this.pace, began = Date.now();
     this.loading = true;
     started(pace, began);
@@ -215,7 +217,6 @@ export default class Files extends View {
         if (this.current(ctx)) {
           this.loading = false;
           ended(pace, Date.now() - began, Date.now());
-          if (this.again) { this.again = false; this.refresh(cx); }
         }
         cx.notify();
       }

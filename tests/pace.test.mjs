@@ -38,6 +38,43 @@ test("FIL-114: in front the timer reads every 10 s and a waiting change once its
   assert.equal(changed(p, true, 34200), true, "after a quick read a change reads at once");
 });
 
+test("FIL-114: a read the timer or the watch asks for while a slow one runs waits for the hold that read ends with", async () => {
+  clock.useFakeNow();
+  const dir = tempDir("roundup-pace-slow-");
+  write(dir, { "a.txt": "a\n" });
+  herdr.set({
+    spaces: [space("s1", [tab("tb1", { active: true })], { active: true, folder: dir })],
+    panes: [pane("p1", "tb1", { terminal: "t1", cwd: dir })],
+    focused: { space: "s1", tab: "tb1", pane: "p1", terminal: "t1", cwd: dir },
+  });
+  // Outside a repo every read asks rev-parse once: that call counts the reads, and holds one up.
+  let gate = null;
+  herdr.onExec((c) => (gate && c.args.includes("rev-parse") ? gate.then(() => undefined) : undefined));
+  const reads = () => herdr.calls("exec").filter(([, args]) => args.includes("rev-parse")).length;
+  const { view, cx } = mount(Files, { props: {} });
+  view.sync(cx);
+  await waitFor(() => herdr.watching(dir) === 1 && !view.loading);
+  let release;
+  gate = new Promise((r) => { release = r; });
+  await clock.advance(10000);
+  await waitFor(() => reads() === 2 && view.loading, 2000, "the timed read starts and is held up");
+  await clock.advance(10000); // its own 10 s are over: the timer asks again
+  write(dir, { "b.txt": "b\n" });
+  herdr.change(dir, [`${dir}/b.txt`]); // and the watch reports a change
+  await clock.advance(2000);
+  assert.equal(reads(), 2, "nothing starts beside the running read");
+  gate = null;
+  release();
+  await waitFor(() => !view.loading);
+  // 12 s: a hold of 60 s.
+  await clock.advance(59000);
+  assert.equal(reads(), 2, "not at once after the slow read, nor before its hold is over");
+  await clock.advance(1000);
+  await waitFor(() => reads() === 3 && !view.loading, 2000, "the waiting read, once");
+  assert.ok((view.entries.get("") ?? []).some((e) => e.name === "b.txt"), "and it takes the change with it");
+  assert.deepEqual(cx.errors, []);
+});
+
 test("FIL-115: behind another app nothing is read; back in front a change seen meanwhile is, and an unwatched folder always", () => {
   const p = newPace(0, true);
   assert.equal(due(p, false, 60000, true), false, "not even when the 10 s have passed");
