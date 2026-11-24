@@ -16,7 +16,9 @@ Only by hand. Nothing happens on push, merge or release.
 2. Merge to `main`.
 3. `gh workflow run pages.yml` (or Actions → "Publish site" → Run workflow); `gh run watch` follows it.
 
-`.github/workflows/pages.yml` (`workflow_dispatch` only) uploads `site/` from the branch it runs on and deploys it. The `github-pages` environment takes only `main` by default.
+`.github/workflows/pages.yml` (`workflow_dispatch` only) uploads `site/` from the branch it runs on and deploys it, in two jobs: on 2026-11-24 a deploy in the same job found no artifact 0.2 s after the upload, three runs in a row (cause unconfirmed); a second job gives the artifact time to become visible, but doesn't guarantee it. This repo's `github-pages` environment takes only `main`.
+
+If the upload succeeded and the deploy reports "No artifacts named github-pages were found": `gh run rerun <run-id> --failed` runs only the deploy job again, with the original commit, while the artifact is kept (one day). Once it has expired, or to publish a newer `main`, start a fresh run.
 
 ## Set up once
 

@@ -15,12 +15,14 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+# On 2026-11-24 deploy-pages found no github-pages artifact in three runs. In run 45507754787
+# it looked for the artifact about 0.2 s after the upload finalized in the same job; the cause
+# is unconfirmed. A second job gives the artifact time to become visible: needs: upload waits
+# for the upload job to succeed. The lookup can still fail if the artifact is not yet
+# available (re-run: docs/GITHUB_PAGES.md).
 jobs:
-  deploy:
+  upload:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/configure-pages@v6
@@ -28,5 +30,13 @@ jobs:
       - uses: actions/upload-pages-artifact@v5
         with:
           path: site
+
+  deploy:
+    needs: upload
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
         uses: actions/deploy-pages@v5
