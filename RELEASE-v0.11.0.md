@@ -4,7 +4,7 @@ Each agent's pane now shows how full its context window is and, on a subscriptio
 
 **Needs Herdr 0.1.17 or later.**
 
-![Herdr Roundup](https://raw.githubusercontent.com/carstenlucke/herdr-roundup/v0.11.0/preview.png)
+![Herdr Roundup: every agent by tab and pane, context and plan limits](https://raw.githubusercontent.com/carstenlucke/herdr-roundup/v0.11.0/preview-limits.png)
 
 ## New
 

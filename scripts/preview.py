@@ -8,6 +8,8 @@
 # Settings shows the SVG: the bare window, as it is without a scene (or with the scene "window").
 # README.md and RECIPE.md show the PNG, drawn from the poster instead:
 #   python3 scripts/preview.py . /tmp/poster.svg poster && rsvg-convert -z 2 /tmp/poster.svg -o preview.png
+# The 0.11.0 release notes show the other poster (poster-alt, below), kept as preview-limits.png:
+#   python3 scripts/preview.py . /tmp/alt.svg poster-alt && rsvg-convert -z 2 /tmp/alt.svg -o preview-limits.png
 # The poster puts the window beside name, claim and the main features (FEATURES), the sheep sunk
 # into the background above it; its window shows the quicklook card of search-filters' agents. assets/logo-mark.png is assets/logo.png in grey, 480px, 8 colors;
 # a filter turns its dark wool into the light mark. "poster" is no scene: --scenes leaves it out.
