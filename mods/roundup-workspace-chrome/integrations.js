@@ -6,7 +6,9 @@
 // Shared state under this mod's name, read by roundup-pane's card too:
 // STATE: { <agent>: { state, detail, file, installed } } after the first read, null before it.
 //   state "on" | "off" | "broken" | "unknown" (the script's word); detail its words in brackets, or null;
-//   file what install changes (`where`); installed what knownAgents() said (null: it couldn't tell).
+//   file what install changes (`where`); installed what knownAgents() said (null: it couldn't tell);
+//   form, for an "on": "older" (installed in an earlier form: switch off and on again to update it),
+//   "manual" (Codex's id set by hand, not by Roundup: switching off is the person's), else null.
 // BUSY: the agent whose install or uninstall runs, else null.
 // TOLD: the agents the toast after an install or an update has named (each at most once, ever).
 export const STATE = "roundup-workspace-chrome.integrations";
@@ -43,6 +45,13 @@ export function parseStatus(text) {
   return out;
 }
 
+// The script's details that mark an "on" (formOf). Pinned against its output by
+// tests/agent-integrations.test.mjs, so a change of its words shows there.
+export const OLDER = ["an older form", "an older install", "thread id not last"];
+export const MANUAL = "set by hand";
+export const formOf = (state, detail) => state !== "on" || !detail ? null
+  : OLDER.some((w) => detail.startsWith(w)) ? "older" : detail === MANUAL ? "manual" : null;
+
 // `where`'s lines ("pi: /Users/x/.pi/agent/extensions/roundup-context.js"), per agent: the path.
 export function parseWhere(text) {
   const out = {};
@@ -63,7 +72,8 @@ export function survey(status, where, known) {
   for (const { key } of AGENTS) {
     if (!st[key]) continue;
     const entry = Array.isArray(known) ? known.find((k) => k?.key === key) : undefined;
-    out[key] = { ...st[key], file: files[key] ?? null, installed: Array.isArray(known) ? Boolean(entry?.installed) : null };
+    out[key] = { ...st[key], form: formOf(st[key].state, st[key].detail), file: files[key] ?? null,
+      installed: Array.isArray(known) ? Boolean(entry?.installed) : null };
   }
   return out;
 }
@@ -73,8 +83,10 @@ export function survey(status, where, known) {
 export const listed = (state) => AGENTS.map((a) => a.key).filter((k) => state?.[k] && (state[k].installed !== false || state[k].state !== "off"));
 
 // The section's rows for the agents fixed when the menu opened (`keys`: listed(), or null before the first
-// read; `windows` where the script can't run). Each row: { key, label, check, icon, warn, spin, dim, does },
-// `does` what a click does: "on" (ask, then install), "off" (uninstall), "why" (say what is wrong), or null.
+// read; `windows` where the script can't run). Each row: { key, label, check, icon, warn, flag, tip, spin,
+// dim, does }, `does` what a click does: "on" (ask, then install), "off" (uninstall), "why" (say what is
+// wrong, or why it can't be switched here), or null. `flag`: a warning drawn after the label, beside a check
+// (`icon` takes the check's place); `tip` the row's tooltip.
 export function sectionRows(keys, state, busy, windows = false) {
   if (windows) return [{ key: null, label: "Not on Windows yet", dim: true, does: null }];
   if (keys === null || keys === undefined) return [{ key: null, label: "Reading…", dim: true, does: null }];
@@ -84,6 +96,12 @@ export function sectionRows(keys, state, busy, windows = false) {
     if (busy === key) return { key, label: name, icon: "spinner", spin: true, dim: true, does: null };
     // Another one running: this row waits, as the script edits one agent at a time.
     if (busy) return { key, label: name, check: s === "on", dim: true, does: null };
+    const form = state?.[key]?.form ?? null;
+    // Updated as it is switched: off restores what the first install changed, on writes today's form.
+    if (s === "on" && form === "older") return { key, label: `${name} · older form`, check: true, flag: "circle-alert", warn: true,
+      tip: "Installed in an older form: switch it off, then on again, to update it", does: "off" };
+    // Not Roundup's to switch off: uninstall would find nothing of its own (it says "already off").
+    if (s === "on" && form === "manual") return { key, label: `${name} · set by hand`, check: true, does: "why" };
     if (s === "on") return { key, label: name, check: true, does: "off" };
     if (s === "off") return { key, label: name, check: false, does: "on" };
     if (s === "broken" || s === "unknown") return { key, label: `${name} · ${s}`, icon: "circle-alert", warn: true, does: "why" };
@@ -121,9 +139,14 @@ export function resultToast(key, action, r) {
     : { level: "success", title: `${name}'s integration is off`, body: `A ${name} session already running keeps it until it restarts.` };
 }
 
-// What a click on a broken or unknown row says.
-export function whyToast(key, state) {
+// What a click on a broken or unknown row says, or on one set by hand (`home`: to show its file as ~/…).
+export function whyToast(key, state, home = null) {
   const s = state?.[key], name = nameOf(key);
+  if (s?.state === "on" && s.form === "manual") return {
+    level: "info",
+    title: `${name}'s integration was set by hand`,
+    body: `"thread-id" (or "session-id") is in tui.terminal_title in ${tilde(s.file, home) ?? "its config"}, not put there by Roundup, so Roundup leaves it alone. To switch it off, take it out there.`,
+  };
   return {
     level: "warning",
     title: s?.state === "unknown" ? `Whether ${name}'s integration is on can't be told` : `${name}'s integration is broken`,

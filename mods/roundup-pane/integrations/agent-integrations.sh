@@ -55,12 +55,17 @@ opencode_target="$app/mods/roundup-pane/integrations/opencode"
 # with "thread-id" last.
 codex_items='["activity", "thread-name", "project-name", "thread-id"]'
 
-die() { echo "$*" >&2; exit 1; }
+# Every line out goes through printf: dash's echo turns a "\n" in the person's text (a status line
+# command, a path) into a line break, and the menu reads one line per agent.
+say() { printf '%s\n' "$*"; }
+die() { say "$*" >&2; exit 1; }
+# Stdin on one line: line breaks as spaces, none at the end (a previous status line of several lines).
+oneline() { tr '\r\n' '  ' | sed 's/[[:space:]]*$//'; }
 need_jq() { command -v jq >/dev/null 2>&1 || die "jq is needed (brew install jq)"; }
 backup() { # file → a copy under $state/backup, named by the file and the time
   [ -f "$1" ] || return 0
   mkdir -p "$state/backup"
-  cp -p "$1" "$state/backup/$(echo "$1" | sed 's|^/||; s|/|_|g').$(date +%Y%m%d-%H%M%S)"
+  cp -p "$1" "$state/backup/$(say "$1" | sed 's|^/||; s|/|_|g').$(date +%Y%m%d-%H%M%S)"
 }
 replace() { # tmp → file, atomically, keeping the file's mode (callers pass resolved paths: real())
   if [ -f "$2" ]; then
@@ -130,17 +135,17 @@ claude_install() {
   real claude_settings
   [ -f "$script" ] || die "$script is missing: install the layout first (scripts/sync.sh)"
   case "$(claude_form)" in
-    canonical) echo "claude: already on"; return 0 ;;
+    canonical) say "claude: already on"; return 0 ;;
     older)
       # An earlier install (or the same script spelled otherwise): only the command changes; what
       # uninstall restores and the status line that runs after it stay as they are.
       [ -f "$claude_prev" ] || die "claude: broken ($claude_prev is missing, so the previous status line is unknown): not changed"
       backup "$claude_settings"
       set_command
-      echo "claude: on (the status line now runs through exec sh: $command_now)"
+      say "claude: on (the status line now runs through exec sh: $command_now)"
       return 0 ;;
     mentions)
-      die "claude: your status line appears to reference Roundup's script ($(jq -r '.statusLine.command' "$claude_settings")): not changed. Remove that first, then install again." ;;
+      die "claude: your status line appears to reference Roundup's script ($(jq -r '.statusLine.command' "$claude_settings" | oneline)): not changed. Remove that first, then install again." ;;
   esac
   mkdir -p "$state" "$(dirname "$claude_settings")"
   existed=true
@@ -152,7 +157,7 @@ claude_install() {
   prev_type=$(jq -r '.statusLine.type // empty' "$claude_settings")
   if [ "$prev_type" = command ]; then jq -r '.statusLine.command // empty' "$claude_settings" >"$next"; else : >"$next"; fi
   set_command
-  if [ -s "$next" ]; then echo "claude: on (your status line keeps running after it: $(cat "$next"))"; else echo "claude: on"; fi
+  if [ -s "$next" ]; then say "claude: on (your status line keeps running after it: $(oneline <"$next"))"; else say "claude: on"; fi
 }
 
 claude_uninstall() {
@@ -160,7 +165,7 @@ claude_uninstall() {
   real claude_settings
   if ! claude_ours; then
     [ -f "$claude_prev" ] && die "claude: the status line is no longer Roundup's ($claude_settings): left as it is"
-    echo "claude: already off"; return 0
+    say "claude: already off"; return 0
   fi
   [ -f "$claude_prev" ] || die "claude: $claude_prev is missing, so the previous status line is unknown: remove statusLine from $claude_settings by hand"
   backup "$claude_settings"
@@ -174,22 +179,22 @@ claude_uninstall() {
     replace "$tmp" "$claude_settings"
   fi
   rm -f "$claude_prev" "$next"
-  echo "claude: off"
+  say "claude: off"
 }
 
-claude_file() { echo "claude: $claude_settings"; }
+claude_file() { say "claude: $claude_settings"; }
 
 claude_status() {
-  if ! command -v jq >/dev/null 2>&1; then echo "claude: unknown (jq is needed)"; return 0; fi
+  if ! command -v jq >/dev/null 2>&1; then say "claude: unknown (jq is needed)"; return 0; fi
   form=$(claude_form)
   if [ "$form" = canonical ] || [ "$form" = older ]; then
-    if [ ! -f "$script" ]; then echo "claude: broken ($script is missing: run scripts/sync.sh)"
-    elif [ ! -f "$claude_prev" ]; then echo "claude: broken ($claude_prev is missing: uninstall can't restore the previous status line)"
-    elif [ "$form" = older ]; then echo "claude: on (an older form: run install claude again, so it runs through exec sh)"
-    elif [ -s "$next" ]; then echo "claude: on (then: $(cat "$next"))"
-    else echo "claude: on"; fi
-  elif [ -f "$claude_prev" ]; then echo "claude: broken (the status line was changed since install: $claude_settings)"
-  else echo "claude: off"; fi
+    if [ ! -f "$script" ]; then say "claude: broken ($script is missing: run scripts/sync.sh)"
+    elif [ ! -f "$claude_prev" ]; then say "claude: broken ($claude_prev is missing: uninstall can't restore the previous status line)"
+    elif [ "$form" = older ]; then say "claude: on (an older form: run install claude again, so it runs through exec sh)"
+    elif [ -s "$next" ]; then say "claude: on (then: $(oneline <"$next"))"
+    else say "claude: on"; fi
+  elif [ -f "$claude_prev" ]; then say "claude: broken (the status line was changed since install: $claude_settings)"
+  else say "claude: off"; fi
 }
 
 # --- Codex -------------------------------------------------------------------------------------
@@ -197,16 +202,18 @@ claude_status() {
 # Where terminal_title stands: "table <n>" (inside [tui], line n), "dotted <n>" (tui.terminal_title
 # at the root), "tui <n>" (no key, [tui] header at line n), "dotted-tui" (no [tui] table, but
 # tui.* dotted keys at the root), "inline <n>" (tui itself assigned at the root, line n: an inline
-# table, refused), or "none".
+# table, refused), or "none". TOML lets each key be bare, "quoted" or 'quoted', with spaces around
+# a dot and inside a header's brackets: a form missed here would get a second terminal_title from
+# install, and Codex doesn't start with a key defined twice.
 codex_where() {
   awk '
-    /^[ \t]*\[/ { root = 0; tui = ($0 ~ /^[ \t]*\[[ \t]*tui[ \t]*\][ \t]*(#.*)?$/); if (tui && !hdr) hdr = NR; next }
+    /^[ \t]*\[/ { root = 0; tui = ($0 ~ /^[ \t]*\[[ \t]*(tui|"tui"|\047tui\047)[ \t]*\][ \t]*(#.*)?$/); if (tui && !hdr) hdr = NR; next }
     BEGIN { root = 1 }
     # tui itself assigned at the top (an inline table `tui = { … }`, bare or quoted): not edited.
     root && /^[ \t]*(tui|"tui"|\047tui\047)[ \t]*=/ { print "inline " NR; found = 1; exit }
-    root && /^[ \t]*tui\.terminal_title[ \t]*=/ { print "dotted " NR; found = 1; exit }
-    root && /^[ \t]*tui\./ { dotted = 1 }
-    tui && /^[ \t]*terminal_title[ \t]*=/ { print "table " NR; found = 1; exit }
+    root && /^[ \t]*(tui|"tui"|\047tui\047)[ \t]*\.[ \t]*(terminal_title|"terminal_title"|\047terminal_title\047)[ \t]*=/ { print "dotted " NR; found = 1; exit }
+    root && /^[ \t]*(tui|"tui"|\047tui\047)[ \t]*\./ { dotted = 1 }
+    tui && /^[ \t]*(terminal_title|"terminal_title"|\047terminal_title\047)[ \t]*=/ { print "table " NR; found = 1; exit }
     END { if (!found) { if (hdr) print "tui " hdr; else if (dotted) print "dotted-tui"; else print "none" } }
   ' "$codex_config"
 }
@@ -275,8 +282,8 @@ codex_install() {
       [ "$rc" = 2 ] && die "codex: terminal_title in $codex_config spans several lines: add \"thread-id\" to it by hand"
       if [ "$rc" = 0 ]; then
         # An install before the id went last (0.11.0 before release) put it after "activity".
-        if codex_ours && ! id_last "$line"; then echo "codex: already on ($not_last)"
-        else echo "codex: already on (terminal_title has the thread id)"; fi
+        if codex_ours && ! id_last "$line"; then say "codex: already on ($not_last)"
+        else say "codex: already on (terminal_title has the thread id)"; fi
         return 0
       fi
       # "thread-id" last: before the array's own `]`, not one in a string or a trailing comment.
@@ -299,13 +306,13 @@ codex_install() {
       edit_line a 0 "$new"
       ;;
   esac
-  echo "codex: on (new Codex sessions show the thread id in their title)"
+  say "codex: on (new Codex sessions show the thread id in their title)"
 }
 
 codex_uninstall() {
   need_jq
   real codex_config
-  if [ ! -f "$codex_prev" ]; then echo "codex: already off"; return 0; fi
+  if [ ! -f "$codex_prev" ]; then say "codex: already off"; return 0; fi
   to=$(jq -r .to "$codex_prev")
   n=$( [ -f "$codex_config" ] && find_line "$to" || true)
   [ -n "$n" ] || die "codex: the line Roundup wrote is no longer in $codex_config ($to): left as it is"
@@ -321,26 +328,30 @@ codex_uninstall() {
   # (`.existed`, not `.existed // true`: jq's // takes false for missing.)
   if [ "$(jq -r .existed "$codex_prev")" = false ] && [ "$codex_config_linked" = false ] && [ ! -s "$codex_config" ]; then rm -f "$codex_config"; fi
   rm -f "$codex_prev"
-  echo "codex: off"
+  say "codex: off"
 }
 
-codex_file() { echo "codex: $codex_config"; }
+codex_file() { say "codex: $codex_config"; }
 
 codex_status() {
-  if ! command -v jq >/dev/null 2>&1; then echo "codex: unknown (jq is needed)"; return 0; fi
+  if ! command -v jq >/dev/null 2>&1; then say "codex: unknown (jq is needed)"; return 0; fi
   if [ -f "$codex_prev" ]; then
     to=$(jq -r .to "$codex_prev")
-    if codex_ours; then if id_last "$to"; then echo "codex: on"; else echo "codex: on ($not_last)"; fi
-    else echo "codex: broken (terminal_title was changed since install: $codex_config)"; fi
+    if codex_ours; then if id_last "$to"; then say "codex: on"; else say "codex: on ($not_last)"; fi
+    else say "codex: broken (terminal_title was changed since install: $codex_config)"; fi
   elif [ -f "$codex_config" ]; then
     set -- $(codex_where)
     case "$1" in
-      inline) echo "codex: unknown (inline tui table; inspect by hand)"; return 0 ;;
+      inline) say "codex: unknown (inline tui table; inspect by hand)"; return 0 ;;
       table | dotted)
-        if title_array has "$(line_at "$2")"; then echo "codex: on (set by hand)"; return 0; fi ;;
+        # The id there without Roundup's record: the person's own, which uninstall leaves alone (the
+        # menu's row says so). An array over several lines can't be read here: neither on nor off.
+        rc=0; title_array has "$(line_at "$2")" || rc=$?
+        [ "$rc" = 0 ] && { say "codex: on (set by hand)"; return 0; }
+        [ "$rc" = 2 ] && { say "codex: unknown (terminal_title spans several lines in $codex_config: inspect by hand)"; return 0; } ;;
     esac
-    echo "codex: off"
-  else echo "codex: off"; fi
+    say "codex: off"
+  else say "codex: off"; fi
 }
 
 # --- pi and opencode: a link to the layout's file ----------------------------------------------
@@ -357,39 +368,39 @@ link_install() { # agent link target suffix
   [ -e "$3" ] || die "$1: $3 is missing: install the layout first (scripts/sync.sh)"
   case "$(link_form "$2" "$4")" in
     ours)
-      if [ "$(readlink "$2")" = "$3" ]; then echo "$1: already on"; return 0; fi
+      if [ "$(readlink "$2")" = "$3" ]; then say "$1: already on"; return 0; fi
       rm -f "$2" ;; # an older install's link: pointed here again
     other) die "$1: $2 is there and isn't Roundup's: not changed" ;;
   esac
   mkdir -p "$(dirname "$2")"
   ln -s "$3" "$2"
-  echo "$1: on (new $1 sessions keep their context for the pane header: $2)"
+  say "$1: on (new $1 sessions keep their context for the pane header: $2)"
 }
 link_uninstall() { # agent link suffix
   case "$(link_form "$2" "$3")" in
-    ours) rm -f "$2"; echo "$1: off" ;;
-    missing) echo "$1: already off" ;;
+    ours) rm -f "$2"; say "$1: off" ;;
+    missing) say "$1: already off" ;;
     other) die "$1: $2 isn't Roundup's: left as it is" ;;
   esac
 }
 link_status() { # agent link target suffix
   case "$(link_form "$2" "$4")" in
     ours)
-      if [ ! -e "$2" ]; then echo "$1: broken ($(readlink "$2") is missing: run scripts/sync.sh, or install $1 again)"
-      elif [ "$(readlink "$2")" != "$3" ]; then echo "$1: on (an older install: run install $1 again, so it follows this layout)"
-      else echo "$1: on"; fi ;;
-    missing) echo "$1: off" ;;
-    other) echo "$1: unknown ($2 is there and isn't Roundup's)" ;;
+      if [ ! -e "$2" ]; then say "$1: broken ($(readlink "$2") is missing: run scripts/sync.sh, or install $1 again)"
+      elif [ "$(readlink "$2")" != "$3" ]; then say "$1: on (an older install: run install $1 again, so it follows this layout)"
+      else say "$1: on"; fi ;;
+    missing) say "$1: off" ;;
+    other) say "$1: unknown ($2 is there and isn't Roundup's)" ;;
   esac
 }
 pi_install() { link_install pi "$pi_link" "$pi_target" pi-context.js; }
 pi_uninstall() { link_uninstall pi "$pi_link" pi-context.js; }
 pi_status() { link_status pi "$pi_link" "$pi_target" pi-context.js; }
-pi_file() { echo "pi: $pi_link"; }
+pi_file() { say "pi: $pi_link"; }
 opencode_install() { link_install opencode "$opencode_link" "$opencode_target" opencode; }
 opencode_uninstall() { link_uninstall opencode "$opencode_link" opencode; }
 opencode_status() { link_status opencode "$opencode_link" "$opencode_target" opencode; }
-opencode_file() { echo "opencode: $opencode_link"; }
+opencode_file() { say "opencode: $opencode_link"; }
 
 # -------------------------------------------------------------------------------------------------
 

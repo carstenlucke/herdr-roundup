@@ -246,6 +246,21 @@ test("PAN-125: the card's note on Claude Code's integration: off, on but the ses
   assert.deepEqual(note({ ...R, source: "status-line", window: null }, "on"), []);
 });
 
+test("PAN-131: an integration in an older form: the card says to switch it off and on again, not to restart", async () => {
+  const { integrationWord } = await import("../mods/roundup-pane/context/card.js");
+  assert.equal(integrationWord({ state: "on", form: "older" }), "older");
+  assert.equal(integrationWord({ state: "on", form: "manual" }), "on");
+  assert.equal(integrationWord({ state: "broken", form: null }), "broken");
+  assert.equal(integrationWord(undefined), null, "not read yet");
+  assert.equal(integrationWord({ state: "on", form: "older" }, "windows"), "windows");
+  const none = { ...R, source: "transcript", window: null };
+  assert.deepEqual(cardModel(none, { agent: "claude", integration: "older" }).notes.filter((n) => /integration/.test(n)),
+    ["Claude Code's integration is in an older form: switch it off and on again in the Herdr Roundup menu (top left)"]);
+  const footer = { used: null, window: 66_000, windowRounded: true, percent: 8.6, source: "screen", at: R.at };
+  assert.equal(cardModel(footer, { agent: "pi", integration: "older" }).notes.at(-1),
+    "Pi's integration is in an older form: switch it off and on again in the Herdr Roundup menu (top left)");
+});
+
 test("PAN-125: pi's footer: the note follows its integration; other agents' cards say nothing about theirs", () => {
   const footer = { used: null, window: 66_000, windowRounded: true, percent: 8.6, source: "screen", at: R.at };
   const notes = (integration) => cardModel(footer, { agent: "pi", integration }).notes;

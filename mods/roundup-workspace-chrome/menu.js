@@ -4,7 +4,7 @@
 // A popup ends when it closes, so whatever has to outlive it goes to the brand copy as a command.
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { theme, props, run, shared, setShared, closeOverlay, notify } from "herdr";
+import { theme, props, run, shared, setShared, closeOverlay, notify, home } from "herdr";
 import { get, put, available, prerelease } from "./update.js";
 import { STATE, BUSY, sectionRows, whyToast } from "./integrations.js";
 import { unsupported } from "./integrate.js";
@@ -53,12 +53,12 @@ function rows(m) {
 function integrations(m) {
   const state = shared(STATE), busy = shared(BUSY) ?? null;
   return sectionRows(m.integrations ?? null, state, busy, unsupported()).map((r, i) => ({
-    label: r.label, check: r.check, icon: r.icon, spin: r.spin, warn: r.warn, dim: r.dim,
+    label: r.label, check: r.check, icon: r.icon, flag: r.flag, tip: r.tip, spin: r.spin, warn: r.warn, dim: r.dim,
     ...(i === 0 ? { head: "Agent integrations", sep: true } : {}),
     keep: r.does !== "on",
     act: r.does === "on" ? () => run(`roundup-workspace-chrome.integrate@${r.key}`)
       : r.does === "off" ? () => run(`roundup-workspace-chrome.uninstall@${r.key}`)
-      : r.does === "why" ? () => notify(whyToast(r.key, state))
+      : r.does === "why" ? () => notify(whyToast(r.key, state, home()))
       : () => {},
   }));
 }
@@ -93,10 +93,13 @@ export function menuView(view) {
       .when(Boolean(it.head), el => el.child(div().px(8).pt(3).pb(2).text_size(11).text_color(t.dim).child(it.head)))
       .child(h_flex().id(`mi-${i}`).h(31).px(8).gap(9).rounded(7).items_center().text_color(it.accent ? t.accent : it.dim ? t.dim : t.foreground)
         .when(i === view.at, el => el.bg(t.selected)).when(!it.dim, el => el.hover(s => s.bg(t.hover)))
+        .when(Boolean(it.tip), el => el.tooltip(it.tip))
         .on_click((_e, cx) => choose(i, cx))
         .child(it.icon
           ? svg(icon(it.icon)).size(14).flex_none().text_color(it.warn ? t.working : it.accent ? t.accent : it.dim ? t.dim : t.muted)
             .when(Boolean(it.spin), el => el.spin(900))
           : div().size(14).flex_none().when(it.check, el => el.child(svg(icon("check")).size(14).text_color(t.accent))))
-        .child(div().flex_1().truncate().child(it.label)))));
+        .child(div().flex_1().truncate().child(it.label))
+        // A warning beside a check (an integration in an older form), not in its place.
+        .when(Boolean(it.flag), el => el.child(svg(icon(it.flag)).size(14).flex_none().text_color(t.working))))));
 }

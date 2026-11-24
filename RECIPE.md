@@ -252,8 +252,9 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
     only in direct mode (`codex --no-daemon`), pi the rounded percent of
     its footer, opencode nothing. The card then says so for its own agent:
     off, "switch on … in the Herdr Roundup menu (top left)"; on, that a
-    session started before it shows them after a restart; broken or
-    unknown, "see the Herdr Roundup menu". Claude Code with a window from
+    session started before it shows them after a restart; in an older
+    form, to switch it off and on again there; broken or unknown, "see the
+    Herdr Roundup menu". Claude Code with a window from
     `/context` but no plan limits gets the note too.
 - **Plan limits** (the 5-hour and the weekly window, percent used):
   `muted` below 70%, from 70% an alert mark in `working`, from 90% in
@@ -345,7 +346,10 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
     ask and leaves the menu open. Either ends in a toast: on/off and that a
     running session may need a restart, or the script's own words
     (`warning`). A broken or unknown one shows `Pi · broken` with a circled
-    `!` in `working`; a click says why. A running switch spins its row and
+    `!` in `working`; a click says why. One in an older form stays checked
+    as `Claude Code · older form`, the `!` after it, a tooltip: switching
+    off and on again updates it. `Codex · set by hand` (the id put there by
+    the person) is checked; a click only says so. A running switch spins its row and
     holds the others. "Reading…" before the first read, "Not on Windows
     yet" there.
   - ↑/↓ move, Enter runs, Esc closes. The choices and Check leave the menu

@@ -15,17 +15,25 @@ export const script = () => `${appHome()}/mods/roundup-pane/integrations/agent-i
 // not have (an isolated instance's HERDR_APP_HOME).
 const sh = (args, timeout) => exec("env", [`HERDR_APP_HOME=${appHome()}`, "sh", script(), ...args], { timeout });
 
-// One read of every agent's state, kept in STATE. Resolves with it, or null when the script couldn't run
-// (STATE stays as it was).
+// One read of every agent's state, kept in STATE. Reads overlap (the menu's, a switch's, the hourly one),
+// and knownAgents() can be slow the first time: a read writes only when no read started after it has
+// written yet, so an older one never brings back the state from before a switch. A later read that fails
+// or is still running doesn't hold this one back. Resolves with the state this session last wrote (this
+// read's, or a newer one's), or null when none has been written yet or the script couldn't run (STATE stays
+// as it was, possibly from a run before).
+let started = 0, written = 0;
 export async function refresh() {
   if (unsupported()) return null;
+  const mine = ++started;
   const [status, where, known] = await Promise.all([
     sh(["status"], 15000).catch(() => null),
     sh(["where"], 15000).catch(() => null),
     knownAgents().catch(() => null),
   ]);
   if (!status || status.code !== 0) return null;
+  if (mine < written) return shared(STATE);
   const state = survey(status.stdout, where?.code === 0 ? where.stdout : "", known);
+  written = mine;
   setShared(STATE, state);
   return state;
 }
@@ -40,14 +48,18 @@ export function ask(key) {
 }
 
 // install or uninstall one agent's integration, then a toast with what happened, and STATE read again. One
-// at a time: the menu's rows wait while BUSY is set.
+// at a time: the menu's rows wait while BUSY is set, until the read after the switch is in (else the open
+// menu would offer the state from before it for a click).
 export async function apply(key, action) {
   if (!agentOf(key) || unsupported() || shared(BUSY)) return;
   setShared(BUSY, key);
   let r;
-  try { r = await sh([action, key], 60000); } catch (e) { r = { code: -1, stdout: "", stderr: String(e?.message ?? e) }; }
-  setShared(BUSY, null);
-  await refresh().catch(() => null);
+  try {
+    try { r = await sh([action, key], 60000); } catch (e) { r = { code: -1, stdout: "", stderr: String(e?.message ?? e) }; }
+    await refresh().catch(() => null);
+  } finally {
+    setShared(BUSY, null);
+  }
   notify(resultToast(key, action, r));
 }
 

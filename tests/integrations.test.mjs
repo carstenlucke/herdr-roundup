@@ -59,7 +59,7 @@ test("CHR-48: the script's status and where lines per agent; other lines left ou
 
 test("CHR-48: one read: state, file and installed per agent; listed are the installed ones and any not off", () => {
   const s = I.survey(STATUS, WHERE, known("claude", "codex"));
-  assert.deepEqual(s.claude, { state: "off", detail: null, file: "/h/.claude/settings.json", installed: true });
+  assert.deepEqual(s.claude, { state: "off", detail: null, form: null, file: "/h/.claude/settings.json", installed: true });
   assert.equal(s.pi.installed, false);
   assert.deepEqual(I.listed(s), ["claude", "codex", "pi", "opencode"], "pi and opencode not installed but not off: listed");
   const off = I.survey("claude: off\ncodex: off\npi: off\nopencode: off\n", "", known("codex"));
@@ -373,4 +373,107 @@ test("CHR-58: a click on the brand opens the menu with the agents listed then, a
   // pi broken and opencode unknown are listed though not installed: they can be looked at.
   assert.deepEqual(spec.props.menu.integrations, ["codex", "pi", "opencode"]);
   await waitFor(() => herdr.calls("exec").length >= 2);
+});
+
+// --- PR #54 review (agreed with Codex 2026-11-24) ---------------------------------------------------
+
+// knownAgents() answering when the test says: each call waits for its own release (gates[i]()).
+function heldKnown() {
+  const gates = [];
+  herdr.set({ knownAgents: () => new Promise((resolve) => gates.push(() => resolve(known("claude", "codex", "pi", "opencode")))) });
+  return gates;
+}
+// The script's status answering what `now.status` holds when it is run (code 1 when null).
+function liveStatus(now) {
+  herdr.onExec((call) => {
+    if (call.command !== "env") return undefined;
+    const action = call.args[3];
+    if (action === "status") return now.status === null ? { code: 1, stdout: "", stderr: "broken" } : { code: 0, stdout: now.status };
+    if (action === "where") return { code: 0, stdout: WHERE };
+    return { code: 0, stdout: `${call.args[4]}: ${action === "install" ? "on" : "off"}\n` };
+  });
+}
+
+test("CHR-60: an older read never overwrites a newer one; a newer read that fails or is pending doesn't hold back an older one", async () => {
+  const gates = heldKnown(), now = { status: "claude: on\n" };
+  liveStatus(now);
+  const a = integrate.refresh(); // the menu's read: knownAgents() slow
+  await waitFor(() => gates.length === 1);
+  now.status = "claude: off\n"; // switched off meanwhile
+  const b = integrate.refresh(); // the switch's read
+  await waitFor(() => gates.length === 2);
+  gates[1]();
+  assert.equal((await b).claude.state, "off");
+  gates[0]();
+  assert.equal((await a).claude.state, "off", "the older read answers with what is kept");
+  assert.equal(herdr.shared(STATE).claude.state, "off", "and doesn't write the state from before the switch");
+  // Reads started later, one failing and one still running, don't stop an earlier one from writing.
+  now.status = "claude: on\n";
+  const c = integrate.refresh();
+  await waitFor(() => gates.length === 3);
+  now.status = null;
+  const failed = integrate.refresh();
+  await waitFor(() => gates.length === 4);
+  gates[3]();
+  assert.equal(await failed, null, "a read whose script fails: null, nothing written");
+  now.status = "claude: off\n";
+  const d = integrate.refresh();
+  await waitFor(() => gates.length === 5);
+  gates[2]();
+  assert.equal((await c).claude.state, "on");
+  assert.equal(herdr.shared(STATE).claude.state, "on");
+  gates[4]();
+  assert.equal((await d).claude.state, "off", "the newest read still writes");
+});
+
+test("CHR-61: a switch keeps the rows busy until the read after it is in; a second switch meanwhile does nothing", async () => {
+  liveStatus({ status: "pi: off\n" });
+  const gates = heldKnown();
+  const run = integrate.apply("pi", "install");
+  await waitFor(() => gates.length === 1);
+  assert.equal(herdr.shared(BUSY), "pi", "the read after the switch runs: still busy");
+  await integrate.apply("codex", "install");
+  assert.equal(herdr.calls("exec").filter(([, args]) => args.includes("install")).length, 1, "the second switch didn't run");
+  gates[0]();
+  await run;
+  assert.equal(herdr.shared(BUSY), null);
+  assert.equal(toasts().length, 1);
+});
+
+test("CHR-62: an install in an older form keeps its check with a warning and a tooltip; Codex's id set by hand only says why", async () => {
+  const status = [
+    "claude: on (an older form: run install claude again, so it runs through exec sh)",
+    "codex: on (set by hand)",
+    "pi: on (an older install: run install pi again, so it follows this layout)",
+    "opencode: on (then: something else)",
+  ].join("\n");
+  const s = I.survey(status, WHERE, known("claude", "codex", "pi", "opencode"));
+  assert.deepEqual(Object.fromEntries(Object.entries(s).map(([k, v]) => [k, v.form])), { claude: "older", codex: "manual", pi: "older", opencode: null });
+  assert.equal(I.formOf("on", "thread id not last: run uninstall, then install, to move it"), "older");
+  assert.equal(I.formOf("broken", "an older form"), null, "only an on has a form");
+  const rows = I.sectionRows(["claude", "codex", "pi", "opencode"], s, null);
+  assert.deepEqual(rows[0], { key: "claude", label: "Claude Code · older form", check: true, flag: "circle-alert", warn: true,
+    tip: "Installed in an older form: switch it off, then on again, to update it", does: "off" });
+  assert.deepEqual(rows[1], { key: "codex", label: "Codex · set by hand", check: true, does: "why" });
+  assert.equal(rows[2].label, "Pi · older form");
+  assert.deepEqual(rows[3], { key: "opencode", label: "OpenCode", check: true, does: "off" });
+  assert.deepEqual(I.whyToast("codex", s, "/h"), {
+    level: "info", title: "Codex's integration was set by hand",
+    body: '"thread-id" (or "session-id") is in tui.terminal_title in ~/.codex/config.toml, not put there by Roundup, so Roundup leaves it alone. To switch it off, take it out there.',
+  });
+  // In the menu: the check stays in its place, the warning after the label, the tooltip on the row.
+  script({ status });
+  herdr.set({ knownAgents: known("claude", "codex", "pi", "opencode") });
+  await integrate.refresh();
+  const m = await chromeMenu({ ...BASE, integrations: ["claude", "codex", "pi", "opencode"] });
+  const row = m.row("Claude Code · older form");
+  assert.equal(m.checked("Claude Code · older form"), true);
+  assert.ok([...walk(row)].some((e) => e.type === "svg" && String(e.arg).endsWith("/circle-alert.svg")));
+  assert.deepEqual(row.style("tooltip"), ["Installed in an older form: switch it off, then on again, to update it"]);
+  click(row, makeCx());
+  assert.equal(runs().at(-1), "roundup-workspace-chrome.uninstall@claude", "a click switches off, as on any checked row");
+  assert.equal(m.checked("Codex · set by hand"), true);
+  click(m.row("Codex · set by hand"), makeCx());
+  assert.equal(toasts().at(-1).title, "Codex's integration was set by hand");
+  assert.equal(runs().filter((r) => r.endsWith("@codex")).length, 0, "nothing runs for it");
 });

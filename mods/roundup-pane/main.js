@@ -27,6 +27,7 @@ import { folder, paneId, paneFrame, oldName, OLD_LABEL, OLD_NAMES, MOVED } from 
 import { ContextReader, sweep } from "./context/reader.js";
 import { makeIo } from "./context-io.js";
 import { meter, headerTiers, sameTiers } from "./context-view.js";
+import { integrationWord } from "./context/card.js";
 // The plan limits of the agent's account, beside the context in the same pill (limits/; RECIPE "Limits").
 import { sharedStore } from "./limits/store.js";
 import { shownState } from "./limits/text.js";
@@ -50,9 +51,9 @@ function moved(source, on) {
 const OVERLAY = "roundup-pane.overlay";
 const covered = () => Boolean(shared("roundup-menu.open") || shared("roundup-confirm.open") || shared(OVERLAY));
 // The state of an agent's integration as the logo menu read it (roundup-workspace-chrome, issue #48),
-// for the card's notes: "on", "off", "broken", "unknown", "windows" (none there), or null (not read).
-const integrationOf = (agent) => window()?.platform === "windows" ? "windows"
-  : shared("roundup-workspace-chrome.integrations")?.[agent]?.state ?? null;
+// for the card's notes: "on", "older" (on, in an earlier install's form: the menu's `form`), "off",
+// "broken", "unknown", "windows" (none there), or null (not read).
+const integrationOf = (agent) => integrationWord(shared("roundup-workspace-chrome.integrations")?.[agent], window()?.platform);
 
 function icon(p, size, color) {
   if (!p?.icon) return null;

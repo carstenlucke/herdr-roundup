@@ -21,16 +21,24 @@ const NAMES = { claude: "Claude Code", pi: "Pi" };
 
 // What the card says about its own agent's integration when the reading lacks what it would give
 // (`gives`: "its window and plan limits", …). `integration` is the menu's word for it (shared
-// roundup-workspace-chrome.integrations): "on" with such a reading means a session older than it;
+// roundup-workspace-chrome.integrations): "on" with such a reading means a session older than it,
+// "older" an install in an earlier form;
 // null (not read yet) counts as off; "windows": the script doesn't run there.
 function integrationNote(agent, integration, gives, without = "") {
   const name = NAMES[agent] ?? agent, or = without ? `, or ${without}` : "";
   if (integration === "on") return `Its integration is on: a session started before it shows ${gives} after a restart${or}`;
+  // A restart doesn't help there: the install itself is to be renewed.
+  if (integration === "older") return `${name}'s integration is in an older form: switch it off and on again in ${MENU}`;
   if (integration === "broken") return `${name}'s integration is broken: see ${MENU}`;
   if (integration === "unknown") return `Whether ${name}'s integration is on can't be told: see ${MENU}`;
   if (integration === "windows") return without ? `${name}'s integration isn't on Windows yet: ${without}` : null;
   return `For ${gives}, switch on ${name}'s integration in ${MENU}${or}`;
 }
+
+// The card's word for an agent's integration from the logo menu's entry for it (shared
+// roundup-workspace-chrome.integrations: { state, form, … }, or none before the first read).
+export const integrationWord = (entry, platform) => platform === "windows" ? "windows"
+  : entry?.state === "on" && entry.form === "older" ? "older" : entry?.state ?? null;
 
 // → { big: { used, of, percent, sev }, rows: [{ label, value, extra, kind }], notes: [text] }, or null.
 // `kind` is "plain" or "warn"; `big.of` is "of 200k", "in use · window unknown" or "".
