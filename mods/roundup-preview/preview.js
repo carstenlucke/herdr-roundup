@@ -122,13 +122,16 @@ export class Preview {
   // watch that rejects (on Linux, a tree above 4096 folders) gives way to a look every POLL ms.
   watch(cx) {
     this.poll?.cancel(); this.poll = null;
+    // The folder of the file shown before is no longer watched (a FolderWatch's cancel(), Herdr 0.1.16).
+    this.watchPending?.cancel(); this.watchPending = null;
     if (this.on) return;
     const file = this.file, token = this.watching = {};
     cx.spawn(async (cx) => {
       const real = await this.realFile(file);
       try {
         while (this.watching === token) {
-          const changed = await watchFolder(dirname(file));
+          const pending = this.watchPending = watchFolder(dirname(file));
+          const changed = await pending;
           if (this.watching === token && changedFile(changed, file, real)) this.show(file, cx, true);
         }
       } catch {
@@ -192,7 +195,7 @@ export class Preview {
   }
 
   close() {
-    this.watching = null; this.poll?.cancel(); this.release();
+    this.watching = null; this.poll?.cancel(); this.watchPending?.cancel(); this.release();
     // The window is gone: roundup-files learns there is none, unless another one (opened again
     // in its place) or a later copy of this one (the mod reloaded) already took FLOAT.
     if (releasesFloat(shared(FLOAT), this.float, this.copy)) setShared(FLOAT, null);

@@ -19,10 +19,10 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { panes, terminals, props, run, theme, settings, home, hc, shared, setShared, focused } from "herdr";
+import { panes, terminals, props, run, theme, settings, home, hc, shared, setShared, focused, layout } from "herdr";
 import { closePane, givenName, fallbackName } from "./close.js";
 import { menuView, shortcut } from "./menu.js";
-import { folder, paneId, oldName, OLD_LABEL, OLD_NAMES } from "./header-text.js";
+import { folder, paneId, paneFrame, oldName, OLD_LABEL, OLD_NAMES } from "./header-text.js";
 // Roundup's own: the agent's context meter (context/, context-io.js, context-view.js; RECIPE "Context").
 import { ContextReader, sweep } from "./context/reader.js";
 import { makeIo } from "./context-io.js";
@@ -184,6 +184,8 @@ export default class Pane extends View {
     const font = settings().font_family ?? "JetBrains Mono";
     const st = p.status;
     const pane = p.pane;
+    // A header the layout puts below its pane draws its divider above itself.
+    const bottom = paneFrame(layout())?.header?.position === "bottom";
     this.context?.see(p, focused()?.tab === p.tab, cx);
     // The tier from the current zoom, so a zoom change re-tiers without a new measurement.
     const now = Date.now();
@@ -205,7 +207,8 @@ export default class Pane extends View {
       .gap(8)
       .items_center()
       .bg(t.background)
-      .border_b(1)
+      .when(bottom, (el) => el.border_t(1))
+      .when(!bottom, (el) => el.border_b(1))
       .border_color(t.border)
       .text_size(12)
       .on_hover((hovered, cx) => { this.hovered = hovered; cx.notify(); })

@@ -304,3 +304,15 @@ test("PAN-122: a mod pane's old name moves the same way, other panes' entries st
   next.view.close();
   last.view.close();
 });
+
+test("PAN-123: a header the layout puts below its pane draws its divider above itself", async () => {
+  const frame = (position) => ({ id: "root", children: [{ id: "body", content: { tab: "active", pane: { header: { position } } } }] });
+  const top = await header({}, { layout: frame("top") });
+  let head = top.part("pane-head-p1");
+  assert.deepEqual([head.style("border_b"), head.has("border_t")], [[1], false]);
+  top.view.close();
+  const bottom = await header({}, { layout: frame("bottom") });
+  head = bottom.part("pane-head-p1");
+  assert.deepEqual([head.style("border_t"), head.has("border_b")], [[1], false]);
+  bottom.view.close();
+});

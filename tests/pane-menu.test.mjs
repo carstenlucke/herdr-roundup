@@ -7,6 +7,7 @@ import { herdr, reset, mount, find, findAll, texts, pane, terminal } from "./sup
 
 const Pane = (await import("../mods/roundup-pane/main.js")).default;
 const Confirm = (await import("../mods/roundup-confirm/main.js")).default;
+const Menu = (await import("../mods/roundup-menu/main.js")).default;
 
 beforeEach(reset);
 
@@ -55,4 +56,16 @@ test("CNF-06, CNF-08: the dialog is rounded 8px on popover, with the defaults fo
   assert.ok(detail.has("overflow_y_scrollbar"), "the detail is the scrolling text under the title");
   assert.deepEqual(detail.style("text_color"), ["muted"]);
   assert.deepEqual(detail.kids, [""], "the detail is empty");
+});
+
+test("MEN-02: roundup-menu's pane menu starts with Rename, and Split down draws its own icon, as Herdr's menu 0.1.17", () => {
+  herdr.set({ panes: [pane("p1", "tb1", { terminal: "t1" })], terminals: [terminal("t1")] });
+  const root = mount(Menu, { props: { tab: "pane", target: { pane: "p1", terminal: "t1" }, overlay: "o1" } }).render();
+  const rows = findAll(root, (e) => /^mi-\d+$/.test(e.elementId ?? ""));
+  const label = (r) => texts(r).find((s) => s.length > 1);
+  assert.deepEqual(rows.slice(0, 4).map(label), ["Rename", "Split right", "Split down", "Zoom"]);
+  const icon = (r) => find(r, (e) => e.type === "svg").arg;
+  assert.deepEqual(rows.slice(0, 3).map(icon), ["mods/workspace-chrome/square-pen.svg", "mods/workspace-chrome/panel-right.svg", "mods/workspace-chrome/panel-bottom.svg"]);
+  rows[0].handlers.click({}, {});
+  assert.deepEqual(herdr.calls("run").at(-1), ["pane.rename", { pane: "p1" }]);
 });

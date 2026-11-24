@@ -160,6 +160,8 @@ export default class Files extends View {
     this.cursor = s?.cursor ?? ""; this.git = emptyGit(); this.index = null; this.indexing = null; this.hits = null; this.searchError = null;
     this.searchSeq++; this.searching = false;
     this.error = null; this.limited = false; this.loading = false; this.again = false; this.watched = null;
+    // The folder shown before is no longer watched (a FolderWatch's cancel(), Herdr 0.1.16).
+    this.watchPending?.cancel(); this.watchPending = null;
     this.scrollTo = this.cursor || null;
     if (this.query) { this.query = ""; this.input?.set_value(""); }
     this.closePreview();
@@ -243,9 +245,11 @@ export default class Files extends View {
       try {
         if (ctx.real === undefined) ctx.real = await realPath(root).catch(() => null);
         while (this.current(ctx)) {
-          const paths = await watchFolder(root);
+          const pending = this.watchPending = watchFolder(root);
+          const paths = await pending;
           if (!this.current(ctx)) return;
-          this.changed(paths, cx);
+          // A cancelled or reclaimed watch answers with nothing: watch again.
+          if (paths.length) this.changed(paths, cx);
         }
       } catch { if (this.current(ctx)) this.watched = null; }
     });

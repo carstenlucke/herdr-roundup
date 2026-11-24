@@ -29,3 +29,20 @@ export function oldName(p, labels, names) {
   const name = old.trim();
   return { name, step: p.name || !name ? "drop" : "give" };
 }
+
+// The layout's first visible tab frame (`content.tab` with its `pane`), the active child of a
+// stack included (Herdr's pane 0.1.15): its `header.position` says where this header sits.
+export function paneFrame(node) {
+  if (!node || node.hidden) return null;
+  if (node.content?.tab && node.content.pane) return node.content.pane;
+  let children = node.children ?? [];
+  if (node.type === "stack") {
+    const visible = children.filter((child) => !child.hidden);
+    children = [visible.find((child) => child.id === node.active) ?? visible[0]];
+  }
+  for (const child of children) {
+    const frame = paneFrame(child);
+    if (frame) return frame;
+  }
+  return null;
+}

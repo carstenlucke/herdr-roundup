@@ -290,6 +290,7 @@ Nothing may need a person: there is no pointer or key injection, so L2 calls han
 | PAN-120 | The ask for an account's kept files goes out once per process, not once per account: an agent restarted in the pane on the same account (another pid, the program unchanged as panes() has it) asks again before its session answers; `store.due` still keeps it to once a minute per account. | PR #45 Copilot review (an account-only marker left a restarted session without limits) | L2 | limits: "an agent restarted in the pane on the same account asks the account's files again, once a minute per account at most" | — | M |
 | PAN-121 | `parseEnv` keeps a value with spaces whole, up to the next ` NAME=` or the line's end: `CODEX_HOME=/Users/a/Codex Personal` and `…/Codex Work` (likewise `CLAUDE_CONFIG_DIR`) are two accounts, not one cut at the space. | PR #45 Copilot review (two folders became one account key) | L1 | context-io: "parseEnv keeps a value with spaces whole up to the next variable or the line's end: two config folders with a space stay two accounts" | — | M |
 | PAN-122 | A name from before `pane.rename` (Roundup up to 0.11: a terminal's label `roundup-pane.name`, a mod pane's entry in shared `roundup-pane.names`) moves over in two looks of the header's 2 s timer: a pane without a name gets it through `pane.rename {pane, name}` (trimmed), and once the pane shows a name the old one goes (`hc label <t> roundup-pane.name=`; the shared entry deleted, the key with its last entry). The pane's own name wins over an old one, a blank old name is only removed, each step runs once per header copy, and a `pane.rename` that throws keeps the old name for the next start. | Herdr 0.1.17 `pane.rename`; decided 2026-11-24 | L2 | header-text: "PAN-122: an old name is given to a pane without a name, dropped once the pane has one or when it is blank"; close: "PAN-122: a name from before pane.rename is given to its pane, then removed, each once", "PAN-122: a mod pane's old name moves the same way, other panes' entries stay; a rename that throws is left alone" | herdr stub, fake clock | H |
+| PAN-123 | A header the layout puts below its pane (`header.position: "bottom"` of the first visible tab frame, a stack's active child counting, hidden blocks not) draws its divider above itself, else below. | Herdr `bf346c0` | L2 | header-text: "PAN-123: paneFrame is the layout's first visible tab frame, a stack's active child counting, hidden blocks not"; close: "PAN-123: a header the layout puts below its pane draws its divider above itself" | herdr + gpui stubs | L |
 
 ## roundup-tabs (TAB)
 
@@ -344,6 +345,7 @@ Nothing may need a person: there is no pointer or key injection, so L2 calls han
 | ID | Behaviour | Source | Level | Covered | Needs | Prio |
 |---|---|---|---|---|---|---|
 | MEN-01 | `init` writes its `props().overlay` to `roundup-menu.open`; `close()` clears it only while it holds that id: menu A, then B, A closes → B's id stays; B closes → null. | PLAN quicklook (B1) | L2 | spaces-quicklook: "roundup-menu marks itself open with its overlay id and clears only its own entry" | shared recorder | H |
+| MEN-02 | The pane menu of the clone starts with Rename (`pane.rename {pane}`), and Split down draws `panel-bottom`, Split right `panel-right`, as Herdr's `menu` 0.1.17. (The layout's terminal menu is roundup-pane, PAN-12; this is the clone's parity.) | Herdr `e91dfca`, `14ab8ea` | L2 | pane-menu: "MEN-02: roundup-menu's pane menu starts with Rename, and Split down draws its own icon, as Herdr's menu 0.1.17" | herdr + gpui stubs | L |
 
 ## roundup-files (FIL)
 
@@ -495,6 +497,7 @@ Source keys: `PR #6 c <sha>` is a fix commit inside PR #6 whose message names th
 | FIL-110 | Every id in `icons.js` has `icons/<id>.svg`; `.css`, `.html`, `.php`, `.vue` get non-generic icons; `icons/LICENSE` exists. | PR #6 body; RECIPE now | L1 | `every icon the tables name is in icons/, with the licence beside them`; `web files get icons of their own` | static | M |
 | FIL-111 | `THIRD_PARTY_NOTICES.md` names `link.svg` (Lucide) and `fonts/Geist-Italic.ttf` with `fonts/OFL.txt`, and both files exist. | PR #18 rc 4506237521 | L1 | `THIRD_PARTY_NOTICES.md names the Lucide link icon and the Geist font with its licence, and they exist` | static | L |
 | FIL-112 | The script commands `tab:<rel>` / `float:<rel>` act only on a path below the shown folder: empty, absolute (`/`, `\`, UNC, `C:`) and `..` parts are refused, nothing is trimmed; without a shown folder nothing opens. | PR #22 rc 4507932269 | L1 | `scriptRel takes a path below the shown folder and refuses the rest` | — | M |
+| FIL-113 | The panel cancels the folder watch of the folder shown before (`FolderWatch.cancel`, Herdr 0.1.16) when it shows another; a watch that answers with no paths (cancelled or reclaimed) refreshes nothing and is set again. | Herdr 0.1.16 (`watchFolder` returns a `FolderWatch`) | L2 | watch-cancel: "FIL-113: the panel cancels the watch of the folder shown before, and a watch that answers with nothing is set again" | herdr stub (`watchFolder().cancel()`), temp folders | M |
 
 ## Opening files: roundup-files → roundup-preview (OPN, FLT, WIN)
 
@@ -624,6 +627,7 @@ Source keys: `PR #6 c <sha>` is a fix commit inside PR #6 whose message names th
 | CHG-06 | Prune deletes only files older than 14 days in `data/roundup-preview/` and is awaited before staging or rendering. | PR #16 rc 4505948213, 4505990837 | L2 | — | real `find` on aged files | H |
 | CHG-07 | `key()` (FNV-1a, base 36) is stable per path and differs for two. | media.js | L1 | cache-key: "key (FNV-1a, base 36) is stable per path and differs for two" | move `key` to a pure file | L |
 | CHG-08 | Rewriting an open .md on disk changes the shown content within ~1 s, Raw still on. | PR #16 body; RECIPE now | L3 | smoke.sh CHG-08 | debug readout of the loaded revision | M |
+| CHG-09 | A preview cancels the folder watch of the file shown before when it shows a file elsewhere (a followed link, Back) and when it closes. | Herdr 0.1.16 (`watchFolder` returns a `FolderWatch`) | L2 | watch-cancel: "CHG-09: a preview cancels the watch of the folder it showed when it shows a file elsewhere, and when it closes" | herdr stub (`watchFolder().cancel()`), temp folders | M |
 
 ### ⋯ menu, editor, external programs
 
