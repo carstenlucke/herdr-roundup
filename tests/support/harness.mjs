@@ -137,11 +137,11 @@ export const space = (id, tabs = [], extra = {}) => ({
   tabs: tabs.map((t, i) => ({ ...t, index: i + 1 })), ...extra, // a tab's index is its place in the list
 });
 export const pane = (paneId, tabId, extra = {}) => ({
-  pane: paneId, terminal: null, tab: tabId, title: "", cwd: null, branch: null, status: null, app: null,
+  pane: paneId, terminal: null, tab: tabId, title: "", name: null, cwd: null, branch: null, status: null, app: null,
   program: program(), focused: false, zoomed: false, movable: false, ...extra,
 });
 export const agent = (address, extra = {}) => ({
   address, pane: "", space: "", space_name: "", tab: "", tab_index: 1, tab_name: "", status: "idle", app: null,
-  program: agentProgram(), title: "", seq: 0, pinned: false, focused: false, ...extra,
+  program: agentProgram(), title: "", pane_name: null, seq: 0, pinned: false, focused: false, ...extra,
 });
 export const terminal = (address, extra = {}) => ({ address, name: "", argv: [], parent: null, labels: {}, state: "running", ...extra });

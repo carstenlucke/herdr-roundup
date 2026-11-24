@@ -103,14 +103,12 @@ test("the card names the idle compaction as an estimate, the last compaction, a 
   assert.equal(cardModel(null), null);
 });
 
-test("the header: no meter for a shell, nor in the rename dialog or the terminal menu (no reader there)", () => {
+test("the header: no meter for a shell, nor in the terminal menu (no reader there)", () => {
   herdr.set({ panes: [pane("p1", "tb1", { terminal: "t1", program: program("shell") })], focused: { tab: "tb1" }, props: { pane: "p1", terminal: "t1" } });
   const { view, render } = mount(Pane, { props: { pane: "p1", terminal: "t1" } });
   assert.ok(view.context, "a header copy has a reader");
   assert.equal(findAll(render(), (e) => String(e.elementId ?? "").startsWith("ph-ctx")).length, 0);
   assert.equal(view.context.strategy, null);
-  const dialog = mount(Pane, { props: { rename: { pane: "p1", terminal: "t1", value: "", fallback: "zsh" }, overlay: "o1" } });
-  assert.equal(dialog.view.context, undefined);
   const menu = mount(Pane, { props: { tab: "pane", target: { pane: "p1", terminal: "t1" }, overlay: "o2" } });
   assert.equal(menu.view.context, undefined);
 });
@@ -197,7 +195,7 @@ test("the header's tier follows the zoom: on_size_change's window px are divided
   view.close();
 });
 
-test("the card stays empty while this mod's menu or rename dialog is open, or a close confirmation; each clears only its own id", async () => {
+test("the card stays empty while this mod's menu is open, or a close confirmation; each menu clears only its own id", async () => {
   const { view, render } = claudeHeader();
   // props() is the stub's one value: each mount sets it, so the header's goes back before its render.
   const empty = () => { herdr.set({ props: { pane: "p1", terminal: "t1" } }); return cardOf(render()).style("content")[0].kids.length === 0; };
@@ -205,15 +203,15 @@ test("the card stays empty while this mod's menu or rename dialog is open, or a 
   const menu = mount(Pane, { props: { tab: "pane", target: { pane: "p1", terminal: "t1" }, overlay: "o1" } });
   assert.equal(herdr.shared("roundup-pane.overlay"), "o1");
   assert.equal(empty(), true, "the menu is open: the card would draw above it");
-  const dialog = mount(Pane, { props: { rename: { pane: "p1", terminal: "t1", value: "", fallback: "zsh" }, overlay: "o2" } });
+  const newer = mount(Pane, { props: { tab: "pane", target: { pane: "p1", terminal: "t1" }, overlay: "o2" } });
   assert.equal(herdr.shared("roundup-pane.overlay"), "o2");
   await menu.view.close();
-  assert.equal(herdr.shared("roundup-pane.overlay"), "o2", "the older menu's close leaves the dialog's id");
+  assert.equal(herdr.shared("roundup-pane.overlay"), "o2", "the older menu's close leaves the newer one's id");
   assert.equal(empty(), true);
   const other = mount(Pane, { props: { pane: "p1", terminal: "t1" } });
   await other.view.close();
   assert.equal(herdr.shared("roundup-pane.overlay"), "o2", "a header that starts or closes leaves it alone");
-  await dialog.view.close();
+  await newer.view.close();
   assert.equal(herdr.shared("roundup-pane.overlay"), null);
   assert.equal(empty(), false);
   herdr.set({ shared: { "roundup-confirm.open": "o3" } });

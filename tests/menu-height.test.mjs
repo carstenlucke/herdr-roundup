@@ -1,6 +1,6 @@
 // node --test 'tests/*.test.mjs'
 // The right-click popups are opened at a fixed height: it must hold every row the menu can
-// have, or the last one (the pane menu's ninth, "Send back to …") is cut off. menu.js is loaded
+// have, or the last one (the pane menu's tenth, "Send back to …") is cut off. menu.js is loaded
 // with herdr stubbed (L2), so the test reads its heights and the sizes its render draws with.
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
@@ -45,11 +45,11 @@ test("the menu draws with the heights it exports", () => {
   assert.equal(MODES, 3);
 });
 
-test("the pane's terminal menu fits its popup with all nine rows", () => {
+test("the pane's terminal menu fits its popup with all ten rows", () => {
   const pane = rows(read("mods/roundup-pane/main.js"), "function menuRows(");
-  assert.deepEqual(pane, { rows: 9, seps: 1 });
+  assert.deepEqual(pane, { rows: 10, seps: 1 });
   const popup = JSON.parse(read("mods/roundup-pane/mod.json")).overlay.height;
-  assert.equal(height(pane), 326);
+  assert.equal(height(pane), 357);
   assert.ok(popup >= height(pane), `mods/roundup-pane/mod.json: overlay.height ${popup} < ${height(pane)} for ${pane.rows} rows`);
 });
 

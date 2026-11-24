@@ -122,10 +122,10 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   Claude Code and Codex on a subscription add the account's plan limits
   after a 1px `border` divider, each a short name (10.5px `dim`) and its
   percent: `5h 21% wk 40%`. Terminal padding 14 × 12px. Right-clicking a terminal shows Herdr's
-  pane menu (Split right, Split down, Zoom, where right-clicks go, Close
-  pane), then "Ask before closing a pane" with the same three choices. A
-  terminal outside a tab has no pane: its menu leaves out Split, Zoom and
-  Close pane.
+  pane menu (Rename, Split right, Split down, Zoom, where right-clicks go,
+  Close pane), then "Ask before closing a pane" with the same three
+  choices. A terminal outside a tab has no pane: its menu leaves out
+  Rename, Split, Zoom and Close pane.
 - **Side panel** on the right, hidden at first (368px, 280–900px): a stack
   of `roundup-files` and Herdr's `changes`, picked with the Files and
   Changes buttons at the right of the tab bar. `roundup-files` is a card
@@ -229,8 +229,9 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   agents list's `»` unfolds it.
 - **Pane header:** double-click the id chip to copy the id (a mod pane's
   whole id); the chip shows "copied" in `accent` for 1.2s. Double-click the
-  name, or click the pencil, to rename the pane in a dialog (Enter saves,
-  Esc cancels); an empty name goes back to the program's. A click elsewhere
+  name, click the pencil or choose Rename in the terminal's menu to rename
+  the pane in Herdr's prompt (Enter saves, Esc cancels); an empty name goes
+  back to the program's. A click elsewhere
   focuses the pane. Tooltips: the whole id on the chip, the given and the
   program's name on the name.
 - **Context meter:** follows a working agent within about 15s (and 2s
@@ -489,23 +490,22 @@ While open it sets shared `roundup-workspace-chrome.menu`; shared
 `circle-alert`, and `spinner.svg` from `workspace-chrome`.
 
 **`roundup-pane`** (clone of `pane` 0.1.14, `place: "none"`, title "Pane
-header"). One copy per pane, `props()` `{pane, terminal}`. herdr-core can't
-rename a running terminal, so a terminal pane's name is its core label
-`roundup-pane.name`, read from `terminals()[i].labels`, written with
-`hc(["label", terminal, "roundup-pane.name=<name>"])` (`…=` removes it); a
-mod pane's is in shared `roundup-pane.names` (pane id → name); see
+header"). One copy per pane, `props()` `{pane, terminal}`. A pane's name is
+Herdr's (0.1.17): `run("pane.rename", {pane})` asks in Herdr's prompt, and
+the name is `panes()[i].name`, kept with the pane's tab, for a mod pane
+too. A name Roundup kept itself up to 0.11 (a terminal's label
+`roundup-pane.name`, shared `roundup-pane.names`) is given to its pane and
+then removed by the header's timer; see
 `docs/adr/0001-pane-names-in-core-labels.md`. The chip copies with
-`cx.write_to_clipboard` on `click_count === 2`. The rename dialog is the
-same mod, `openOverlay({mod: "roundup-pane", kind: "dialog", width: 380,
-height: 196, props: {rename: {pane, terminal, value, fallback}}})`. It is
-also the `terminal_menu`: a popup (`mod.json` `overlay` 240×332),
+`cx.write_to_clipboard` on `click_count === 2`. It is
+also the `terminal_menu`: a popup (`mod.json` `overlay` 240×363),
 `props()` `{tab: "pane", target: {pane, terminal}, overlay}`, Herdr's pane
-menu item for item; Split, Zoom and Close pane, and the closing choice,
-only when `target.pane` is in `panes()`. Closing is `closePane(pane)` from
+menu item for item; Rename, Split, Zoom and Close pane, and the closing
+choice, only when `target.pane` is in `panes()`. Closing is `closePane(pane)` from
 `close.js` (as in `roundup-tabs`); `cmd-shift-w` goes to
 `roundup-tabs.close-pane`, as a command here would reach every header.
-Commands: `pane.focus`, `pane.split`, `pane.zoom`, `pane.close`,
-`tab.close`, `terminal.right_click`, `terminal.park`. Own art:
+Commands: `pane.focus`, `pane.rename`, `pane.split`, `pane.zoom`,
+`pane.close`, `tab.close`, `terminal.right_click`, `terminal.park`. Own art:
 `rename.svg`, and the shipped header's `split-right`, `split-down`,
 `zoom`, `unzoom`, `close`.
 
@@ -849,9 +849,10 @@ of global `tab.close` and `pane.close`.
   that agent and as `/usage` and `/status` say right after an answer; a
   shell, a pi and an opencode pane show none.
 - Every pane header shows its terminal's address (`t5j`); double-clicking
-  copies it. `hc label t5j roundup-pane.name=Build` shows "Build" within a
-  second; so does renaming in the dialog, and an empty name shows the
-  program's again.
+  copies it. `herdr-app do pane.rename --pane <id> --name Build` shows
+  "Build" at once; so does renaming in the prompt, and an empty name shows
+  the program's again. A pane named before 0.12 keeps its name: its header
+  moves it to Herdr within a few seconds of being shown.
 - With "While an agent works", `cmd-w` on a tab whose agent works asks and
   Cancel keeps it; a shell's tab closes at once. "Always" asks for it too;
   "Never" for neither. In a tab split into a working agent and a shell,

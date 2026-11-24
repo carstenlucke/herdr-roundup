@@ -1,7 +1,6 @@
-// What the pane's header writes: its folder, its id chip, and a name as it is saved. Pure,
-// so tests/header-text.test.mjs runs it in node: `home` comes in as a parameter.
-
-export const MAX_NAME = 48;
+// What the pane's header writes: its folder and its id chip, and what becomes of a name from
+// before Herdr named panes. Pure, so tests/header-text.test.mjs runs it in node: `home` comes in
+// as a parameter.
 
 // A folder under home as ~/…; null as "".
 export function folder(cwd, home) {
@@ -17,6 +16,16 @@ export function paneId(p) {
   return { shown: short, copied: p.pane };
 }
 
-// A typed name as it is saved: trimmed, at most MAX_NAME characters, by code point, so a cut
-// never leaves half an emoji. "" goes back to the program's name.
-export const cutName = (raw) => Array.from(raw.trim()).slice(0, MAX_NAME).join("").trim();
+// Names from before Herdr could name a pane (Roundup up to 0.11): a terminal's core label
+// `roundup-pane.name`, a mod pane's entry in shared `roundup-pane.names` (pane id -> name).
+export const OLD_LABEL = "roundup-pane.name";
+export const OLD_NAMES = "roundup-pane.names";
+
+// What such a name asks for, or null without one: "give" it to a pane that has no name, "drop" it
+// once the pane has one (or it is blank). Two looks, so a rename that didn't arrive keeps the old name.
+export function oldName(p, labels, names) {
+  const old = (p.terminal ? labels?.[OLD_LABEL] : names?.[p.pane]) ?? "";
+  if (!old) return null;
+  const name = old.trim();
+  return { name, step: p.name || !name ? "drop" : "give" };
+}

@@ -78,16 +78,9 @@ export function closeTab(id) {
   });
 }
 
-// A pane's name, as roundup-pane's header shows it and its rename dialog sets it. herdr-core can't
-// rename a running terminal, so a terminal's name is its label; a mod pane's is in shared state.
-export const NAME_LABEL = "roundup-pane.name";
-export const NAMES = "roundup-pane.names";
-
-// The name someone gave the pane, or "".
-export function givenName(p) {
-  if (p.terminal) return terminals().find(t => t.address === p.terminal)?.labels?.[NAME_LABEL] ?? "";
-  return shared(NAMES)?.[p.pane] ?? "";
-}
+// The name someone gave the pane with Herdr's `pane.rename` (`panes()[i].name`, kept with the
+// pane's tab; Herdr 0.1.17), or "". roundup-pane's header shows it.
+export const givenName = (p) => p.name ?? "";
 
 export const fallbackName = (p) => ((p.program?.agent || p.program?.shell) && p.program.name) || p.title || p.program?.name || "shell";
 

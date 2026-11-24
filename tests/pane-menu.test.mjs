@@ -18,13 +18,13 @@ function menu(target) {
   return { root, rows };
 }
 
-test("PAN-12, PAN-17: a terminal in a tab gets Split, Zoom and Close pane; one outside a tab only the terminal rows", () => {
+test("PAN-12, PAN-17: a terminal in a tab gets Rename, Split, Zoom and Close pane; one outside a tab only the terminal rows", () => {
   herdr.set({
     panes: [pane("p1", "tb1", { terminal: "t1" })],
     terminals: [terminal("t1"), terminal("t9", { parent: "t1" })],
   });
   const inTab = menu({ pane: "p1", terminal: "t1" });
-  assert.deepEqual(inTab.rows, ["Split right", "Split down", "Zoom", "Send right-clicks to pane", "Close pane", ...CHOICES]);
+  assert.deepEqual(inTab.rows, ["Rename", "Split right", "Split down", "Zoom", "Send right-clicks to pane", "Close pane", ...CHOICES]);
   assert.ok(texts(inTab.root).includes("Ask before closing a pane"));
   // A layout terminal block, or a window: its pane is the block's id, not in panes(). With no
   // Close pane there, the choice of when closing asks goes too.
