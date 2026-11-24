@@ -327,6 +327,9 @@ export default class Spaces extends View {
 
   // A repo's git folder is watched while a shown place is in it: `watching` keeps the pending
   // watch, so due() can cancel it (a FolderWatch, Herdr 0.1.16) once no place is.
+  // An answer with no paths that isn't due()'s cancel is a watch Herdr reclaimed (it keeps 64 at
+  // most): no git, and no new watch at once, which would reclaim another repo's and start a ring.
+  // The repo falls to due()'s timer, and check() watches it again after its next status.
   watch(repo, cx) {
     if (this.watching.has(repo)) return;
     const pending = watchFolder(repo);
@@ -335,8 +338,9 @@ export default class Spaces extends View {
       let current = pending;
       try {
         for (;;) {
-          await current;
+          const paths = await current;
           if (this.watching.get(repo) !== current) return;
+          if (!paths?.length) break;
           const mine = JSON.stringify([null, repo]);
           const keys = Object.keys(this.git).filter((k) => this.git[k]?.repo === mine);
           if (!keys.length) break;

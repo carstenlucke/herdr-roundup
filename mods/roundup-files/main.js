@@ -256,8 +256,15 @@ export default class Files extends View {
           const pending = this.watchPending = watchFolder(root);
           const paths = await pending;
           if (!this.current(ctx)) return;
-          // A cancelled or reclaimed watch answers with nothing: watch again.
-          if (paths.length) this.changed(paths, cx);
+          if (paths?.length) { this.changed(paths, cx); continue; }
+          // No paths, and not reset()'s cancel (that changed ctx): a watch Herdr reclaimed (it keeps
+          // 64 at most). Watching again at once would reclaim another one's and start a ring, so the
+          // panel's next timed read (pace.js) watches again. What changed meanwhile may be a `.git`
+          // (rev-parse again) or anything the search's index lists (read again before searching).
+          this.watched = null;
+          ctx.base = null; ctx.drops++;
+          if (this.index) this.index.stale = true;
+          return;
         }
       } catch { if (this.current(ctx)) this.watched = null; }
     });

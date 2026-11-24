@@ -5,7 +5,7 @@
 import { test, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { herdr, reset, mount, space, tab, pane, waitFor } from "./support/harness.mjs";
+import { herdr, reset, mount, space, tab, pane, waitFor, clock } from "./support/harness.mjs";
 import { tempDir, cleanup, write } from "./support/git-repo.mjs";
 
 const Files = (await import("../mods/roundup-files/main.js")).default;
@@ -15,7 +15,8 @@ beforeEach(reset);
 after(cleanup);
 const cancelled = () => herdr.calls("watchFolder.cancel").map(([p]) => p);
 
-test("FIL-113: the panel cancels the watch of the folder shown before, and a watch that answers with nothing is set again", async () => {
+test("FIL-113: the panel cancels the watch of the folder shown before; a watch that answers with nothing is set again by the next timed read", async () => {
+  clock.useFakeNow();
   const a = tempDir("roundup-watch-a-"), b = tempDir("roundup-watch-b-");
   write(a, { "a.txt": "a\n" });
   write(b, { "b.txt": "b\n" });
@@ -28,11 +29,17 @@ test("FIL-113: the panel cancels the watch of the folder shown before, and a wat
   const { view, cx } = mount(Files, { props: {} });
   view.sync(cx);
   await waitFor(() => herdr.watching(a) === 1);
-  // Nothing changed (a watch Herdr reclaimed): no refresh, the folder is watched again.
+  // Nothing changed (a watch Herdr reclaimed): no refresh, and no new watch at once, which would
+  // reclaim another one's; the next timed read watches again.
+  await waitFor(() => !view.loading);
   const refreshes = herdr.calls("exec").length;
   herdr.change(a, []);
-  await waitFor(() => herdr.watching(a) === 1);
-  assert.equal(herdr.calls("exec").length, refreshes, "an empty answer reads nothing again");
+  await waitFor(() => view.watched === null);
+  assert.equal(herdr.watching(a), 0, "not watched again at once");
+  assert.equal(herdr.calls("exec").length, refreshes, "an empty answer reads nothing at once");
+  assert.equal(view.ctx.base, null, "a .git may have come or gone meanwhile: rev-parse again");
+  await clock.advance(10000);
+  await waitFor(() => herdr.watching(a) === 1 && !view.loading, 2000, "the timed read watches again");
   at(b);
   view.sync(cx);
   assert.deepEqual(cancelled(), [a]);
@@ -56,5 +63,27 @@ test("CHG-09: a preview cancels the watch of the folder it showed when it shows 
   view.close();
   assert.deepEqual(cancelled(), [a, b]);
   assert.equal(herdr.watching(b), 0);
+  assert.deepEqual(cx.errors, []);
+});
+
+test("CHG-10: a preview whose watch Herdr reclaimed reads its file once and looks every 3 s, without a new watch", async () => {
+  const a = tempDir("roundup-watch-pr-");
+  write(a, { "one.txt": "1\n" });
+  const file = join(a, "one.txt");
+  herdr.set({ props: { file } });
+  const view = new Preview();
+  const { cx } = mount(class { init(_p, cx) { view.init(_p, cx); } }, { props: { file } });
+  await waitFor(() => herdr.watching(a) === 1 && view.loads === 1);
+  herdr.clear();
+  herdr.change(a, []);
+  await waitFor(() => view.loads === 2 && view.poll, 2000, "read once, then the look every 3 s");
+  assert.deepEqual(herdr.calls("watchFolder"), [], "no new watch, which would reclaim another one's");
+  write(a, { "one.txt": "changed\n" });
+  await clock.advance(3000);
+  await waitFor(() => view.loads === 3, 2000, "the look sees the save");
+  view.show(join(a, "one.txt"), cx);
+  assert.equal(view.poll, null, "showing a file again watches it again");
+  await waitFor(() => herdr.watching(a) === 1);
+  view.close();
   assert.deepEqual(cx.errors, []);
 });

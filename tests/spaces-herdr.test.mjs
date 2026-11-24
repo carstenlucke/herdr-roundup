@@ -112,6 +112,25 @@ test("SPC-46: a place no space is in is forgotten, and a repo no shown place is 
   assert.deepEqual(cx.errors, []);
 });
 
+test("SPC-52: a watch Herdr reclaimed (an answer with no paths) runs no git and isn't set again until the next status", async () => {
+  fakeGit();
+  herdr.set({ spaces: [space("s0", [tab("tb0")], { folder: "/r", active: true })] });
+  const { view, cx } = mount(Spaces, { props: {} });
+  view.refreshGit(view.due(Date.now(), herdr.stub.spaces, []), cx);
+  await waitFor(() => !view.refreshing && herdr.watching("/r/.git") === 1);
+  herdr.clear();
+  herdr.change("/r/.git", []);
+  await waitFor(() => !view.watching.has("/r/.git"), 2000, "the repo leaves `watching`");
+  assert.deepEqual(herdr.calls("exec"), [], "no git status for nothing");
+  assert.deepEqual(herdr.calls("watchFolder"), [], "and no new watch at once, which would reclaim another repo's");
+  assert.equal(herdr.watching("/r/.git"), 0);
+  // The timer's next look: its status sets the watch again.
+  view.refreshGit([key("/r")], cx);
+  await waitFor(() => !view.refreshing && herdr.watching("/r/.git") === 1);
+  assert.deepEqual(herdr.calls("watchFolder"), [["/r/.git"]]);
+  assert.deepEqual(cx.errors, []);
+});
+
 test("SPC-47: the list scrolls to the active space, counted among its children: a card is one, a machine's header and note count", () => {
   herdr.onExec(() => ({ code: 128, stderr: "fatal: not a git repository" }));
   const sp = (id, extra = {}) => space(id, [tab(`tb-${id}`)], { name: id, folder: `/${id}`, ...extra });

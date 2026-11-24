@@ -120,7 +120,11 @@ export class Preview {
   // A local file reloads on a change in its folder. The watch reports a folder reached through
   // a link (/tmp is /private/tmp on macOS) resolved, so the file's resolved name counts too. A
   // watch that rejects (on Linux, a tree above 4096 folders) gives way to a look every POLL ms.
+  // A watch Herdr reclaimed (it keeps 64 at most) answers with no paths: the file is read once
+  // and the look every POLL ms takes over, rather than a new watch that would reclaim another
+  // one's. `watching` changes before this copy's own cancel(), so that answer ends the loop.
   watch(cx) {
+    this.watching = null;
     this.poll?.cancel(); this.poll = null;
     // The folder of the file shown before is no longer watched (a FolderWatch's cancel(), Herdr 0.1.16).
     this.watchPending?.cancel(); this.watchPending = null;
@@ -128,15 +132,17 @@ export class Preview {
     const file = this.file, token = this.watching = {};
     cx.spawn(async (cx) => {
       const real = await this.realFile(file);
+      let reclaimed = false;
       try {
         while (this.watching === token) {
           const pending = this.watchPending = watchFolder(dirname(file));
           const changed = await pending;
-          if (this.watching === token && changedFile(changed, file, real)) this.show(file, cx, true);
+          if (this.watching !== token) return;
+          if (!changed?.length) { reclaimed = true; break; }
+          if (changedFile(changed, file, real)) this.show(file, cx, true);
         }
-      } catch {
-        if (this.watching === token) await this.pollFile(file, token, cx);
-      }
+      } catch { /* rejected: the look every POLL ms */ }
+      if (this.watching === token) await this.pollFile(file, token, cx, reclaimed);
     });
   }
 
@@ -149,10 +155,13 @@ export class Preview {
   }
 
   // The watch's stand-in: the file's revision (modification time and size), looked at every POLL ms.
-  async pollFile(file, token, cx) {
+  // reload: read the file once too (a reclaimed watch may have missed a change), after the first
+  // look, so a save between the two is still seen.
+  async pollFile(file, token, cx, reload = false) {
     const stamp = () => exec(...programs(this.system).stamp(file)).then((r) => r.code === 0 ? r.stdout.trim() : null, () => null);
     let last = await stamp(), busy = false;
     if (this.watching !== token) return;
+    if (reload) this.show(file, cx, true);
     this.poll = cx.timer.every(POLL, (cx) => {
       if (busy || this.watching !== token) return;
       busy = true;
