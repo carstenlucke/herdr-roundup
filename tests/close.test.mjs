@@ -135,7 +135,29 @@ for (const mod of ["roundup-tabs", "roundup-pane"]) {
     herdr.set({ panes: [pane("p2", "tb1", { program: program("nvim", { name: "Neovim" }) }), pane("p1", "tb1")] });
     assert.equal(tabProgram({ id: "tb1" }).name, "Neovim");
     assert.equal(tabName({ id: "tb1", name: "tb1" }), "Neovim");
-    assert.equal(tabName({ id: "x", name: "My tab" }), "My tab");
+    assert.equal(tabName({ id: "x", name: "My tab", named: true }), "My tab");
+    assert.equal(tabName({ id: "x", name: "tb7", named: true }), "tb7", "TAB-15: a name that looks like an id is a name when the person gave it");
+    assert.equal(tabName({ id: "x", name: "1" }), "Terminal", "TAB-15: unnamed goes by `named`, not by how the name looks");
+  });
+
+  test(`${mod} close.js: TAB-16: a tab Herdr named follows its agent's live title; a name the person gave stays`, () => {
+    const lead = (title, extra = {}) => herdr.set({ panes: [pane("p1", "tb1", { terminal: "t1", program: claude, title, ...extra })] });
+    const unnamed = { id: "tb1", name: "1", named: false };
+    lead("✳ Fix the tests");
+    assert.equal(tabName(unnamed), "Fix the tests");
+    assert.equal(tabName({ id: "tb1", name: "Claude Code", named: true }), "Fix the tests", "named after its program: Herdr's name");
+    assert.equal(tabName({ id: "tb1", name: "Review", named: true }), "Review");
+    for (const title of ["", "Claude Code", "claude", "t1", "~/src/app", "/tmp", "C:\\work", "sam@host: ~"]) {
+      lead(title);
+      assert.equal(tabName(unnamed), "Claude Code", `no telling title: ${JSON.stringify(title)}`);
+    }
+    lead("Fix tests | 01a1d750-0653-7190-914d-7c804...", { program: codex });
+    assert.equal(tabName(unnamed), "Fix tests", "without Codex's thread id");
+    lead("vim main.js", { program: program("nvim", { name: "Neovim" }) });
+    assert.equal(tabName(unnamed), "Neovim", "only an agent's title counts");
+    assert.equal(close.liveTitle("[ ! ] [web] login"), "[web] login");
+    assert.equal(close.liveTitle("🔴 login"), "🔴 login");
+    assert.equal(close.liveTitle(undefined), "");
   });
 
   test(`${mod} close.js: closePane closes a pane with siblings, a lone pane's tab, and says what goes with it`, () => {

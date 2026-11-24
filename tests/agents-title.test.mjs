@@ -66,3 +66,78 @@ test("an agent whose tab isn't known reads its raw title without the id, else th
   assert.doesNotMatch(r.t1, /01a1d750/);
   assert.match(r.t2, /Codex/, "only the id: the program's name");
 });
+
+test("AGT-02: clean keeps a title's own bracket, quote or emoji in front and drops status marks, Codex's blinking one too", () => {
+  assert.equal(clean("[web] login"), "[web] login");
+  assert.equal(clean("“Quoted” title"), "“Quoted” title");
+  assert.equal(clean("🔴 login"), "🔴 login");
+  assert.equal(clean("❤️ deploy"), "❤️ deploy");
+  assert.equal(clean("[ ! ] Fix tests"), "Fix tests", "Codex's mark while it waits");
+  assert.equal(clean("[ . ] Fix tests"), "Fix tests");
+  assert.equal(clean(`[ ! ] Fix tests | ${CUT}`), "Fix tests", "and the thread id after it");
+  assert.equal(clean("✋ Waiting"), "Waiting");
+  assert.equal(clean("⏳ Thinking"), "Thinking");
+  assert.equal(clean("⠋ - Thinking"), "Thinking", "a spinner and its separator");
+  assert.equal(clean("✦  Working"), "Working");
+});
+
+test("AGT-03: a title that is only the terminal's address is no name: the row falls back as without a title", () => {
+  const r = rows([row("t1", "t1")]);
+  assert.doesNotMatch(r.t1, /\bt1\b/);
+  assert.match(r.t1, /demo/);
+});
+
+// A parent t1 with one live sub-agent t2, in the priority sort.
+function family(kid, { kept = null } = {}) {
+  const parent = row("t1", "Parent work", { status: "working" });
+  herdr.set({
+    layout: { id: "root", children: [{ id: "sidebar", size: { px: 268 } }] },
+    spaces: [space("sp1", [tab("tb1")], { name: "demo" })],
+    panes: [pane("p-t1", "tb1", { terminal: "t1", program: codex })],
+    agents: kept ? [parent, row("t2", "Helper", { status: kept, pane: "p-t2" })] : [parent],
+    terminals: [{ address: "t1", parent: null, state: "live", labels: {} }, { address: "t2", parent: "t1", state: "live", labels: {}, status: kid, program: codex }],
+    props: {},
+  });
+  const root = mount(Agents, { props: {} }).render();
+  const ids = findAll(root, (e) => /^sec-\d$/.test(e.elementId ?? "")).map((e) => e.elementId);
+  const mark = findAll(root, (e) => e.elementId === "sub-t2")[0].kids.at(-1);
+  return { ids, mark };
+}
+
+test("AGT-04: a kept sub-agent shows its own done and leaves a working parent in Working; one without a pane is never done", () => {
+  const kept = family("done", { kept: "done" });
+  assert.deepEqual(kept.ids, ["sec-2"], "the parent stays under Working");
+  assert.deepEqual(kept.mark.style("bg"), ["done"], "the helper's own row shows the done dot");
+  const hidden = family("done");
+  assert.deepEqual(hidden.ids, ["sec-2"]);
+  assert.ok(hidden.mark.has("border"), "no pane: its done is the parent's news, the row shows idle's ring");
+  const blocked = family("error");
+  assert.deepEqual(blocked.ids, ["sec-4"], "a helper that needs the person still takes its parent to Needs you");
+});
+
+test("AGT-05: the rail marks the focused agent's row", () => {
+  herdr.set({
+    layout: { id: "root", children: [{ id: "sidebar", size: { px: 44 } }] },
+    spaces: [space("sp1", [tab("tb1")], { name: "demo" })],
+    panes: [], terminals: [], props: {},
+    agents: [row("t1", "One", { focused: true }), row("t2", "Two", { pane: "p-t2" })],
+  });
+  const root = mount(Agents, { props: {} }).render();
+  const [on, off] = ["t1", "t2"].map((a) => findAll(root, (e) => e.elementId === `ag-${a}`)[0]);
+  assert.deepEqual([on.style("bg"), on.style("mx"), on.style("rounded")], [["selected"], [6], [6]]);
+  assert.deepEqual(on.kids[0].style("text_color"), ["foreground"]);
+  assert.equal(off.has("bg"), false);
+  assert.deepEqual(off.kids[0].style("text_color"), ["muted"]);
+});
+
+test("AGT-06: what localStorage holds is read with care: broken JSON or another type starts empty", () => {
+  herdr.set({ props: {} });
+  localStorage.setItem("changed", "{broken");
+  localStorage.setItem("pins", JSON.stringify("t1"));
+  let view = mount(Agents, { props: {} }).view;
+  assert.deepEqual([view.changed, view.pendingPins], [{}, []]);
+  localStorage.setItem("changed", JSON.stringify(["t1"]));
+  localStorage.setItem("pins", "[oops");
+  view = mount(Agents, { props: {} }).view;
+  assert.deepEqual([view.changed, view.pendingPins], [{}, []]);
+});
