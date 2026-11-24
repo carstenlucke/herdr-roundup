@@ -5,7 +5,7 @@ and why one won. The details are in `docs/adr/`, one file per decision.
 
 | # | Decision | Status | Date |
 | --- | --- | --- | --- |
-| [0001](adr/0001-pane-names-in-core-labels.md) | A pane's name is Herdr's own (`pane.rename`, Herdr 0.1.17); the core label `roundup-pane.name` and shared `roundup-pane.names`, where Roundup kept it until 0.11, are only read once to move old names over | Accepted | 2026-11-24 |
+| [0001](adr/0001-pane-names-in-core-labels.md) | A pane's name is Herdr's own (`pane.rename`, Herdr 0.1.17); the core label `roundup-pane.name` and shared `roundup-pane.names`, where Roundup kept it in 0.11.0-beta.3 and earlier, are only read once to move old names over | Accepted | 2026-11-24 |
 | [0002](adr/0002-file-icon-set.md) | `roundup-files` draws Symbols, chosen from nine icon sets on taste and licence | Accepted | 2026-11-06 |
 | [0003](adr/0003-context-from-agent-integrations.md) | The context meter takes the agents' own numbers through opt-in integrations (Claude's status line, Codex's thread id in its title), the session files as the passive part | Accepted | 2026-11-14 |
 

@@ -498,9 +498,9 @@ While open it sets shared `roundup-workspace-chrome.menu`; shared
 header"). One copy per pane, `props()` `{pane, terminal}`. A pane's name is
 Herdr's (0.1.17): `run("pane.rename", {pane})` asks in Herdr's prompt, and
 the name is `panes()[i].name`, kept with the pane's tab, for a mod pane
-too. A name Roundup kept itself up to 0.11 (a terminal's label
-`roundup-pane.name`, shared `roundup-pane.names`) is given to its pane and
-then removed by the header's timer; see
+too. A name Roundup kept itself in 0.11.0-beta.3 and earlier (a terminal's
+label `roundup-pane.name`, shared `roundup-pane.names`) is given to its pane
+and then removed by the header's timer; see
 `docs/adr/0001-pane-names-in-core-labels.md`. The chip copies with
 `cx.write_to_clipboard` on `click_count === 2`. It is
 also the `terminal_menu`: a popup (`mod.json` `overlay` 240×363),
@@ -856,8 +856,8 @@ of global `tab.close` and `pane.close`.
 - Every pane header shows its terminal's address (`t5j`); double-clicking
   copies it. `herdr-app do pane.rename --pane <id> --name Build` shows
   "Build" at once; so does renaming in the prompt, and an empty name shows
-  the program's again. A pane named before 0.12 keeps its name: its header
-  moves it to Herdr within a few seconds of being shown.
+  the program's again. A pane named in 0.11.0-beta.3 or earlier keeps its
+  name: its header moves it to Herdr within a few seconds of being shown.
 - With "While an agent works", `cmd-w` on a tab whose agent works asks and
   Cancel keeps it; a shell's tab closes at once. "Always" asks for it too;
   "Never" for neither. In a tab split into a working agent and a shell,

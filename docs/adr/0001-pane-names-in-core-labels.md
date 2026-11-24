@@ -31,7 +31,7 @@ reason for the label is gone, so the question was asked again.
 - Con: only this Herdr App sees it.
 - Con: names of closed panes stay in the map until something cleans them up.
 
-### B. A label on the terminal in herdr-core (the decision until 0.11)
+### B. A label on the terminal in herdr-core (the decision up to 0.11.0-beta.3)
 
 `hc label t7 roundup-pane.name=<name>`; read back from `terminals()[i].labels`.
 
