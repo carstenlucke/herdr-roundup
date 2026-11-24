@@ -18,7 +18,7 @@ import base64, json, os, re, sys
 from html import escape
 
 SCENES = ["spaces", "quicklook", "files", "files-changed", "search", "symlink", "pane-header", "context", "context-pi", "limits",
-          "rename", "close-menu", "close-confirm", "update", "preview-tab", "float"]
+          "close-menu", "close-confirm", "update", "preview-tab", "float"]
 if sys.argv[1:] == ["--scenes"]:
     print("\n".join(SCENES))
     sys.exit()
@@ -620,7 +620,7 @@ for ry_ in (pb - 15 - LH, pb - 15 + LH):
 rect(LX + 30, pb - 13, 8, 17, "terminal", op=0.85)
 
 # In the panes scene the reviewer has a name of its own, and the pointer is on its header.
-PANES = SCENE in ("pane-header", "rename")
+PANES = SCENE == "pane-header"
 # In the context-pi scene pi reviews instead of Codex, without its extension: the meter takes the
 # share from pi's footer at the bottom (rounded, no tokens), as context/strategies/pi.js reads it.
 if SCENE == "context-pi":
@@ -1094,9 +1094,8 @@ if SCENE == "close-menu":
         dict(label="Always"),
     ])
 
-# The two dialogs' sizes, which their crops follow.
+# The dialog's size, which its crop follows.
 CONFIRM_W, CONFIRM_H = 400, 170
-RENAME_W, RENAME_H = 380, 196
 
 if SCENE == "close-confirm":
     # cmd-w while both agents work: roundup-confirm asks, Cancel holding the keyboard.
@@ -1109,20 +1108,6 @@ if SCENE == "close-confirm":
         text(dx + 18, ty, l, 13, "muted")
         ty += 18
     buttons(dx + DW_ - 18, dy + DH_ - 18 - 32, [("Cancel", False, True, 12), ("Confirm", True, False, 12)])
-
-if SCENE == "rename":
-    # A double-click on the left pane's name: roundup-pane's dialog, a name being typed.
-    DW_, DH_ = RENAME_W, RENAME_H
-    dx, dy = (W - DW_) / 2, (H - DH_) / 2
-    overlay(dx, dy, DW_, DH_, rx=12)
-    dialog_head(dx, dy, DW_, "Rename pane")
-    text(dx + 18, dy + 18 + 20 + 16 + 11, "Name (empty: the program's name)", 11.5, "dim")
-    iy = dy + 18 + 20 + 16 + 15 + 7
-    rect(dx + 18, iy, DW_ - 36, 36, "background", rx=9)
-    frame(dx + 18, iy, DW_ - 36, 36, "accent", rx=9)
-    text(dx + 28, iy + 22.5, "Facet filters", 12.8, "foreground")
-    rect(dx + 28 + tw("Facet filters", 12.8) + 1, iy + 10, 1.5, 16, "foreground")
-    buttons(dx + DW_ - 18, iy + 36 + 20, [("Cancel", False, False, 12.5), ("Save", True, False, 12.5)])
 
 if SCENE == "symlink":
     # The pointer on AGENTS.md's arrow: where the link points.
@@ -1345,7 +1330,6 @@ CROPS = {
     "context": (LX + LW - 380, 42, 388, 210),
     "context-pi": (RX + RW - 380, 42, 388, 230),
     "limits": (LX + LW - 400, 42, 408, 320),
-    "rename": ((W - RENAME_W) / 2 - 60, (H - RENAME_H) / 2 - 50, RENAME_W + 120, RENAME_H + 100),
     "close-menu": (WX, 0, 520, 290),
     "close-confirm": ((W - CONFIRM_W) / 2 - 60, (H - CONFIRM_H) / 2 - 50, CONFIRM_W + 120, CONFIRM_H + 100),
     "update": (0, 0, MX + MW + 40, MY + MH + 24) if SCENE == "update" else None,

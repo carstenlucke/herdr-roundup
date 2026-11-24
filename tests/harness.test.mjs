@@ -155,6 +155,16 @@ test("shared state is JSON in memory; commands and folder changes come when the 
   assert.equal(herdr.watching("/w"), 1);
   herdr.change("/w", ["/w/a"]);
   assert.deepEqual(await watched, ["/w/a"]);
+  // A FolderWatch: cancel() resolves that call with [] and leaves the folder's other calls waiting.
+  const mine = h.watchFolder("/w"), other = h.watchFolder("/w");
+  mine.cancel();
+  assert.deepEqual(await mine, []);
+  assert.equal(herdr.watching("/w"), 1);
+  herdr.change("/w", ["/w/b"]);
+  assert.deepEqual(await other, ["/w/b"]);
+  assert.equal(h.checking(), false);
+  herdr.set({ checking: true });
+  assert.equal(h.checking(), true);
 });
 
 test("fetch never reaches the network: it fails until a test answers, and can wait for the test", async () => {

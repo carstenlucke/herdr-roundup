@@ -38,7 +38,7 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   padding, `popover`, 1px `border`, radius 10, large shadow, 4px under the
   row. "Herdr Roundup" semibold 13px, then four 12px lines, label `dim`
   left, value `foreground` right: Installed `0.7.0`, Based on `Herdr
-  0.1.14`, Latest `0.8.0` (`accent` when newer, `0.8.0 · skipped` when
+  0.1.18`, Latest `0.8.0` (`accent` when newer, `0.8.0 · skipped` when
   skipped), Checked `today 09:12` / `yesterday 18:40` / `Nov 3 09:12`
   (Latest and Checked `–` before the first answer). Only when there is
   something to say, a status line at 11.5px with a 12px icon: a spinner and
@@ -104,6 +104,8 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
 **Work area**, top to bottom:
 
 - **Tabs** (42px, drags the window): Herdr's tab bar, as `roundup-tabs`.
+  A tab nobody named shows its program, or its agent's live title; the
+  bar scrolls to the active tab.
   Right-clicking a tab shows Rename, New tab and Close, then "Ask before
   closing a tab" with Never, While an agent works and Always, an `accent`
   check on the chosen one.
@@ -122,10 +124,10 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   Claude Code and Codex on a subscription add the account's plan limits
   after a 1px `border` divider, each a short name (10.5px `dim`) and its
   percent: `5h 21% wk 40%`. Terminal padding 14 × 12px. Right-clicking a terminal shows Herdr's
-  pane menu (Split right, Split down, Zoom, where right-clicks go, Close
-  pane), then "Ask before closing a pane" with the same three choices. A
-  terminal outside a tab has no pane: its menu leaves out Split, Zoom and
-  Close pane.
+  pane menu (Rename, Split right, Split down, Zoom, where right-clicks go,
+  Close pane), then "Ask before closing a pane" with the same three
+  choices. A terminal outside a tab has no pane: its menu leaves out
+  Rename, Split, Zoom and Close pane.
 - **Side panel** on the right, hidden at first (368px, 280–900px): a stack
   of `roundup-files` and Herdr's `changes`, picked with the Files and
   Changes buttons at the right of the tab bar. `roundup-files` is a card
@@ -220,6 +222,7 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   front, and while in front every 10s for the active space, 60s for the
   others. A commit refreshes every space of its repo.
 - **Machine headers:** click to fold or unfold; folds stay after a restart.
+  A machine that needs a login shows `hc machine login <name>` with Copy.
   A rebuilt or replaced machine shows "rebuilt · Connect" and its old
   spaces aren't listed; Connect removes it and adds it again under the same
   name. On the rail a click on its icon connects instead of folding, the
@@ -229,8 +232,9 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   agents list's `»` unfolds it.
 - **Pane header:** double-click the id chip to copy the id (a mod pane's
   whole id); the chip shows "copied" in `accent` for 1.2s. Double-click the
-  name, or click the pencil, to rename the pane in a dialog (Enter saves,
-  Esc cancels); an empty name goes back to the program's. A click elsewhere
+  name, click the pencil or choose Rename in the terminal's menu to rename
+  the pane in Herdr's prompt (Enter saves, Esc cancels); an empty name goes
+  back to the program's. A click elsewhere
   focuses the pane. Tooltips: the whole id on the chip, the given and the
   program's name on the name.
 - **Context meter:** follows a working agent within about 15s (and 2s
@@ -345,7 +349,9 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   first terminal of its tab), on its machine. Each folder keeps its open
   folders, selection and preview (the last 50). Files show at once; git
   fills in its marks without moving a row. A local folder refreshes when
-  anything under it changes (`watchFolder`), any folder every 10s.
+  anything under it changes (`watchFolder`), any folder every 10s, slower
+  after a slow read. Behind another app it reads nothing until the window
+  is back.
 - **All** lists the disk: folders first, natural order ("file2" before
   "file10"), dotfiles included, `.git` left out; folders load when opened.
   **Changed** lists exactly what `git status` lists, the first 2,000 paths,
@@ -420,7 +426,7 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
 
 ## Built from
 
-**Layout** `layouts/Herdr-Roundup.json`, cloned from Herdr's `main` 0.1.14
+**Layout** `layouts/Herdr-Roundup.json`, cloned from Herdr's `main` 0.1.18
 (`cloned_from`) with a root `"version"` (`0.7.0`). Root `row` (`titlebar:
 "none"`, `traffic_lights: [12, 16]`, `background: "canvas"`,
 `terminal_padding: [14, 12]`, `terminal_menu: "roundup-pane"`, divider 1px
@@ -449,7 +455,7 @@ header differ from `main`. The block ids stay Herdr's, so the tab bar's
 Files button (`layout.select {stack: "panel-body", child: "files"}`) finds
 it.
 
-**`roundup-workspace-chrome`** (clone of `workspace-chrome` 0.1.14, `place:
+**`roundup-workspace-chrome`** (clone of `workspace-chrome` 0.1.18, `place:
 "none"`), two looks by `props().footer`. The brand row reads the version
 from `readTextFile(appHome() + "/layouts/" + shared("layout") + ".json")`
 (`layout()` leaves the root's `version` out), again when
@@ -488,24 +494,23 @@ While open it sets shared `roundup-workspace-chrome.menu`; shared
 `plus.svg`, Lucide's `refresh`, `bot`, `notes`, `skip`, `check`,
 `circle-alert`, and `spinner.svg` from `workspace-chrome`.
 
-**`roundup-pane`** (clone of `pane` 0.1.14, `place: "none"`, title "Pane
-header"). One copy per pane, `props()` `{pane, terminal}`. herdr-core can't
-rename a running terminal, so a terminal pane's name is its core label
-`roundup-pane.name`, read from `terminals()[i].labels`, written with
-`hc(["label", terminal, "roundup-pane.name=<name>"])` (`…=` removes it); a
-mod pane's is in shared `roundup-pane.names` (pane id → name); see
+**`roundup-pane`** (clone of `pane` 0.1.18, `place: "none"`, title "Pane
+header"). One copy per pane, `props()` `{pane, terminal}`. A pane's name is
+Herdr's (0.1.17): `run("pane.rename", {pane})` asks in Herdr's prompt, and
+the name is `panes()[i].name`, kept with the pane's tab, for a mod pane
+too. A name Roundup kept itself in 0.11.0-beta.3 and earlier (a terminal's
+label `roundup-pane.name`, shared `roundup-pane.names`) is given to its pane
+and then removed by the header's timer; see
 `docs/adr/0001-pane-names-in-core-labels.md`. The chip copies with
-`cx.write_to_clipboard` on `click_count === 2`. The rename dialog is the
-same mod, `openOverlay({mod: "roundup-pane", kind: "dialog", width: 380,
-height: 196, props: {rename: {pane, terminal, value, fallback}}})`. It is
-also the `terminal_menu`: a popup (`mod.json` `overlay` 240×332),
+`cx.write_to_clipboard` on `click_count === 2`. It is
+also the `terminal_menu`: a popup (`mod.json` `overlay` 240×363),
 `props()` `{tab: "pane", target: {pane, terminal}, overlay}`, Herdr's pane
-menu item for item; Split, Zoom and Close pane, and the closing choice,
-only when `target.pane` is in `panes()`. Closing is `closePane(pane)` from
+menu item for item; Rename, Split, Zoom and Close pane, and the closing
+choice, only when `target.pane` is in `panes()`. Closing is `closePane(pane)` from
 `close.js` (as in `roundup-tabs`); `cmd-shift-w` goes to
 `roundup-tabs.close-pane`, as a command here would reach every header.
-Commands: `pane.focus`, `pane.split`, `pane.zoom`, `pane.close`,
-`tab.close`, `terminal.right_click`, `terminal.park`. Own art:
+Commands: `pane.focus`, `pane.rename`, `pane.split`, `pane.zoom`,
+`pane.close`, `tab.close`, `terminal.right_click`, `terminal.park`. Own art:
 `rename.svg`, and the shipped header's `split-right`, `split-down`,
 `zoom`, `unzoom`, `close`.
 
@@ -528,7 +533,7 @@ strategy per agent program (`context/strategies/<agent>.js`), `io` from
   the header comments of `limits/store.js` and `limits/parse.js`. A
   further source is one parser and one `offer`.
 
-**`roundup-spaces`** (clone of `spaces` 0.1.14, `place: "none"`, title
+**`roundup-spaces`** (clone of `spaces` 0.1.18, `place: "none"`, title
 "Spaces"). Reads `spaces()`, `panes()`, `terminals()` (each agent's `turn`),
 `agents()`, `machines()`, `theme()`, `settings().dark`, `window()?.active`
 and shared `space.colors` (Herdr's). A space's place is its first
@@ -569,16 +574,16 @@ readable answer per machine, logs the first failure per machine once, and
 reads again for each new set of agents the tree doesn't hold. Programs'
 icons as in `agents`: `svg(icon)` when `tint`, else `image(icon)`.
 
-**`roundup-agents`** (clone of `agents` 0.1.15, `place: "none"`, title
+**`roundup-agents`** (clone of `agents` 0.1.18, `place: "none"`, title
 "Agents"): Herdr's agent list. Its one change: a title item that is only a
 Codex thread id (the context meter's integration) is no row's name.
 
-**`roundup-menu`** (clone of `menu` 0.1.14, `place: "none"`): Herdr's
+**`roundup-menu`** (clone of `menu` 0.1.18, `place: "none"`): Herdr's
 context menu. Its one change: `init` writes its overlay id to shared
 `roundup-menu.open`, and `close()` clears the key only while it still holds
 that id.
 
-**`roundup-tabs`** (clone of `tabs` 0.1.14, `place: "none"`, title "Tabs"):
+**`roundup-tabs`** (clone of `tabs` 0.1.18, `place: "none"`, title "Tabs"):
 Herdr's tab bar, except how a tab closes (`close.js`). The choice is shared
 `roundup-tabs.confirm-close` for tabs, `roundup-pane.confirm-close` for
 panes: `never`, `agents` (also when unset) or `always`. A tab's busy agents
@@ -590,7 +595,7 @@ mod itself as a popup (220×237, `props: {menu: {id, space}}`), since
 Herdr's `menu` would close past the choice. Key commands: `close` (the
 shown tab), `close:<id>`, `close-pane`.
 
-**`roundup-confirm`** (clone of `confirm` 0.1.14, `place: "none"`): props
+**`roundup-confirm`** (clone of `confirm` 0.1.18, `place: "none"`): props
 `{title, detail, command: {name, args}}`; Confirm runs `command`. Each
 button has its own focus handle with `tab_index(0)`; the dialog keeps the
 chosen one (Cancel at start) and moves it on Tab and Shift-Tab.
@@ -613,7 +618,7 @@ cache only, `git rev-parse`, the login shell for `$EDITOR`, `open`. Key
 commands for scripts (`scripts/smoke.sh`, none bound): `to-tab`, `raw`,
 `state` (writes each copy's state to shared `roundup-preview.debug`).
 
-**`roundup-files`** (clone of `files` 0.1.14, `place: "none"`, title
+**`roundup-files`** (clone of `files` 0.1.18, `place: "none"`, title
 "Files", `focusable: true`). `main.js` draws the panel and, with
 `props().menu`, the context menu; `disk.js` lists folders (`sh`, PowerShell
 on Windows) and builds the disk's search index with `find`; `git.js` reads
@@ -809,7 +814,7 @@ of global `tab.close` and `pane.close`.
 - The top left shows the logo, "Herdr Roundup" and the version under it; at
   268px nothing truncates the name, and dragging the name moves the window
   without opening the menu.
-- Hovering logo or name shows the card (Installed, Based on `Herdr 0.1.14`,
+- Hovering logo or name shows the card (Installed, Based on `Herdr 0.1.18`,
   Latest, Checked); clicking opens the menu with those facts on top, no
   card over it.
 - With a newer release on GitHub, the logo has the point, the second line
@@ -849,9 +854,10 @@ of global `tab.close` and `pane.close`.
   that agent and as `/usage` and `/status` say right after an answer; a
   shell, a pi and an opencode pane show none.
 - Every pane header shows its terminal's address (`t5j`); double-clicking
-  copies it. `hc label t5j roundup-pane.name=Build` shows "Build" within a
-  second; so does renaming in the dialog, and an empty name shows the
-  program's again.
+  copies it. `herdr-app do pane.rename --pane <id> --name Build` shows
+  "Build" at once; so does renaming in the prompt, and an empty name shows
+  the program's again. A pane named in 0.11.0-beta.3 or earlier keeps its
+  name: its header moves it to Herdr within a few seconds of being shown.
 - With "While an agent works", `cmd-w` on a tab whose agent works asks and
   Cancel keeps it; a shell's tab closes at once. "Always" asks for it too;
   "Never" for neither. In a tab split into a working agent and a shell,

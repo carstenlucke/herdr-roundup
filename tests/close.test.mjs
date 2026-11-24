@@ -1,9 +1,9 @@
 // close.js (both copies: roundup-tabs and roundup-pane), with herdr stubbed: when closing a tab or a
 // pane asks first, what the dialog says, and the command it runs. Plus the tab bar's close commands
-// and the pane's rename dialog, which use it.
+// and the pane header's rename, which use it.
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { herdr, reset, mount, space, tab, pane, agent, terminal, program, agentProgram } from "./support/harness.mjs";
+import { herdr, reset, mount, find, texts, clock, space, tab, pane, agent, terminal, program, agentProgram } from "./support/harness.mjs";
 
 beforeEach(reset);
 
@@ -135,7 +135,29 @@ for (const mod of ["roundup-tabs", "roundup-pane"]) {
     herdr.set({ panes: [pane("p2", "tb1", { program: program("nvim", { name: "Neovim" }) }), pane("p1", "tb1")] });
     assert.equal(tabProgram({ id: "tb1" }).name, "Neovim");
     assert.equal(tabName({ id: "tb1", name: "tb1" }), "Neovim");
-    assert.equal(tabName({ id: "x", name: "My tab" }), "My tab");
+    assert.equal(tabName({ id: "x", name: "My tab", named: true }), "My tab");
+    assert.equal(tabName({ id: "x", name: "tb7", named: true }), "tb7", "TAB-15: a name that looks like an id is a name when the person gave it");
+    assert.equal(tabName({ id: "x", name: "1" }), "Terminal", "TAB-15: unnamed goes by `named`, not by how the name looks");
+  });
+
+  test(`${mod} close.js: TAB-16: a tab Herdr named follows its agent's live title; a name the person gave stays`, () => {
+    const lead = (title, extra = {}) => herdr.set({ panes: [pane("p1", "tb1", { terminal: "t1", program: claude, title, ...extra })] });
+    const unnamed = { id: "tb1", name: "1", named: false };
+    lead("✳ Fix the tests");
+    assert.equal(tabName(unnamed), "Fix the tests");
+    assert.equal(tabName({ id: "tb1", name: "Claude Code", named: true }), "Fix the tests", "named after its program: Herdr's name");
+    assert.equal(tabName({ id: "tb1", name: "Review", named: true }), "Review");
+    for (const title of ["", "Claude Code", "claude", "t1", "~/src/app", "/tmp", "C:\\work", "sam@host: ~"]) {
+      lead(title);
+      assert.equal(tabName(unnamed), "Claude Code", `no telling title: ${JSON.stringify(title)}`);
+    }
+    lead("Fix tests | 01a1d750-0653-7190-914d-7c804...", { program: codex });
+    assert.equal(tabName(unnamed), "Fix tests", "without Codex's thread id");
+    lead("vim main.js", { program: program("nvim", { name: "Neovim" }) });
+    assert.equal(tabName(unnamed), "Neovim", "only an agent's title counts");
+    assert.equal(close.liveTitle("[ ! ] [web] login"), "[web] login");
+    assert.equal(close.liveTitle("🔴 login"), "🔴 login");
+    assert.equal(close.liveTitle(undefined), "");
   });
 
   test(`${mod} close.js: closePane closes a pane with siblings, a lone pane's tab, and says what goes with it`, () => {
@@ -183,9 +205,11 @@ for (const mod of ["roundup-tabs", "roundup-pane"]) {
   });
 
   test(`${mod} close.js: paneName: the given name, else the agent's or shell's name, the title, the program, "shell"`, () => {
-    herdr.set({ terminals: [terminal("t1", { labels: { "roundup-pane.name": "Build" } }), terminal("t2")], shared: { "roundup-pane.names": { m1: "Docs" } } });
-    assert.equal(paneName(pane("p1", "x", { terminal: "t1", program: claude })), "Build");
-    assert.equal(paneName(pane("m1", "x", { mod: "roundup-preview", title: "Preview" })), "Docs");
+    herdr.set({ terminals: [terminal("t1", { labels: { "roundup-pane.name": "Old" } }), terminal("t2")], shared: { "roundup-pane.names": { m1: "Old" } } });
+    assert.equal(paneName(pane("p1", "x", { terminal: "t1", program: claude, name: "Build" })), "Build");
+    assert.equal(paneName(pane("m1", "x", { mod: "roundup-preview", title: "Preview", name: "Docs" })), "Docs");
+    assert.equal(paneName(pane("p1", "x", { terminal: "t1", program: claude })), "Claude Code", "the old label is no name any more");
+    assert.equal(paneName(pane("m1", "x", { mod: "roundup-preview", program: undefined, title: "Preview" })), "Preview");
     assert.equal(paneName(pane("p2", "x", { terminal: "t2", program: claude, title: "✳ Working" })), "Claude Code");
     assert.equal(paneName(pane("p2", "x", { terminal: "t2", program: program("shell"), title: "~/src" })), "zsh");
     assert.equal(paneName(pane("p2", "x", { terminal: "t2", program: program("nvim", { name: "Neovim" }), title: "main.js" })), "main.js");
@@ -218,56 +242,115 @@ test("roundup-tabs' close commands: the focused tab, else the shown one; close:<
   assert.deepEqual(cx.errors, []);
 });
 
-test("roundup-pane's rename dialog saves a trimmed name of at most 48 code points as the terminal's label", async () => {
+// The header's parts by id, in a header copy for pane p1.
+async function header(paneFields = {}, extra = {}) {
   const Pane = (await import("../mods/roundup-pane/main.js")).default;
-  const rename = (target, value) => {
-    const { view } = mount(Pane, { props: { rename: { ...target, value: "", fallback: "zsh" }, overlay: "overlay-9" } });
-    view.input.set_value(value);
-    view.input.emit("submit");
-    return view;
-  };
-  rename({ pane: "p1", terminal: "t1" }, "  Build server  ");
-  rename({ pane: "p1", terminal: "t1" }, "😀".repeat(50));
-  rename({ pane: "p1", terminal: "t1" }, "a".repeat(47) + " b");
-  rename({ pane: "p1", terminal: "t1" }, "   ");
-  await new Promise((r) => setImmediate(r));
-  assert.deepEqual(herdr.calls("hc"), [
-    [["label", "t1", "roundup-pane.name=Build server"]],
-    [["label", "t1", `roundup-pane.name=${"😀".repeat(48)}`]],
-    [["label", "t1", `roundup-pane.name=${"a".repeat(47)}`]],
-    [["label", "t1", "roundup-pane.name="]],
-  ]);
-  assert.deepEqual(herdr.calls("closeOverlay"), [["overlay-9"], ["overlay-9"], ["overlay-9"], ["overlay-9"]]);
-  assert.deepEqual(herdr.calls("notify"), []);
+  herdr.set({ panes: [pane("p1", "tb1", { terminal: "t1", ...paneFields })], terminals: [terminal("t1")], focused: { tab: "tb1" }, ...extra });
+  const m = mount(Pane, { props: { pane: "p1", terminal: "t1" } });
+  const part = (id) => find(m.render(), (e) => e.elementId === id);
+  return { ...m, part };
+}
+
+test("PAN-06, PAN-09: a double-click on the name and the pencil run Herdr's pane.rename for this pane; a single click doesn't", async () => {
+  const { view, cx, part } = await header({ name: "Build" });
+  assert.deepEqual(texts(part("ph-name-p1")), ["Build"], "the name Herdr keeps");
+  part("ph-name-p1").handlers.click({ click_count: 1 }, cx);
+  assert.deepEqual(runs(), []);
+  part("ph-name-p1").handlers.click({ click_count: 2 }, cx);
+  assert.deepEqual(runs(), [{ name: "pane.rename", args: { pane: "p1" } }], "no name: Herdr asks in its own prompt");
+  assert.equal(cx.stopped, 1, "the double-click doesn't also focus the pane");
+  view.hovered = true;
+  part("ph-n-p1").handlers.click({}, cx);
+  assert.deepEqual(runs().at(-1), { name: "pane.rename", args: { pane: "p1" } });
+  assert.deepEqual(herdr.calls("openOverlay"), [], "no dialog of its own");
+  assert.deepEqual(herdr.calls("hc"), []);
+  view.close();
 });
 
-test("roundup-pane's rename dialog says so when hc can't label the terminal", async () => {
-  const Pane = (await import("../mods/roundup-pane/main.js")).default;
-  // Newest hook first: the first save fails with an exit code, the second as hc not starting.
-  herdr.onHc(() => new Error("hc not found"), { times: 1 });
-  herdr.onHc(() => ({ code: 1, stderr: "no such terminal\n" }), { times: 1 });
-  for (let i = 0; i < 2; i++) {
-    const { view } = mount(Pane, { props: { rename: { pane: "p1", terminal: "t1", value: "x" }, overlay: "o" } });
-    view.input.emit("submit");
-  }
-  await new Promise((r) => setImmediate(r));
-  const toasts = herdr.calls("notify").map(([n]) => n);
-  assert.deepEqual(toasts[0], { title: "Couldn't rename the pane", body: "no such terminal", level: "error" });
-  assert.equal(toasts[1].title, "Couldn't rename the pane");
-  assert.match(toasts[1].body, /hc not found/);
+test("PAN-122: a name from before pane.rename is given to its pane, then removed, each once", async () => {
+  const { view, cx } = await header({}, { terminals: [terminal("t1", { labels: { "roundup-pane.name": " Build " } })] });
+  await clock.advance(2000);
+  assert.deepEqual(runs(), [{ name: "pane.rename", args: { pane: "p1", name: "Build" } }]);
+  assert.deepEqual(herdr.calls("hc"), [], "the label stays until the pane shows a name");
+  await clock.advance(4000);
+  assert.equal(runs().length, 1, "asked once, not at every look");
+  herdr.set({ panes: [pane("p1", "tb1", { terminal: "t1", name: "Build" })] });
+  await clock.advance(4000);
+  assert.deepEqual(herdr.calls("hc"), [[["label", "t1", "roundup-pane.name="]]], "removed once");
+  assert.equal(runs().length, 1);
+  assert.deepEqual(cx.errors, []);
+  view.close();
 });
 
-test("roundup-pane's rename dialog keeps a mod pane's name in shared state, others kept", async () => {
+test("PAN-122: a mod pane's old name moves the same way, other panes' entries stay; a rename that throws is left alone", async () => {
   const Pane = (await import("../mods/roundup-pane/main.js")).default;
-  herdr.set({ shared: { "roundup-pane.names": { m2: "Other" } } });
-  const save = (value) => {
-    const { view } = mount(Pane, { props: { rename: { pane: "m1", terminal: null, value: "" }, overlay: "o" } });
-    view.input.set_value(value);
-    view.input.emit("submit");
-  };
-  save(" Docs ");
-  assert.deepEqual(herdr.shared("roundup-pane.names"), { m2: "Other", m1: "Docs" });
-  save("");
+  herdr.set({ panes: [pane("m1", "tb1", { mod: "roundup-preview" })], focused: { tab: "tb1" }, shared: { "roundup-pane.names": { m1: "Docs", m2: "Other" } } });
+  herdr.onRun(() => { throw new Error("no document"); }, { times: 1 });
+  const first = mount(Pane, { props: { pane: "m1", terminal: null } });
+  await clock.advance(4000);
+  assert.equal(runs().length, 1, "it threw: not again from this copy");
+  assert.deepEqual(herdr.shared("roundup-pane.names"), { m1: "Docs", m2: "Other" }, "and the old name is kept");
+  assert.deepEqual(first.cx.errors, []);
+  first.view.close();
+  herdr.set({ panes: [pane("m1", "tb1", { mod: "roundup-preview", name: "Docs" })] });
+  const next = mount(Pane, { props: { pane: "m1", terminal: null } });
+  await clock.advance(2000);
   assert.deepEqual(herdr.shared("roundup-pane.names"), { m2: "Other" });
   assert.deepEqual(herdr.calls("hc"), []);
+  herdr.set({ panes: [pane("m2", "tb1", { mod: "roundup-preview", name: "Mine" })] });
+  const last = mount(Pane, { props: { pane: "m2", terminal: null } });
+  await clock.advance(2000);
+  assert.equal(herdr.shared("roundup-pane.names"), null, "the last entry takes the key with it");
+  next.view.close();
+  last.view.close();
+});
+
+test("PAN-124: a name the person cleared after the move doesn't come back when the label's removal failed, after a restart neither", async () => {
+  clock.useFakeNow();
+  const Pane = (await import("../mods/roundup-pane/main.js")).default;
+  const named = (name) => herdr.set({ panes: [pane("p9", "tb1", { terminal: "t9", name })] });
+  named(null);
+  herdr.set({ terminals: [terminal("t9", { labels: { "roundup-pane.name": "Build" } })], focused: { tab: "tb1" } });
+  // The rename shows at once; the first removal fails (the machine is away).
+  herdr.onRun(({ name, args }) => { if (name === "pane.rename" && args.name) named(args.name); return undefined; });
+  herdr.onHc(() => ({ code: 1, stderr: "machine away" }), { times: 1 });
+  const first = mount(Pane, { props: { pane: "p9", terminal: "t9" } });
+  await clock.advance(2000);
+  assert.deepEqual(runs(), [{ name: "pane.rename", args: { pane: "p9", name: "Build" } }]);
+  assert.deepEqual(herdr.calls("hc"), [[["label", "t9", "roundup-pane.name="]]], "named at once: the label is asked to go in the same look");
+  assert.deepEqual(herdr.shared("roundup-pane.moved"), { t9: true });
+  named(null); // the person clears the name
+  await clock.advance(10000);
+  assert.equal(runs().length, 1, "not given again");
+  assert.equal(herdr.calls("hc").length, 1, "the next removal waits a minute");
+  // Its machine is away for a while: the terminal isn't listed, which says nothing about its label.
+  herdr.set({ terminals: [] });
+  await clock.advance(4000);
+  assert.deepEqual(herdr.shared("roundup-pane.moved"), { t9: true }, "kept while the terminal isn't listed");
+  herdr.set({ terminals: [terminal("t9", { labels: { "roundup-pane.name": "Build" } })] });
+  assert.deepEqual(first.cx.errors, []);
+  first.view.close();
+  const next = mount(Pane, { props: { pane: "p9", terminal: "t9" } }); // as after a restart
+  await clock.advance(2000);
+  assert.equal(runs().length, 1, "a new copy doesn't give it either");
+  await clock.advance(50000);
+  assert.equal(herdr.calls("hc").length, 2, "a minute after the failed one: tried again");
+  herdr.set({ terminals: [terminal("t9")] }); // the label is gone
+  await clock.advance(2000);
+  assert.equal(herdr.shared("roundup-pane.moved"), null, "the terminal leaves MOVED, the key with its last entry");
+  assert.equal(runs().length, 1);
+  assert.deepEqual(next.cx.errors, []);
+  next.view.close();
+});
+
+test("PAN-123: a header the layout puts below its pane draws its divider above itself", async () => {
+  const frame = (position) => ({ id: "root", children: [{ id: "body", content: { tab: "active", pane: { header: { position } } } }] });
+  const top = await header({}, { layout: frame("top") });
+  let head = top.part("pane-head-p1");
+  assert.deepEqual([head.style("border_b"), head.has("border_t")], [[1], false]);
+  top.view.close();
+  const bottom = await header({}, { layout: frame("bottom") });
+  head = bottom.part("pane-head-p1");
+  assert.deepEqual([head.style("border_t"), head.has("border_b")], [[1], false]);
+  bottom.view.close();
 });

@@ -13,6 +13,7 @@
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, InputState, Input, Scrollbar, Popup, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { spaces, panes, focused, readTextFile, watchFolder, theme, settings, window, props, notify, openOverlay, closeOverlay, shared, setShared, nextCommand, run } from "herdr";
+import { newPace, due, changed as changeDue, started, ended } from "./pace.js";
 import { iconFor, rootIcon } from "./icon.js";
 import { listDir, buildIndex, diskSearch, kinds, prunedName, realPath, homeOf } from "./disk.js";
 import { INDEX_PATHS } from "./disk-rules.js";
@@ -79,7 +80,10 @@ export default class Files extends View {
     this.input.on("focus", (_e, cx) => { this.typing = true; cx.notify(); });
     this.input.on("blur", (_e, cx) => { this.typing = false; cx.notify(); });
     this.reset(null, null);
-    cx.timer.every(10000, (cx) => {
+    // Read again when pace.js says so: every 10 s in front, slower after a slow read, not behind
+    // another app.
+    cx.timer.every(1000, (cx) => {
+      if (!due(this.pace, window()?.active !== false, Date.now(), Boolean(this.watched))) return;
       this.refresh(cx);
       // A known file or folder changed while no other change came after it: the hits may still
       // list it (a folder's hold normally reads it again before this).
@@ -159,7 +163,10 @@ export default class Files extends View {
     // searchSeq++: a search still running for the folder before ends without a word here.
     this.cursor = s?.cursor ?? ""; this.git = emptyGit(); this.index = null; this.indexing = null; this.hits = null; this.searchError = null;
     this.searchSeq++; this.searching = false;
-    this.error = null; this.limited = false; this.loading = false; this.again = false; this.watched = null;
+    this.error = null; this.limited = false; this.loading = false; this.watched = null;
+    // The folder shown before is no longer watched (a FolderWatch's cancel(), Herdr 0.1.16).
+    this.watchPending?.cancel(); this.watchPending = null;
+    this.pace = newPace(Date.now(), this.pace?.front ?? null);
     this.scrollTo = this.cursor || null;
     if (this.query) { this.query = ""; this.input?.set_value(""); }
     this.closePreview();
@@ -178,9 +185,12 @@ export default class Files extends View {
 
   refresh(cx) {
     if (!this.root) return;
-    if (this.loading) { this.again = true; return; }
-    const ctx = this.ctx;
+    // A read asked for while one runs (the timer, the watch) waits as a change for pace.js: once the
+    // hold this read ends with is over, not at once after it.
+    if (this.loading) { this.pace.dirty = true; return; }
+    const ctx = this.ctx, pace = this.pace, began = Date.now();
     this.loading = true;
+    started(pace, began);
     // A `.git` change during this read (changed() counts them) leaves its repo unremembered.
     const drops = ctx.drops;
     cx.spawn(async (cx) => {
@@ -206,7 +216,7 @@ export default class Files extends View {
       finally {
         if (this.current(ctx)) {
           this.loading = false;
-          if (this.again) { this.again = false; this.refresh(cx); }
+          ended(pace, Date.now() - began, Date.now());
         }
         cx.notify();
       }
@@ -243,9 +253,20 @@ export default class Files extends View {
       try {
         if (ctx.real === undefined) ctx.real = await realPath(root).catch(() => null);
         while (this.current(ctx)) {
-          const paths = await watchFolder(root);
+          const pending = this.watchPending = watchFolder(root);
+          const paths = await pending;
           if (!this.current(ctx)) return;
-          this.changed(paths, cx);
+          if (paths?.length) { this.changed(paths, cx); continue; }
+          // No paths, and not reset()'s cancel (that changed ctx): a watch Herdr reclaimed (it keeps
+          // 64 at most). Watching again at once would reclaim another one's and start a ring, so the
+          // panel's next timed read (pace.js) watches again. What changed meanwhile may be a `.git`
+          // (rev-parse again) or anything the search's index lists (read again before searching),
+          // the one being built included (`regit`: it comes out stale).
+          this.watched = null;
+          ctx.base = null; ctx.drops++;
+          if (this.index) this.index.stale = true;
+          if (this.indexing) this.indexing.regit = true;
+          return;
         }
       } catch { if (this.current(ctx)) this.watched = null; }
     });
@@ -263,7 +284,8 @@ export default class Files extends View {
     if (drops) { this.ctx.base = null; this.ctx.drops += drops; } // a repo made or removed here: rev-parse again
     if (recheck.length) this.recheck(index, recheck, cx);
     if (index) this.reindex(index, cx);
-    if (shown) this.refresh(cx);
+    // Behind another app, or right after a slow read, the change waits for the timer (pace.js).
+    if (shown && changeDue(this.pace, window()?.active !== false, Date.now())) this.refresh(cx);
   }
 
   // Reads the index again when it is due. A stale one younger than STALE_AGE is read once
@@ -423,10 +445,12 @@ export default class Files extends View {
         const index = { dirs: built.dirs, all: built.all, lower: built.all.map((rel) => rel.toLowerCase()), full: built.full, cut: built.cut, files: built.all.length - built.dirs.size, source: ctx.noDisk ? "git" : source, from: fromGit ? "git" : "disk", known: new Set(built.all), added: new Set(), pending: new Set(), checking: false, at: Date.now(), stale: false, held: false, dirty: Boolean(fromGit ? job.changedGit : job.changedDisk) };
         // Git's answer changed during the build (regit): the next search, or the timer, reads it again.
         if (job.regit) { index.stale = true; index.at = 0; }
-        if (this.current(ctx) && this.searchSource() === index.source) this.index = index;
+        // Only the latest build: an older one (the source switched away and back meanwhile) may
+        // finish last, and would replace a newer index with what it read before.
+        if (this.current(ctx) && this.indexing === job && this.searchSource() === index.source) this.index = index;
         return index;
       })()
-        .catch((e) => { if (this.current(ctx)) ctx.failed = { source, git: this.git, error: e }; throw e; })
+        .catch((e) => { if (this.current(ctx) && this.indexing === job) ctx.failed = { source, git: this.git, error: e }; throw e; })
         .finally(() => { if (this.current(ctx) && this.indexing === job) this.indexing = null; });
       this.indexing = job;
     }
@@ -475,7 +499,6 @@ export default class Files extends View {
         const t = theme(), name = baseOf(rel), ext = name.includes(".") ? name.split(".").pop().toLowerCase() : "txt";
         this.code = EditorState.new({ language: LANG[ext] ?? ext, readonly: true,
           value: text.length > 400000 ? text.slice(0, 400000) + "\n… (file truncated)" : text,
-          font_family: settings().font_family, font_size: 12,
           syntax: { keyword: t.ansi5, string: t.ansi2, comment: t.dim, function: t.ansi4, type: t.ansi3, number: t.ansi1, constant: t.ansi6 } });
       } catch { if (this.file === rel && this.current(ctx)) this.fileError = "Cannot preview this file (binary, too large, or unreadable)"; }
       finally { cx.notify(); }
@@ -835,7 +858,9 @@ export default class Files extends View {
       .on_size_change((size, cx) => { if (Math.abs(size.width - (this.measuredWidth ?? 0)) > 4) { this.measuredWidth = size.width; cx.notify(); } })
       .child(this.header(t));
     if (this.file) {
-      return root.child(this.code ? Editor.new(this.code).flex_1().min_h(0) : div().p(12).text_color(t.dim).child(this.fileError || "Loading file…"));
+      // The terminal's font and size (Herdr's files 0.1.17), on the Editor: a change shows in an open file.
+      const font = settings();
+      return root.child(this.code ? Editor.new(this.code).font_family(font.font_family).text_size(font.font_size).flex_1().min_h(0) : div().p(12).text_color(t.dim).child(this.fileError || "Loading file…"));
     }
     const rows = this.shown = this.rows();
     // The keyboard menu goes when its row moves or goes.

@@ -1,6 +1,6 @@
 # Herdr Roundup
 
-A Herdr App layout, cloned from Herdr's `main` (0.1.14). See README.md for the layout of the repo.
+A Herdr App layout, cloned from Herdr's `main` (0.1.18); it needs Herdr 0.1.17 or later. See README.md for the layout of the repo.
 
 ## Before changing anything
 
@@ -31,17 +31,19 @@ A Herdr App layout, cloned from Herdr's `main` (0.1.14). See README.md for the l
 ## Limits found so far
 
 - `<mod>.<command>` reaches only shown copies of a mod; a mod runs only where a layout places it.
-- Mods can't add entries to Settings (cmd-,) or to the command palette (cmd-shift-p).
+- Mods can't add entries to Settings (cmd-,). The command palette (cmd-shift-p) takes entries from `"palette"` in a mod's `mod.json` since Herdr 0.1.18; no mod here has any yet.
 - Mods can't import from another mod's folder: shared code is copied into each mod.
-- `watchFolder()` can't be cancelled: a watch on a folder no longer shown waits until its next change there. At most one per folder, and Herdr shares it between mods.
+- `watchFolder()` returns a `FolderWatch` (Herdr 0.1.16): keep it and `cancel()` it when the folder is no longer shown, or it waits until that folder's next change. A cancelled or reclaimed watch answers with `[]`. At most 64 folders have a pending watch, and Herdr shares a folder's between mods.
 - A popup overlay is a copy of its mod that ends when it closes, timers and tasks included: work that must outlive it runs in the copy that stays.
 - In a `window_drag` block a drag still ends in `on_click`; tell them apart by the pointer's moves (RECIPE "Click or drag"), or stop `mouse_down` and lose the drag there.
 - A `HoverCard` draws above popups: empty its content while a popup it would cover is open.
 - A `HoverCard` wraps its trigger in an element no style reaches, which never shrinks below its content: `truncate` inside it cuts nothing unless given a width (`nameRoom` in `roundup-workspace-chrome/brand.js`).
 - Herdr gives mods no signal for an open overlay, and its shipped `menu` sets no shared state: a mod that must know opens a clone that says so (`roundup-menu`, `roundup-menu.open`).
 - Herdr's `fs/promises` has only `exists`, `mkdir`, `readFile`, `readdir`, `rmdir`, `unlink`, `writeFile`: no `stat`. Size and mtime come from `exec("stat", …)` (`mods/roundup-pane/context-io.js`).
-- `terminals()` has no pid (it is `hc ls --json`'s form): a terminal's foreground process comes from `hc(["get", t, "--json"])`.
+- `terminals()` has no pid (it is `hc ls --json`'s form): a terminal's foreground process comes from `hc(["get", t, "--json"])`. Nor does it say which children outlive their parent (`--outlive-parent`, kept running since Herdr 0.1.18): the close dialog counts every sub-agent as ending.
 - A pane header copy starts only when its pane is first shown: a tab not opened since Herdr started runs none of its headers' timers.
 - A mod copy in a tab not shown doesn't render, but its timers run: what it must notice there (its tab coming back, a status change) it learns from a timer, not from `render()` (`roundup-pane/main.js`, `see()`).
 - herdr.dev's gallery skips a layout whose `RECIPE.md` is 64 KB or larger, with no notice but a warning in `https://assets.herdr.dev/layouts/index.json`. Keep it well below (LAY-23); new detail goes into the code's comments, not the recipe.
+- `herdr-app check` runs `init()` for real: guard `hc`, `exec` and writes there with `checking()` (`roundup-spaces`, `refreshMachines`). Its warning about stranded timers and tasks comes for Herdr's own mods too.
+- A name given with `pane.rename` belongs to the pane, not the terminal: a terminal sent back to its parent and kept again starts unnamed.
 - Mods don't get the split arrangement (`panes()` has no geometry). It is only in each machine's core document `herdr-app` (`doc.get` over `hc connect`), opaque JSON whose form can change with herdr-core: read it defensively, with a fallback (`mods/roundup-spaces/pane-map.js`).

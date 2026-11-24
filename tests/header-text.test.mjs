@@ -1,8 +1,8 @@
 // node --test 'tests/*.test.mjs' (Node 22.15 or later: it loads the mods' files as ES modules without a package.json).
-// roundup-pane's header: the folder, the id chip, a saved name.
+// roundup-pane's header: the folder, the id chip, a name from before pane.rename.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { folder, paneId, cutName, MAX_NAME } from "../mods/roundup-pane/header-text.js";
+import { folder, paneId, paneFrame, oldName, OLD_LABEL, OLD_NAMES, MOVED } from "../mods/roundup-pane/header-text.js";
 
 test("folder: home is ~, below home ~/…, a sibling that only starts like home stays, null is \"\"", () => {
   assert.equal(folder("/Users/a", "/Users/a"), "~");
@@ -27,14 +27,38 @@ test("paneId: a mod pane p + 7 or more hex shows p + 6 hex + …, a machine pref
   assert.deepEqual(paneId({ terminal: null, pane: "pane-x" }), { shown: "pane-x", copied: "pane-x" });
 });
 
-test("A saved name is trimmed and cut at 48 code points, never inside an emoji", () => {
-  assert.equal(MAX_NAME, 48);
-  assert.equal(cutName("  build  "), "build");
-  assert.equal(cutName(""), "");
-  assert.equal(cutName("   "), "");
-  const emoji = "😀".repeat(60);
-  assert.equal(Array.from(cutName(emoji)).length, 48);
-  assert.equal(cutName(emoji), "😀".repeat(48));
-  // A cut that ends on a space is trimmed again.
-  assert.equal(cutName("a".repeat(47) + " b"), "a".repeat(47));
+test("PAN-122: an old name is given to a pane without a name, dropped once the pane has one or when it is blank", () => {
+  assert.equal(OLD_LABEL, "roundup-pane.name");
+  assert.equal(OLD_NAMES, "roundup-pane.names");
+  const term = { pane: "p1", terminal: "t1", name: null }, mod = { pane: "m1", terminal: null, name: null };
+  assert.equal(oldName(term, {}, { p1: "not a terminal's" }), null);
+  assert.equal(oldName(term, undefined, null), null);
+  assert.equal(oldName(mod, { [OLD_LABEL]: "not a mod pane's" }, { m2: "Other" }), null);
+  assert.deepEqual(oldName(term, { [OLD_LABEL]: " Build " }, null), { source: "t1", name: "Build", step: "give" });
+  assert.deepEqual(oldName({ ...term, name: "Server" }, { [OLD_LABEL]: "Build" }, null), { source: "t1", name: "Build", step: "drop" }, "the pane's name wins");
+  assert.deepEqual(oldName(term, { [OLD_LABEL]: "  " }, null), { source: "t1", name: "", step: "drop" }, "blank: nothing to give");
+  assert.deepEqual(oldName(mod, null, { m1: "Docs" }), { source: "m1", name: "Docs", step: "give" });
+  assert.deepEqual(oldName({ ...mod, name: "Docs" }, null, { m1: "Docs" }), { source: "m1", name: "Docs", step: "drop" });
+});
+
+test("PAN-124: a terminal in shared roundup-pane.moved never gets its old name again, and leaves it once the label is gone", () => {
+  assert.equal(MOVED, "roundup-pane.moved");
+  const term = { pane: "p1", terminal: "t1", name: null }, mod = { pane: "m1", terminal: null, name: null };
+  assert.deepEqual(oldName(term, { [OLD_LABEL]: "Build" }, null, { t1: true }), { source: "t1", name: "Build", step: "drop" }, "the name was cleared after the move: only the label goes");
+  assert.deepEqual(oldName(term, { [OLD_LABEL]: "Build" }, null, { t2: true }), { source: "t1", name: "Build", step: "give" }, "another terminal's entry");
+  assert.deepEqual(oldName(term, {}, null, { t1: true }), { source: "t1", step: "forget" });
+  assert.equal(oldName(term, {}, null, { t2: true }), null);
+  assert.deepEqual(oldName(mod, null, { m1: "Docs" }, { m1: true }), { source: "m1", name: "Docs", step: "give" }, "a mod pane's entry goes in the same look: no marker");
+});
+
+test("PAN-123: paneFrame is the layout's first visible tab frame, a stack's active child counting, hidden blocks not", () => {
+  const frame = (position) => ({ id: "f", content: { tab: "active", pane: { header: { position } } } });
+  assert.equal(paneFrame(null), null);
+  assert.equal(paneFrame({ id: "root", children: [{ id: "side", content: { mod: "x" } }] }), null);
+  assert.deepEqual(paneFrame({ id: "root", children: [{ id: "side" }, frame("bottom")] }).header.position, "bottom");
+  assert.equal(paneFrame({ id: "root", children: [{ ...frame("bottom"), hidden: true }] }), null);
+  const stack = { id: "s", type: "stack", active: "f", children: [{ id: "other", content: { mod: "x" } }, frame("top")] };
+  assert.deepEqual(paneFrame(stack).header.position, "top", "the stack's active child");
+  assert.equal(paneFrame({ ...stack, active: "other" }), null, "a frame behind the stack's shown child doesn't count");
+  assert.deepEqual(paneFrame({ ...stack, active: "gone" })?.header, undefined, "no active child: the first visible one");
 });

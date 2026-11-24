@@ -39,6 +39,8 @@ const handle = (kind, init) => {
   });
 };
 export const VirtualListScrollHandle = { new: () => handle("VirtualListScrollHandle") };
+// A plain scroll area's handle (Herdr 0.1.15): .track_scroll(handle), handle.scroll_to_item(index).
+export const ScrollHandle = { new: () => handle("ScrollHandle") };
 export const EditorState = { new: (opts) => Object.assign(handle("EditorState", opts), { opts }) };
 
 // An input's text and listeners. `type(text)` sets the value as typing would, `emit(event)` fires a

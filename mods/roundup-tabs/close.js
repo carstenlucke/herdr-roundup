@@ -16,14 +16,39 @@ export const MODES = [
 export const confirmMode = (kind) => (MODES.some(([m]) => m === shared(KEYS[kind])) ? shared(KEYS[kind]) : "agents");
 export const setConfirmMode = (kind, mode) => setShared(KEYS[kind], mode);
 
-// A tab's program: its agent's, else its first pane's.
-export function tabProgram(c) {
+// A tab's lead pane: its agent's, else its first. Its program is the tab's.
+export function tabLead(c) {
   const mine = panes().filter(p => p.tab === c.id);
-  return mine.find(p => p.program?.agent)?.program ?? mine[0]?.program;
+  return mine.find(p => p.program?.agent) ?? mine[0];
+}
+export const tabProgram = (c) => tabLead(c)?.program;
+
+// An agent's title as a name, by the rule of roundup-agents' clean() (mods can't import from each
+// other): a title item that is only a Codex thread id goes (what roundup-pane's context meter
+// integration adds to Codex's title), then what an agent puts in front, a status glyph or spinner
+// with its separator and Codex's blinking "[ ! ] " / "[ . ] "; an opening bracket, a quote or an
+// emoji of the title's own stays.
+const THREAD_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1,12}(?:\.\.\.)?$/i;
+const MARK = /^(?:[\u2800-\u28ff\u2733\u273b\u273d\u2736\u2722\u00b7][\uFE0E\uFE0F]?\s+)+/u;
+export function liveTitle(s) {
+  const title = s ?? "", mark = MARK.exec(title)?.[0] ?? "";
+  const kept = title.slice(mark.length).split(" | ").filter((part) => !THREAD_ID.test(part.trim())).join(" | ");
+  return (kept ? mark + kept : "").replace(/^(?:\[ [!.] \] |[✋⏳]\uFE0F?(?=\s)|(?!(?:\p{Emoji}\uFE0F|[#*]\u20E3))[^\p{L}\p{N}\p{Ps}\p{Pi}\p{Emoji_Presentation}])+/u, "").trim();
 }
 
-// A tab nobody named shows its program, as the tab bar draws it.
-export const tabName = (c, program = tabProgram(c)) => /^tb\d+$/.test(c.name) ? program?.name ?? "Terminal" : c.name;
+// A tab's name as the tab bar draws it and the close dialog says it (Herdr's tabs 0.1.16): a name
+// the person gave stays. A tab Herdr named (unnamed, or after its program) shows its program, and
+// follows its agent's live title where that tells something, as the agents list does.
+export function tabName(c, lead = tabLead(c)) {
+  const prog = lead?.program?.name;
+  const base = c.named ? c.name : prog ?? "Terminal";
+  if (!lead?.program?.agent) return base;
+  const live = liveTitle(lead.title);
+  // liveTitle() would strip a path's leading ~ or /: test the title with only its status glyph gone.
+  const path = /^[~/]|^[A-Za-z]:\\/.test((lead.title ?? "").replace(/^[^\p{L}\p{N}~/]+/u, ""));
+  const telling = live && live !== lead.terminal && live !== prog && !path && !live.includes("@") && live.toLowerCase() !== lead.program.key;
+  return (c.name === prog || !c.named) && telling ? live : base;
+}
 
 // The dialog's title doesn't wrap: a long name is cut to what fits, a wide (CJK) character counting twice.
 function fit(name, room = 26) {
@@ -78,16 +103,9 @@ export function closeTab(id) {
   });
 }
 
-// A pane's name, as roundup-pane's header shows it and its rename dialog sets it. herdr-core can't
-// rename a running terminal, so a terminal's name is its label; a mod pane's is in shared state.
-export const NAME_LABEL = "roundup-pane.name";
-export const NAMES = "roundup-pane.names";
-
-// The name someone gave the pane, or "".
-export function givenName(p) {
-  if (p.terminal) return terminals().find(t => t.address === p.terminal)?.labels?.[NAME_LABEL] ?? "";
-  return shared(NAMES)?.[p.pane] ?? "";
-}
+// The name someone gave the pane with Herdr's `pane.rename` (`panes()[i].name`, kept with the
+// pane's tab; Herdr 0.1.17), or "". roundup-pane's header shows it.
+export const givenName = (p) => p.name ?? "";
 
 export const fallbackName = (p) => ((p.program?.agent || p.program?.shell) && p.program.name) || p.title || p.program?.name || "shell";
 
