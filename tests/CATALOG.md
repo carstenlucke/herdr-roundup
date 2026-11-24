@@ -328,7 +328,7 @@ Nothing may need a person: there is no pointer or key injection, so L2 calls han
 | CNF-05 | `close()` clears `roundup-confirm.open` only while it holds this dialog's id. | commit f0ad009 | L2 | — | shared recorder | H |
 | CNF-06 | Without props the title is "Are you sure?" and the detail "". | code | L2 | pane-menu: "CNF-06, CNF-08: the dialog is rounded 8px on popover, with the defaults for title and detail" | gpui stub | L |
 | CNF-07 | After a dialog from TAB-14, `overlay.close {id}` clears `roundup-confirm.open`, and the tab still exists. | commit f0ad009 | L3 | smoke.sh CNF-07 | isolated Herdr | M |
-| CNF-08 | The dialog is rounded 8px on `popover`, as Herdr's confirm 0.1.14. | Herdr confirm 0.1.14 | L2 | pane-menu: "CNF-06, CNF-08: the dialog is rounded 8px on popover, with the defaults for title and detail" | gpui stub | L |
+| CNF-08 | The dialog is rounded 8px on `popover`, as Herdr's confirm 0.1.18. | Herdr confirm 0.1.14 | L2 | pane-menu: "CNF-06, CNF-08: the dialog is rounded 8px on popover, with the defaults for title and detail" | gpui stub | L |
 
 ## roundup-agents (AGT)
 
@@ -484,7 +484,7 @@ Source keys: `PR #6 c <sha>` is a fix commit inside PR #6 whose message names th
 | FIL-101 | `relTo`: under root → rel; equal → `""`; outside → null; `\` normalized; a trailing slash ignored. | actions.js | L1 | tree: "relTo: rel under the root, \"\" for the root, null outside, \ normalized, a trailing slash ignored" | move `relTo` herdr-free | M |
 | FIL-102 | `psQuote` doubles `'` and curly single quotes. | disk.js | L1 | disk-rules: "psQuote doubles ' and the curly single quotes" | move herdr-free | L |
 | FIL-103 | `roundup-files.focus`, `search`, `view:all`, `view:changed`, `source:git`, `source:disk`, `menu` run with status clean; view and source persist across a restart. | RECIPE now; PR #6 body | L3 | partly: smoke.sh FIL-103 (commands run with status clean; persistence read from data/roundup-files/store.json, the view after the restart only in a shot) | isolated Herdr; panel shown first | M |
-| FIL-104 | `mod.json` has `focusable: true`, `place: "none"`, `cloned_from files 0.1.14`; layout block `files` uses `roundup-files`. | PR #6 body; CLAUDE.md | L1 | `roundup-files is a focusable clone of Herdr's files, in the layout's files block` | static | M |
+| FIL-104 | `mod.json` has `focusable: true`, `place: "none"`, `cloned_from files 0.1.18`; layout block `files` uses `roundup-files`. | PR #6 body; CLAUDE.md | L1 | `roundup-files is a focusable clone of Herdr's files, in the layout's files block` | static | M |
 | FIL-105 | View and source persist in prefs; invalid saved values fall back to `all`/`git`. | PR #6 body; RECIPE now | L2 | — | localStorage stub | M |
 
 ### Panel preview, icons
