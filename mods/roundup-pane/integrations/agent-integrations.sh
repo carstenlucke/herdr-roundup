@@ -207,6 +207,8 @@ claude_status() {
 # install, and Codex doesn't start with a key defined twice.
 codex_where() {
   awk '
+    # A file saved with CRLF: the line without its CR, or no header and no comment would match.
+    { sub(/\r$/, "") }
     /^[ \t]*\[/ { root = 0; tui = ($0 ~ /^[ \t]*\[[ \t]*(tui|"tui"|\047tui\047)[ \t]*\][ \t]*(#.*)?$/); if (tui && !hdr) hdr = NR; next }
     BEGIN { root = 1 }
     # tui itself assigned at the top (an inline table `tui = { … }`, bare or quoted): not edited.

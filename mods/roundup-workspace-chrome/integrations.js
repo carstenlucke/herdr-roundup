@@ -51,6 +51,8 @@ export const OLDER = ["an older form", "an older install", "thread id not last"]
 export const MANUAL = "set by hand";
 export const formOf = (state, detail) => state !== "on" || !detail ? null
   : OLDER.some((w) => detail.startsWith(w)) ? "older" : detail === MANUAL ? "manual" : null;
+// An entry's form, also for one kept in shared state by a version before `form` (until the next read).
+const formIn = (entry) => entry?.form ?? formOf(entry?.state, entry?.detail);
 
 // `where`'s lines ("pi: /Users/x/.pi/agent/extensions/roundup-context.js"), per agent: the path.
 export function parseWhere(text) {
@@ -96,7 +98,7 @@ export function sectionRows(keys, state, busy, windows = false) {
     if (busy === key) return { key, label: name, icon: "spinner", spin: true, dim: true, does: null };
     // Another one running: this row waits, as the script edits one agent at a time.
     if (busy) return { key, label: name, check: s === "on", dim: true, does: null };
-    const form = state?.[key]?.form ?? null;
+    const form = formIn(state?.[key]);
     // Updated as it is switched: off restores what the first install changed, on writes today's form.
     if (s === "on" && form === "older") return { key, label: `${name} · older form`, check: true, flag: "circle-alert", warn: true,
       tip: "Installed in an older form: switch it off, then on again, to update it", does: "off" };
@@ -142,7 +144,7 @@ export function resultToast(key, action, r) {
 // What a click on a broken or unknown row says, or on one set by hand (`home`: to show its file as ~/…).
 export function whyToast(key, state, home = null) {
   const s = state?.[key], name = nameOf(key);
-  if (s?.state === "on" && s.form === "manual") return {
+  if (formIn(s) === "manual") return {
     level: "info",
     title: `${name}'s integration was set by hand`,
     body: `"thread-id" (or "session-id") is in tui.terminal_title in ${tilde(s.file, home) ?? "its config"}, not put there by Roundup, so Roundup leaves it alone. To switch it off, take it out there.`,

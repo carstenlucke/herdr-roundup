@@ -456,6 +456,10 @@ test("CHR-62: an install in an older form keeps its check with a warning and a t
     tip: "Installed in an older form: switch it off, then on again, to update it", does: "off" });
   assert.deepEqual(rows[1], { key: "codex", label: "Codex · set by hand", check: true, does: "why" });
   assert.equal(rows[2].label, "Pi · older form");
+  // An entry kept by the version before `form` (until the next read): the form from its detail.
+  const kept = Object.fromEntries(Object.entries(s).map(([k, { form, ...rest }]) => [k, rest]));
+  assert.deepEqual(I.sectionRows(["claude", "codex", "pi", "opencode"], kept, null), rows);
+  assert.equal(I.whyToast("codex", kept, "/h").title, "Codex's integration was set by hand");
   assert.deepEqual(rows[3], { key: "opencode", label: "OpenCode", check: true, does: "off" });
   assert.deepEqual(I.whyToast("codex", s, "/h"), {
     level: "info", title: "Codex's integration was set by hand",

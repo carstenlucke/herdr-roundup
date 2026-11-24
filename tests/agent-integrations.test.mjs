@@ -784,6 +784,17 @@ test("PAN-129: codex: a quoted or spaced terminal_title or [tui] is found, so in
   assert.equal(readFileSync(codex, "utf8"), '[ "tui" ]\nterminal_title = ["activity", "thread-name", "project-name", "thread-id"]\nanimations = false\n');
   assert.equal(run("uninstall", "codex").code, 0);
   assert.equal(readFileSync(codex, "utf8"), '[ "tui" ]\nanimations = false\n');
+  // A file saved with CRLF: its [tui] and its key found all the same.
+  for (const before of ['[tui]\r\nterminal_title = ["model"]\r\n', '[tui] # mine\r\nanimations = false\r\n']) {
+    put(codex, before);
+    assert.equal(run("install", "codex").code, 0, before);
+    const parsed = toml(codex);
+    assert.equal(parsed.status, 0, `${JSON.stringify(before)} → invalid TOML: ${parsed.stderr}`);
+    assert.equal(JSON.parse(parsed.stdout).tui.terminal_title.at(-1), "thread-id");
+    assert.equal(run("status", "codex").out, "codex: on");
+    assert.equal(run("uninstall", "codex").code, 0);
+    assert.equal(readFileSync(codex, "utf8"), before);
+  }
   // Quoted, with the id already: the person's, set by hand.
   put(codex, "[tui]\n'terminal_title' = [\"thread-id\"]\n");
   assert.equal(run("status", "codex").out, "codex: on (set by hand)");
