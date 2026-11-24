@@ -9,7 +9,7 @@
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, HoverCard, ScrollHandle } from "gpui-base";
 import { place, alpha, badge, gitWhere, changesTip, spaceAvatar, rebuilt as isRebuilt } from "./space-text.js";
-import { spaces, machines, panes, terminals, agents, run, openOverlay, exec, hc, theme, settings, shared, setShared, watchFolder, window, layout } from "herdr";
+import { spaces, machines, panes, terminals, agents, run, openOverlay, exec, hc, theme, settings, shared, setShared, watchFolder, window, layout, checking } from "herdr";
 import { parseStatus, parseRevParse } from "./git-parse.js";
 import { docValue, quicklook, fingerprint } from "./pane-map.js";
 
@@ -221,7 +221,9 @@ export default class Spaces extends View {
     return [key, ...(repo ? [...keys].filter((k) => this.git[k]?.repo === repo) : [])];
   }
 
+  // Not while `herdr-app check` loads the mod: init() runs for real there, and hc with it.
   refreshMachines(cx) {
+    if (checking()) return;
     cx.spawn(async cx => {
       try { const r = await hc(["machine", "ls", "--json"]); if (r.code === 0) this.machines = (JSON.parse(r.stdout).machines ?? []).filter((m) => !m.temporary); } catch {}
       cx.notify();

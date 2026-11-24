@@ -30,7 +30,6 @@ export function codeState(text, language, cut = false) {
   const t = theme();
   return EditorState.new({ language, readonly: true,
     value: codeValue(text, cut),
-    font_family: settings().font_family, font_size: 13,
     syntax: { keyword: t.ansi5, string: t.ansi2, comment: t.dim, function: t.ansi4, type: t.ansi3, number: t.ansi1, constant: t.ansi6 } });
 }
 
@@ -38,4 +37,9 @@ export function codeState(text, language, cut = false) {
  *  floating window's own press handler runs after the field's and would take it back. */
 export const keepsKeys = (el, env) => div().flex().flex_col().on_mouse_down("left", () => env?.ownsKeys?.()).child(el);
 
-export const codeView = (state, env) => keepsKeys(Editor.new(state).flex_1().min_h(0), env).flex_1().min_h(0);
+// The code follows the terminal's font and size (Herdr's files 0.1.17): set on the Editor at each
+// draw, not in its state, so a change in Settings shows in a preview that is open.
+export function codeView(state, env) {
+  const font = settings();
+  return keepsKeys(Editor.new(state).font_family(font.font_family).text_size(font.font_size).flex_1().min_h(0), env).flex_1().min_h(0);
+}

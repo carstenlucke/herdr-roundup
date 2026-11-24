@@ -13,6 +13,7 @@
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, InputState, Input, Scrollbar, Popup, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { spaces, panes, focused, readTextFile, watchFolder, theme, settings, window, props, notify, openOverlay, closeOverlay, shared, setShared, nextCommand, run } from "herdr";
+import { newPace, due, changed as changeDue, started, ended } from "./pace.js";
 import { iconFor, rootIcon } from "./icon.js";
 import { listDir, buildIndex, diskSearch, kinds, prunedName, realPath, homeOf } from "./disk.js";
 import { INDEX_PATHS } from "./disk-rules.js";
@@ -79,7 +80,10 @@ export default class Files extends View {
     this.input.on("focus", (_e, cx) => { this.typing = true; cx.notify(); });
     this.input.on("blur", (_e, cx) => { this.typing = false; cx.notify(); });
     this.reset(null, null);
-    cx.timer.every(10000, (cx) => {
+    // Read again when pace.js says so: every 10 s in front, slower after a slow read, not behind
+    // another app.
+    cx.timer.every(1000, (cx) => {
+      if (!due(this.pace, window()?.active !== false, Date.now(), Boolean(this.watched))) return;
       this.refresh(cx);
       // A known file or folder changed while no other change came after it: the hits may still
       // list it (a folder's hold normally reads it again before this).
@@ -162,6 +166,7 @@ export default class Files extends View {
     this.error = null; this.limited = false; this.loading = false; this.again = false; this.watched = null;
     // The folder shown before is no longer watched (a FolderWatch's cancel(), Herdr 0.1.16).
     this.watchPending?.cancel(); this.watchPending = null;
+    this.pace = newPace(Date.now(), this.pace?.front ?? null);
     this.scrollTo = this.cursor || null;
     if (this.query) { this.query = ""; this.input?.set_value(""); }
     this.closePreview();
@@ -181,8 +186,9 @@ export default class Files extends View {
   refresh(cx) {
     if (!this.root) return;
     if (this.loading) { this.again = true; return; }
-    const ctx = this.ctx;
+    const ctx = this.ctx, pace = this.pace, began = Date.now();
     this.loading = true;
+    started(pace, began);
     // A `.git` change during this read (changed() counts them) leaves its repo unremembered.
     const drops = ctx.drops;
     cx.spawn(async (cx) => {
@@ -208,6 +214,7 @@ export default class Files extends View {
       finally {
         if (this.current(ctx)) {
           this.loading = false;
+          ended(pace, Date.now() - began, Date.now());
           if (this.again) { this.again = false; this.refresh(cx); }
         }
         cx.notify();
@@ -267,7 +274,8 @@ export default class Files extends View {
     if (drops) { this.ctx.base = null; this.ctx.drops += drops; } // a repo made or removed here: rev-parse again
     if (recheck.length) this.recheck(index, recheck, cx);
     if (index) this.reindex(index, cx);
-    if (shown) this.refresh(cx);
+    // Behind another app, or right after a slow read, the change waits for the timer (pace.js).
+    if (shown && changeDue(this.pace, window()?.active !== false, Date.now())) this.refresh(cx);
   }
 
   // Reads the index again when it is due. A stale one younger than STALE_AGE is read once
@@ -479,7 +487,6 @@ export default class Files extends View {
         const t = theme(), name = baseOf(rel), ext = name.includes(".") ? name.split(".").pop().toLowerCase() : "txt";
         this.code = EditorState.new({ language: LANG[ext] ?? ext, readonly: true,
           value: text.length > 400000 ? text.slice(0, 400000) + "\n… (file truncated)" : text,
-          font_family: settings().font_family, font_size: 12,
           syntax: { keyword: t.ansi5, string: t.ansi2, comment: t.dim, function: t.ansi4, type: t.ansi3, number: t.ansi1, constant: t.ansi6 } });
       } catch { if (this.file === rel && this.current(ctx)) this.fileError = "Cannot preview this file (binary, too large, or unreadable)"; }
       finally { cx.notify(); }
@@ -839,7 +846,9 @@ export default class Files extends View {
       .on_size_change((size, cx) => { if (Math.abs(size.width - (this.measuredWidth ?? 0)) > 4) { this.measuredWidth = size.width; cx.notify(); } })
       .child(this.header(t));
     if (this.file) {
-      return root.child(this.code ? Editor.new(this.code).flex_1().min_h(0) : div().p(12).text_color(t.dim).child(this.fileError || "Loading file…"));
+      // The terminal's font and size (Herdr's files 0.1.17), on the Editor: a change shows in an open file.
+      const font = settings();
+      return root.child(this.code ? Editor.new(this.code).font_family(font.font_family).text_size(font.font_size).flex_1().min_h(0) : div().p(12).text_color(t.dim).child(this.fileError || "Loading file…"));
     }
     const rows = this.shown = this.rows();
     // The keyboard menu goes when its row moves or goes.

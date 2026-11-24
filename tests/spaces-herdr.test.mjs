@@ -191,3 +191,14 @@ test("SPC-50: what localStorage holds of machines is read with care", () => {
   view = mount(Spaces, { props: {} }).view;
   assert.deepEqual([view.reconnecting, [...view.folded]], [{}, ["box"]]);
 });
+
+test("SPC-51: while herdr-app check loads the mod, it asks hc for nothing", async () => {
+  herdr.set({ checking: true });
+  mount(Spaces, { props: {} });
+  await new Promise((r) => setTimeout(r, 5));
+  assert.deepEqual(herdr.calls("hc"), []);
+  herdr.set({ checking: false });
+  mount(Spaces, { props: {} });
+  await waitFor(() => herdr.calls("hc").length === 1);
+  assert.deepEqual(herdr.calls("hc"), [[["machine", "ls", "--json"]]]);
+});
