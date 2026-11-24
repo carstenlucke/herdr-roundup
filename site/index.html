@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Herdr Roundup</title>
-<meta name="description" content="A layout for Herdr App: spaces that show where each repo stands, a files panel with git built in, a preview for every file, panes with names, and updates through your agent.">
+<meta name="description" content="A layout for Herdr App: spaces that show where each repo stands, a files panel with git built in, a preview for every file, each agent's context and your plan's 5-hour and weekly limits, and updates through your agent.">
 <meta property="og:title" content="Herdr Roundup">
 <meta property="og:description" content="A layout for Herdr App, quieter and more telling.">
 <meta property="og:image" content="https://carstenlucke.github.io/herdr-roundup/img/og.png">
@@ -38,13 +38,13 @@
     <div>
       <h1>Round up<br><span>the herd.</span></h1>
       <nav class="stats" aria-label="In numbers">
-        <a href="#mods"><b>7</b><span>mods <i>→</i></span></a>
+        <a href="#mods"><b>9</b><span>mods <i>→</i></span></a>
         <a href="#viewers"><b>6</b><span>file viewers <i>→</i></span></a>
         <a href="#install"><b>1</b><span>sentence to install <i>→</i></span></a>
       </nav>
     </div>
     <div>
-      <p class="sub">Herdr Roundup is a layout for <a href="https://herdr.dev">Herdr App</a> that gathers your herd in one window, quieter and more telling. <b>Every space shows where its repo stands</b>, files open in a real preview, panes carry names you give them, and a new release installs through your agent.</p>
+      <p class="sub">Herdr Roundup is a layout for <a href="https://herdr.dev">Herdr App</a> that gathers your herd in one window, quieter and more telling. <b>Every space shows where its repo stands</b>, files open in a real preview, <b>each agent's pane shows how full its context is</b> and, on a subscription, where your 5-hour and weekly limits stand, and a new release installs through your agent.</p>
       <div class="cta">
         <a class="pill" href="#install">Install Herdr Roundup</a>
         <a class="ghost" href="https://github.com/carstenlucke/herdr-roundup">View on GitHub <span class="arrow">→</span></a>
@@ -57,6 +57,7 @@
       <div class="track">
         <figure class="slide" aria-roledescription="slide"><img draggable="false" src="img/window.webp" width="1920" height="1200" alt="The whole window: spaces with git state, two agents beside a shell, a README in the floating preview, the files panel" data-title="The whole window" data-text="Spaces with their git state, two agents beside a shell, a README in the floating preview, the files panel."></figure>
         <figure class="slide" aria-roledescription="slide"><img draggable="false" src="img/hero-quicklook.webp" width="1920" height="1200" alt="The agent card open under the badge of search-filters: Claude Code working on the left, Codex done above a shell on the right, and the card's map of those three panes" data-title="Who works where" data-text="Rest the pointer on a space's agent badge: its agents by tab, with their status and a map of the tab's panes."></figure>
+        <figure class="slide" aria-roledescription="slide"><img draggable="false" src="img/hero-limits.webp" width="1920" height="1200" alt="Claude Code's pane header with 41%, 5h 78% with a warning sign and wk 41%, and its card open: the context in use, the 5-hour and the weekly limit with when each resets" data-title="Context and plan limits" data-text="Each agent's pane shows how full its context is and, on a subscription, your 5-hour and weekly limits: exact, through the agent's integration."></figure>
         <figure class="slide" aria-roledescription="slide"><img draggable="false" src="img/hero-files-changed.webp" width="1920" height="1200" alt="The files panel showing only the changed files" data-title="Only what changed" data-text="The files panel lists exactly what git status lists, with lines added and removed."></figure>
         <figure class="slide" aria-roledescription="slide"><img draggable="false" src="img/hero-preview-tab.webp" width="1920" height="1200" alt="package.json in a preview tab as a JSON tree" data-title="A preview for every file" data-text="Markdown, PDF, pictures, CSV, JSON and code, in a floating window or a tab of their own."></figure>
         <figure class="slide" aria-roledescription="slide"><img draggable="false" src="img/hero-update.webp" width="1920" height="1200" alt="The update menu under the logo, offering the next version" data-title="Updates through your agent" data-text="A new release shows on the logo; your agent installs it after asking you."></figure>
@@ -82,6 +83,7 @@
     <div><b>Spaces with their state</b><span>Repo, branch, ahead and behind, uncommitted changes and how many agents work there. <a href="#spaces">More</a></span></div>
     <div><b>Files with git built in</b><span>All files or only the changed ones, with lines added and removed, and search across folders you haven't opened. <a href="#files">More</a></span></div>
     <div><b>A preview for every file</b><span>Markdown, PDF, pictures, CSV, JSON and code, in a floating window or a tab of their own. <a href="#preview">More</a></span></div>
+    <div><b>Context and plan limits</b><span>How full each agent's context is and, on a subscription, the 5-hour and weekly limits, exact through each agent's integration. <a href="#context">More</a></span></div>
   </div>
 </section>
 
@@ -96,10 +98,11 @@
     <a href="#panes"><span>06</span>Panes with names</a>
     <a href="#context"><span>07</span>Each agent's context</a>
     <a href="#limits"><span>08</span>Your plan's limits</a>
-    <a href="#closing"><span>09</span>Closing asks when it matters</a>
-    <a href="#updates"><span>10</span>Updates through your agent</a>
-    <a href="#install"><span>11</span>Install</a>
-    <a href="#questions"><span>12</span>Questions</a>
+    <a href="#integrations"><span>09</span>Integrations</a>
+    <a href="#closing"><span>10</span>Closing asks when it matters</a>
+    <a href="#updates"><span>11</span>Updates through your agent</a>
+    <a href="#install"><span>12</span>Install</a>
+    <a href="#questions"><span>13</span>Questions</a>
   </nav>
 
   <div class="md">
@@ -178,19 +181,31 @@
       <h2><i>07</i>Each agent's context</h2>
       <p>A Claude Code, Codex, pi or opencode pane shows in its header <b>how much of its context window is in use</b>: a small bar, the percent and, where the agent tells them, the tokens. No more typing <code>/context</code> or <code>/status</code> to find out; at 65&nbsp;% the bar turns yellow, at 80&nbsp;% red, with a warning sign beside the number. <b>Hover it</b> for what the agent tells: the tokens free, the model, and when it was read.</p>
       <figure class="crop" style="max-width:388px"><button class="zoom" type="button"><img src="img/context.webp" width="388" height="210" alt="Claude Code's pane header with 41% 412k / 1M, and its card: 412k of 1M in use, 588k free, the model and when it was read"></button></figure>
-      <p style="margin-top:30px">For exact numbers switch on each agent's integration once, with your yes: <code>scripts/agent-integrations.sh install claude</code> lets Claude Code's status line pass on its own numbers (your own status line keeps running), <code>install codex</code> puts the thread id into Codex's title, <code>install pi</code> and <code>install opencode</code> add a small extension to pi and a plugin to opencode that write down their own numbers. <code>uninstall</code> puts everything back. Without them Claude Code shows its tokens, Codex its numbers when Herdr started it, and pi the share its footer shows, rounded and marked with <code>~</code>, without tokens; opencode needs its plugin. An idle Claude Code session above 200k says when it will likely be compacted.</p>
-      <figure class="crop" style="max-width:388px"><button class="zoom" type="button"><img src="img/context-pi.webp" width="388" height="230" alt="pi's pane header with ~34%, and its card: ~34% of ~272k, read from pi's footer, with a note on how to get pi's own number"></button></figure>
+      <p style="margin-top:30px">For exact numbers switch on each agent's integration once, in the menu under the logo (<a href="#integrations">below</a>): Claude Code's status line then passes on its own numbers, Codex's title carries the thread id, and pi and opencode get a small extension or plugin that writes down their own. Without them Claude Code shows its tokens, Codex its numbers when Herdr started it, and pi the share its footer shows, rounded and marked with <code>~</code>, without tokens; opencode needs its plugin. The card says when its agent lacks the integration. An idle Claude Code session above 200k says when it will likely be compacted.</p>
+      <figure class="crop" style="max-width:388px"><button class="zoom" type="button"><img src="img/context-pi.webp" width="388" height="230" alt="pi's pane header with ~34%, and its card: ~34% of ~272k, read from pi's footer, with a note to switch on pi's integration in the Herdr Roundup menu"></button></figure>
     </section>
 
     <section id="limits">
       <h2><i>08</i>Your plan's limits</h2>
       <p>On a subscription, a Claude Code or Codex pane shows beside the context <b>where the 5-hour and the weekly limit stand</b>: <code>5h 78%</code>, <code>wk 41%</code>. From 70&nbsp;% a warning sign comes before the number, red from 90&nbsp;%, a no-entry sign at 100&nbsp;%. The limits are your account's, so every pane of an agent shows the same, as of the last answer in any of them. <b>Hover</b> for when each window resets, and whether you are ahead of it: the tick on the bar is how much of the window's time has passed.</p>
       <figure class="crop" style="max-width:408px"><button class="zoom" type="button"><img src="img/limits.webp" width="408" height="320" alt="Claude Code's pane header with 41%, 5h 78% with a warning sign and wk 41%, and its card: below the context, Limits as of 14:02, 5-hour 78% resets in 1h 35m, Weekly 41% resets Tue 08:48, and a note that at this pace the 5-hour limit runs out about 15:00, 37m before it resets"></button></figure>
-      <p style="margin-top:30px">Codex needs nothing for this. Claude Code tells its limits only to its status line, so they come with the same integration as its context window (<code>scripts/agent-integrations.sh install claude</code>). With an API key there are no windows and nothing is shown; pi and opencode don't pass the limits on.</p>
+      <p style="margin-top:30px">Codex needs nothing for this. Claude Code tells its limits only to its status line, so they come with the same integration as its context window. With an API key there are no windows and nothing is shown; pi and opencode don't pass the limits on.</p>
+    </section>
+
+    <section id="integrations">
+      <h2><i>09</i>Integrations, switched in the menu</h2>
+      <div class="side wide">
+        <div>
+          <p>The exact numbers come from the agents themselves, through a small integration each. Each one changes your agent's own setup, so none is on until you say so: click the logo or the name at the top left, and under <b>Agent integrations</b> tick the agents you want.</p>
+          <p>Switching one on <b>asks first</b> and names the file that changes: <code>~/.claude/settings.json</code> for Claude Code (your own status line keeps running), <code>~/.codex/config.toml</code> for Codex, a link for pi and opencode. A backup is kept, and switching off puts it all back. After you install or update the layout, one notification says which of your agents have theirs off, once.</p>
+        </div>
+        <figure class="crop narrow"><button class="zoom" type="button"><img src="img/integrations.webp" width="460" height="539" alt="The menu under the logo, ending in Agent integrations: Claude Code and Codex checked, Pi and OpenCode not"></button></figure>
+      </div>
+      <figure class="crop" style="max-width:520px;margin-top:30px"><button class="zoom" type="button"><img src="img/integrations-confirm.webp" width="520" height="300" alt="The question Switch on Pi's integration?, naming the link it adds, with Cancel holding the keyboard and a Switch on button"></button></figure>
     </section>
 
     <section id="closing">
-      <h2><i>09</i>Closing asks when it matters</h2>
+      <h2><i>10</i>Closing asks when it matters</h2>
       <p>You choose when closing a tab or a pane asks first: <b>Never</b>, <b>While an agent works</b> (the default) or <b>Always</b>. Tabs have the choice in their right-click menu, panes in the terminal's. <kbd>cmd-w</kbd> closes the tab, <kbd>cmd-shift-w</kbd> the focused pane, both through your choice.</p>
       <div class="stack">
         <figure class="crop"><button class="zoom" type="button"><img src="img/close-menu.webp" width="520" height="290" alt="The tab's right-click menu with Ask before closing a tab: Never, While an agent works, Always"></button></figure>
@@ -200,19 +215,19 @@
     </section>
 
     <section id="updates">
-      <h2><i>10</i>Updates through your agent</h2>
+      <h2><i>11</i>Updates through your agent</h2>
       <div class="side wide">
         <div>
           <p>The installed version sits under the name at the top left. <b>Once a day</b> the layout asks GitHub for its latest release: a plain request with a generic name, so GitHub sees nothing but your IP address.</p>
           <p>When a newer version is out, the logo gets a point, the new version shows under the name, and one notification appears. Click the logo or the name for the menu: check now, update, read the release notes, skip a version, or check <b>only when you ask</b>. Only stable releases are offered, unless you tick <b>Include pre-releases</b> for the alpha, beta and rc ones too.</p>
           <p><b>Update</b> opens a tab with your agent and a brief. It reads the release notes, tells you what would change, keys you edited yourself included, and <b>asks before it installs anything</b>.</p>
         </div>
-        <figure class="crop narrow"><button class="zoom" type="button"><img src="img/update.webp" width="460" height="520" alt="The update menu under the logo: details, Check for updates, Update to the next version with an agent, Release notes, Skip, when to check, Include pre-releases"></button></figure>
+        <figure class="crop narrow"><button class="zoom" type="button"><img src="img/update.webp" width="460" height="632" alt="The update menu under the logo: details, Check for updates, Update to the next version with an agent, Release notes, Skip, when to check, Include pre-releases, and the agent integrations with Claude Code and Codex on"></button></figure>
       </div>
     </section>
 
     <section id="install">
-      <h2><i>11</i>Install</h2>
+      <h2><i>12</i>Install</h2>
       <p>Herdr Roundup needs <a href="https://herdr.dev">Herdr App</a>. The easiest way in is your agent: paste this into it.</p>
       <div class="box">
         <div class="line"><code>Read ~/.config/herdr-app/AGENTS.md, then add this layout: https://github.com/carstenlucke/herdr-roundup/tree/main</code><button class="copy" type="button">Copy</button></div>
@@ -227,13 +242,15 @@
     </section>
 
     <section id="questions">
-      <h2><i>12</i>Questions</h2>
-      <details id="mods"><summary>Which seven mods come with it?</summary>
+      <h2><i>13</i>Questions</h2>
+      <details id="mods"><summary>Which nine mods come with it?</summary>
         <ul>
-          <li><code>roundup-workspace-chrome</code>: the sheep, the name and the version at the top left, and the update check.</li>
+          <li><code>roundup-workspace-chrome</code>: the sheep, the name and the version at the top left, the update check, and the agent integrations' switches.</li>
           <li><code>roundup-spaces</code>: the spaces list with git state, agent badges and worktree cards.</li>
           <li><code>roundup-tabs</code>: the tab bar, and when closing a tab asks.</li>
-          <li><code>roundup-pane</code>: pane headers with their id and your names, and when closing a pane asks.</li>
+          <li><code>roundup-pane</code>: pane headers with their id and your names, each agent's context and plan limits, and when closing a pane asks.</li>
+          <li><code>roundup-agents</code>: Herdr's agents list, which doesn't take a Codex thread id for a name.</li>
+          <li><code>roundup-menu</code>: Herdr's terminal menu, which lets the pane's card know it is open.</li>
           <li><code>roundup-confirm</code>: the question before something closes, Cancel first.</li>
           <li><code>roundup-files</code>: the files panel with All, Changed, search and git state.</li>
           <li><code>roundup-preview</code>: the floating preview and preview tabs, with six viewers.</li>
@@ -242,8 +259,8 @@
       <details><summary>Does it change Herdr's own layouts or mods?</summary><p>No. The layout brings its own mods, all named <code>roundup-*</code>, and uses Herdr's shipped ones where it hasn't cloned them. Your global keys, other layouts and Herdr's mods stay as they are.</p></details>
       <details id="name"><summary>Why "Roundup"?</summary><p>A roundup gathers a herd in one place, and that is what this layout does with your spaces, agents and files in Herdr. There is a second reason: good open-source software has a habit of borrowing from Toy Story (Debian names every release after one of its characters), and in Toy Story 2, <i>Woody's Roundup</i> is the old TV show that gathers the whole gang. A herd, a roundup: it fits.</p></details>
       <details><summary>Does it work with light themes?</summary><p>Yes. The layout and its mods use the theme's color names, never fixed colors, so they follow light and dark themes alike. The pictures on this page show the dark graphite theme.</p></details>
-      <details><summary>What does it reach outside Herdr?</summary><p>Once a day <code>api.github.com</code>, for the latest release. You can turn that off: choose <b>Only when I ask</b> in the menu under the logo, and the layout asks GitHub only when you click <b>Check for updates</b>. Nothing installs by itself either way: an update runs only when you start it, and your agent asks before it changes anything. The spaces and files panels run <code>git</code>; the files panel also runs <code>find</code> and <code>readlink</code>. The preview reads the file it shows and loads a Markdown file's web images only after you click "Load them". Each release's notes list what its mods run.</p></details>
-      <details><summary>Does it run on Linux and Windows?</summary><p>Wherever Herdr App runs. On Linux, PDF previews need <code>pdftoppm</code> and <code>pdfinfo</code> from poppler-utils. On Windows, search in the files panel reads git's files only; there is no disk search there yet.</p></details>
+      <details><summary>What does it reach outside Herdr?</summary><p>Once a day <code>api.github.com</code>, for the latest release. You can turn that off: choose <b>Only when I ask</b> in the menu under the logo, and the layout asks GitHub only when you click <b>Check for updates</b>. Nothing installs by itself either way: an update runs only when you start it, and your agent asks before it changes anything. The spaces and files panels run <code>git</code>; the files panel also runs <code>find</code> and <code>readlink</code>. The preview reads the file it shows and loads a Markdown file's web images only after you click "Load them". The menu under the logo reads whether each agent's integration is on, and changes an agent's setup only when you switch its integration and say yes. Each release's notes list what its mods run.</p></details>
+      <details><summary>Does it run on Linux and Windows?</summary><p>Wherever Herdr App runs. On Linux, PDF previews need <code>pdftoppm</code> and <code>pdfinfo</code> from poppler-utils. On Windows, search in the files panel reads git's files only; there is no disk search there yet, and the agent integrations can't be switched on there yet.</p></details>
       <details><summary>How do I go back to Herdr's default layout?</summary><p>Pick another layout in Herdr's Settings, or run <code>herdr-app do layout.switch '{"name":"main"}'</code>. The roundup mods stay installed but run only where a layout places them.</p></details>
       <details><summary>Is it free?</summary><p>Yes, open source under the Apache 2.0 licence. Icons and code adapted from others are listed with their licences in <a href="https://github.com/carstenlucke/herdr-roundup/blob/main/THIRD_PARTY_NOTICES.md">THIRD_PARTY_NOTICES.md</a>.</p></details>
     </section>

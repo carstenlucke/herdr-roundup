@@ -11,7 +11,7 @@ share a card.
 Closing a tab or pane asks first while an agent works, and a new release
 installs through an agent. Light and dark themes alike.
 
-![Herdr-Roundup: name, claim and main features beside the window, with Claude Code working beside Codex (done) and a shell, their space's agent card open, and a README in the floating preview](preview.png)
+![Herdr-Roundup: name, claim and main features above the window, with Claude Code working beside a diff in hunk; beside it a space's agents by tab and pane, and Claude Code's and Codex's context and plan limits](preview.png)
 
 ## What you see
 
@@ -245,12 +245,17 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   Claude Code session above 200k, the idle compaction it expects (about
   55 min after the last answer, as observed). No meter for a shell, a mod
   pane, an agent of another machine, or a source not proven.
-  - **Exact numbers need an integration** (`scripts/agent-integrations.sh
-    install|uninstall|status <claude|codex|pi|opencode>`, only with the
-    person's yes: it edits their agent config, backs it up, restores it
-    exactly). Without it Claude Code shows its window only after a
-    `/context`, Codex only in direct mode (`codex --no-daemon`), pi the
-    rounded percent of its footer, opencode nothing.
+  - **Exact numbers need an integration**, switched in the logo menu (or
+    `scripts/agent-integrations.sh install|uninstall|status|where`): it
+    edits the person's agent config, backs it up, restores it exactly.
+    Without it Claude Code shows its window only after a `/context`, Codex
+    only in direct mode (`codex --no-daemon`), pi the rounded percent of
+    its footer, opencode nothing. The card then says so for its own agent:
+    off, "switch on … in the Herdr Roundup menu (top left)"; on, that a
+    session started before it shows them after a restart; in an older
+    form, to switch it off and on again there; broken or unknown, "see the
+    Herdr Roundup menu". Claude Code with a window from
+    `/context` but no plan limits gets the note too.
 - **Plan limits** (the 5-hour and the weekly window, percent used):
   `muted` below 70%, from 70% an alert mark in `working`, from 90% in
   `blocked`, at 100% a no-entry mark. They are the account's (the agent's
@@ -307,6 +312,11 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   from a beta its release is an update, also with the switch off again. A
   second line too long for the row is cut. Switching during a check throws
   that check's answer away; the switch's own check follows.
+- **Integrations toast:** once per agent, ever: at start, the installed
+  agents whose integration is off and no toast has named ("Exact numbers
+  for Claude Code and Codex" / "Their integrations are off. Switch them on
+  in the Herdr Roundup menu (top left): click to open it."); a click opens
+  the menu under the brand. No placeholder in the pane header.
 - **Click on logo or name** opens the menu (a popup at the pointer, 300px,
   like the tab menus: `popover`, 5px padding, 12.8px). A press that moves
   the window is a drag, not a click; a double-click maximizes. While the
@@ -328,6 +338,20 @@ on macOS, and can be dragged between 44 and 480px). Top to bottom:
   - Divider, **Include pre-releases**, checked when on. Switching forgets the
     latest release found and checks at once, with a toast.
   - Divider, **Show details on hover**, checked when on (the default).
+  - Divider, heading "Agent integrations", one row per installed agent
+    (Claude Code, Codex, Pi, OpenCode) and any whose integration isn't
+    off, checked when on. Switching on closes the menu and asks first
+    (`roundup-confirm`: "Switch on Claude Code's integration?", the file
+    that changes, as `~/…`, a "Switch on" button); switching off doesn't
+    ask and leaves the menu open. Either ends in a toast: on/off and that a
+    running session may need a restart, or the script's own words
+    (`warning`). A broken or unknown one shows `Pi · broken` with a circled
+    `!` in `working`; a click says why. One in an older form stays checked
+    as `Claude Code · older form`, the `!` after it, a tooltip: switching
+    off and on again updates it. `Codex · set by hand` (the id put there by
+    the person) is checked; a click only says so. A running switch spins its row and
+    holds the others. "Reading…" before the first read, "Not on Windows
+    yet" there.
   - ↑/↓ move, Enter runs, Esc closes. The choices and Check leave the menu
     open, so a choice shows its check at once and a check its answer;
     Update, Release notes and Skip close it.
@@ -482,6 +506,19 @@ folder: appHome(), argv: agent.run, task}` in a space on this computer;
 the brief's commands set `HERDR_APP_HOME`. `.notes` runs `open`,
 `xdg-open` or `cmd /c start "" <url>` by `window().platform`. Toasts are
 `notify()`.
+
+The integrations (`integrate.js`, brand copy only; its rules in
+`integrations.js`) run roundup-pane's
+`integrations/agent-integrations.sh status|where|install|uninstall` as
+`exec("env", ["HERDR_APP_HOME=<appHome()>", "sh", <script>, …])`, at start
+(not under `checking()`, not on Windows), hourly, at each menu opening and
+after a switch, with `knownAgents()` for which are installed. Shared:
+`roundup-workspace-chrome.integrations` (`{<agent>: {state, detail, file,
+installed}}`, read by roundup-pane's card), `.integrations.busy`,
+`.integrations.told`. Commands: `.integrate@<agent>` (the dialog),
+`.install@<agent>` (its button), `.uninstall@<agent>`, `.integrations`,
+`.menu` (the toast: the popup at `{x: 76 or 14, y: 40}`). The menu fixes
+its agents at the opening, as it does the update rows.
 
 The card is gpui-base's `HoverCard` (anchor `top_left`, open delay 500,
 close 150), content `info.js`. The menu is the mod again as a popup,
@@ -843,6 +880,10 @@ of global `tab.close` and `pane.close`.
   the menu with no card over it.
 - The sidebar toggle narrows to the rail (numbers and `●`/`·`) and widens
   back.
+- In a home with no integration on, the first start toasts once; the logo
+  menu lists the installed agents unchecked; Switch on in the dialog
+  writes the file it named and checks the row, a click on it removes it
+  again.
 - A Claude Code and a Codex pane with their integrations show their
   numbers (`5% 47.9k / 1M`), split in one tab each its own; after
   `/compact` the meter drops, after `/clear` it goes within a minute. Two

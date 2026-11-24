@@ -661,3 +661,182 @@ test("pi follows PI_CODING_AGENT_DIR (with ~), opencode OPENCODE_CONFIG_DIR", ()
   assert.equal(lstatSync(join(home, "pi-home/extensions/roundup-context.js")).isSymbolicLink(), true);
   assert.equal(lstatSync(join(home, "oc/plugins/roundup-context")).isSymbolicLink(), true);
 });
+
+// --- Issue #48: the script is one of roundup-pane's files; the logo menu runs it --------------------
+
+const modTool = () => join(env.HERDR_APP_HOME, "mods/roundup-pane/integrations/agent-integrations.sh");
+const runMod = (...args) => {
+  const r = spawnSync("sh", [modTool(), ...args], { env, encoding: "utf8", cwd: home });
+  return { code: r.status, out: r.stdout.trim(), err: r.stderr.trim() };
+};
+
+test("PAN-126: where names the file install changes, per agent, following the same variables", () => {
+  assert.deepEqual(run("where").out.split("\n"), [
+    `claude: ${settings}`, `codex: ${codex}`,
+    `pi: ${join(home, ".pi/agent/extensions/roundup-context.js")}`, `opencode: ${join(home, ".config/opencode/plugins/roundup-context")}`,
+  ]);
+  Object.assign(env, { CLAUDE_CONFIG_DIR: join(home, "cc"), CODEX_HOME: join(home, "cx"), PI_CODING_AGENT_DIR: "~/pi-home", OPENCODE_CONFIG_DIR: join(home, "oc") });
+  assert.equal(run("where", "claude").out, `claude: ${join(home, "cc/settings.json")}`);
+  assert.equal(run("where", "codex").out, `codex: ${join(home, "cx/config.toml")}`);
+  assert.equal(run("where", "pi").out, `pi: ${join(home, "pi-home/extensions/roundup-context.js")}`);
+  assert.equal(run("where", "opencode").out, `opencode: ${join(home, "oc/plugins/roundup-context")}`);
+  assert.equal(run("where", "nobody").code, 1);
+  assert.equal(existsSync(state), false, "where writes nothing");
+});
+
+test("PAN-127: the installed copy works on its own, from any folder; scripts/agent-integrations.sh only forwards to the repo's", () => {
+  // The mod's copy under the app's folder, as the logo menu runs it (sh, no executable bit needed).
+  chmodSync(modTool(), 0o644);
+  let r = runMod("install", "pi");
+  assert.equal(r.code, 0, r.err);
+  assert.equal(runMod("status", "pi").out, "pi: on");
+  assert.equal(run("status", "pi").out, "pi: on", "the forwarder sees the same install");
+  r = run("uninstall", "pi");
+  assert.equal(r.out, "pi: off");
+  assert.equal(runMod("status").out, run("status").out);
+  const forwarder = readFileSync(tool, "utf8");
+  assert.match(forwarder, /exec sh "\$\(dirname "\$0"\)\/\.\.\/mods\/roundup-pane\/integrations\/agent-integrations\.sh" "\$@"/);
+});
+
+test("PAN-127: every line status prints, in every state, is in the form the logo menu reads", async () => {
+  const { parseStatus } = await import("../mods/roundup-workspace-chrome/integrations.js");
+  const lines = [];
+  const look = () => lines.push(...run("status").out.split("\n"));
+  look(); // all off
+  put(settings, "{}");
+  run("install", "claude"); run("install", "codex"); run("install", "pi");
+  look(); // on
+  writeFileSync(settings, JSON.stringify({ statusLine: { type: "command", command: "echo other" } }));
+  put(opencodeLink(), "mine\n");
+  look(); // claude broken, opencode unknown
+  // A PATH of the system's programs less jq (macOS has one in /usr/bin too).
+  const bin = join(home, "bin-without-jq");
+  mkdirSync(bin);
+  for (const dir of ["/bin", "/usr/bin"]) for (const name of readdirSync(dir)) {
+    if (name !== "jq" && !existsSync(join(bin, name))) symlinkSync(join(dir, name), join(bin, name));
+  }
+  const r = spawnSync("/bin/sh", [tool, "status"], { env: { ...env, PATH: bin }, encoding: "utf8" });
+  assert.match(r.stdout, /^claude: unknown \(jq is needed\)$/m);
+  lines.push(...r.stdout.trim().split("\n")); // unknown (jq is needed)
+  assert.ok(lines.length >= 16);
+  for (const line of lines) {
+    const agent = line.split(":")[0];
+    assert.ok(parseStatus(line)[agent], `not in the menu's form: ${line}`);
+  }
+  const states = new Set(lines.map((l) => Object.values(parseStatus(l))[0].state));
+  assert.deepEqual([...states].sort(), ["broken", "off", "on", "unknown"]);
+});
+
+// --- PR #54 review (agreed with Codex 2026-11-24) ---------------------------------------------------
+
+const hasDash = existsSync("/bin/dash");
+const runWith = (shell, ...args) => {
+  const r = spawnSync(shell, [join(env.HERDR_APP_HOME, "mods/roundup-pane/integrations/agent-integrations.sh"), ...args], { env, encoding: "utf8" });
+  return { code: r.status, out: r.stdout.trim(), err: r.stderr.trim() };
+};
+
+test("PAN-128: a previous status line of several lines, or with a backslash, is said on one line and read by the menu", async () => {
+  const { parseStatus, resultToast } = await import("../mods/roundup-workspace-chrome/integrations.js");
+  const command = 'input=$(cat)\r\necho "a\\nb"\nprintf done';
+  put(settings, JSON.stringify({ statusLine: { type: "command", command } }));
+  for (const shell of ["sh", ...(hasDash ? ["/bin/dash"] : [])]) {
+    if (existsSync(join(state, "claude.json"))) assert.equal(runWith(shell, "uninstall", "claude").code, 0);
+    const r = runWith(shell, "install", "claude");
+    assert.equal(r.code, 0, r.err);
+    assert.equal(r.out, 'claude: on (your status line keeps running after it: input=$(cat)  echo "a\\nb" printf done)', shell);
+    assert.equal(resultToast("claude", "install", { code: 0, stdout: r.out, stderr: "" }).level, "success", shell);
+    const s = runWith(shell, "status", "claude").out;
+    assert.equal(s, 'claude: on (then: input=$(cat)  echo "a\\nb" printf done)', shell);
+    assert.equal(parseStatus(s).claude.state, "on", shell);
+  }
+  assert.equal(readFileSync(join(state, "claude-statusline.next"), "utf8"), `${command}\n`, "the command itself is kept as it was");
+  // A line that only mentions the script: the refusal on one line too.
+  assert.equal(run("uninstall", "claude").code, 0);
+  put(settings, JSON.stringify({ statusLine: { type: "command", command: `x=1\n${script} --other` } }));
+  const r = run("install", "claude");
+  assert.notEqual(r.code, 0);
+  assert.equal(r.err.split("\n").length, 1, r.err);
+});
+
+test("PAN-129: codex: a quoted or spaced terminal_title or [tui] is found, so install edits that line and adds no second key", { skip: !hasPython && "python3 with tomllib is needed" }, () => {
+  for (const before of [
+    '[ "tui" ]\n"terminal_title" = ["model"]\n',
+    "['tui']\n'terminal_title' = [\"model\"]\n",
+    '[tui] # mine\n "terminal_title" = ["model"]\n',
+    '"tui"."terminal_title" = ["model"]\n',
+    "tui . 'terminal_title' = [\"model\"]\n",
+    "'tui' .terminal_title = [\"model\"]\n[profiles.a]\nmodel = \"y\"\n",
+  ]) {
+    put(codex, before);
+    const r = run("install", "codex");
+    assert.equal(r.code, 0, `${before}: ${r.err}`);
+    const parsed = toml(codex);
+    assert.equal(parsed.status, 0, `${before} → invalid TOML: ${parsed.stderr}`);
+    assert.deepEqual(JSON.parse(parsed.stdout).tui.terminal_title, ["model", "thread-id"], before);
+    assert.equal(run("status", "codex").out, "codex: on", before);
+    assert.equal(run("uninstall", "codex").code, 0);
+    assert.equal(readFileSync(codex, "utf8"), before);
+  }
+  // A [ "tui" ] table without the key gets it inside, not a dotted key at the top that defines tui twice.
+  put(codex, '[ "tui" ]\nanimations = false\n');
+  assert.equal(run("install", "codex").code, 0);
+  assert.equal(toml(codex).status, 0, readFileSync(codex, "utf8"));
+  assert.equal(readFileSync(codex, "utf8"), '[ "tui" ]\nterminal_title = ["activity", "thread-name", "project-name", "thread-id"]\nanimations = false\n');
+  assert.equal(run("uninstall", "codex").code, 0);
+  assert.equal(readFileSync(codex, "utf8"), '[ "tui" ]\nanimations = false\n');
+  // A file saved with CRLF: its [tui] and its key found all the same.
+  for (const before of ['[tui]\r\nterminal_title = ["model"]\r\n', '[tui] # mine\r\nanimations = false\r\n']) {
+    put(codex, before);
+    assert.equal(run("install", "codex").code, 0, before);
+    const parsed = toml(codex);
+    assert.equal(parsed.status, 0, `${JSON.stringify(before)} → invalid TOML: ${parsed.stderr}`);
+    assert.equal(JSON.parse(parsed.stdout).tui.terminal_title.at(-1), "thread-id");
+    assert.equal(run("status", "codex").out, "codex: on");
+    assert.equal(run("uninstall", "codex").code, 0);
+    assert.equal(readFileSync(codex, "utf8"), before);
+  }
+  // Quoted, with the id already: the person's, set by hand.
+  put(codex, "[tui]\n'terminal_title' = [\"thread-id\"]\n");
+  assert.equal(run("status", "codex").out, "codex: on (set by hand)");
+});
+
+test("PAN-130: codex: an array over several lines without Roundup's record is unknown in status, not off", async () => {
+  const { parseStatus } = await import("../mods/roundup-workspace-chrome/integrations.js");
+  for (const before of ['[tui]\nterminal_title = [\n  "thread-id",\n]\n', 'tui.terminal_title = [ # mine\n  "activity",\n]\n']) {
+    put(codex, before);
+    const s = run("status", "codex").out;
+    assert.equal(s, `codex: unknown (terminal_title spans several lines in ${codex}: inspect by hand)`);
+    assert.equal(parseStatus(s).codex.state, "unknown");
+    assert.notEqual(run("install", "codex").code, 0);
+    assert.equal(readFileSync(codex, "utf8"), before);
+  }
+});
+
+test("CHR-62: the script's words for an older install and for an id set by hand are the ones the menu knows", async () => {
+  const { parseStatus, formOf } = await import("../mods/roundup-workspace-chrome/integrations.js");
+  const form = (agent) => { const s = parseStatus(run("status", agent).out)[agent]; return formOf(s.state, s.detail); };
+  // claude: an earlier install's spelling (PAN-47).
+  put(settings, "{}");
+  assert.equal(run("install", "claude").code, 0);
+  assert.equal(form("claude"), null);
+  const on = json(settings);
+  on.statusLine.command = `sh '${script}'`;
+  writeFileSync(settings, JSON.stringify(on));
+  assert.equal(form("claude"), "older");
+  // codex: the id not last (PAN-50), and set by hand.
+  const to = 'terminal_title = ["activity", "thread-id", "project-name"]';
+  put(codex, `[tui]\n${to}\n`);
+  mkdirSync(state, { recursive: true });
+  writeFileSync(join(state, "codex.json"), JSON.stringify({ mode: "replace", from: 'terminal_title = ["activity", "project-name"]', to, existed: true }));
+  assert.equal(form("codex"), "older");
+  rmSync(join(state, "codex.json"));
+  assert.equal(form("codex"), "manual");
+  // pi and opencode: a link into another Herdr App home (PAN-81).
+  for (const [agent, link, rel] of [["pi", piLink, "pi-context.js"], ["opencode", opencodeLink, "opencode"]]) {
+    const old = join(home, "old-app/mods/roundup-pane/integrations", rel);
+    put(old, "x\n");
+    mkdirSync(join(link(), ".."), { recursive: true });
+    symlinkSync(old, link());
+    assert.equal(form(agent), "older", agent);
+  }
+});

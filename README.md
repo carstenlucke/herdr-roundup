@@ -8,7 +8,7 @@ A layout for [Herdr App](https://herdr.dev), built on Herdr's default layout (`m
 
 The layout is called `Herdr-Roundup`: Herdr's Settings show a layout by its file name, and a name with a space can't be switched to. Its mods keep the short `roundup-` prefix.
 
-[![Herdr-Roundup: name, claim and main features beside the window, with Claude Code working beside Codex (done) and a shell, their space's agent card open, and a README in the floating preview](preview.png)](https://carstenlucke.github.io/herdr-roundup/)
+[![Herdr-Roundup: name, claim and main features above the window, with Claude Code working beside a diff in hunk; beside it a space's agents by tab and pane, and Claude Code's and Codex's context and plan limits](preview.png)](https://carstenlucke.github.io/herdr-roundup/)
 
 ## Contents
 
@@ -22,7 +22,7 @@ The layout is called `Herdr-Roundup`: Herdr's Settings show a layout by its file
 | `docs/ARCHITECTURE_DECISIONS.md` | The few decisions whose reasons need keeping, and when to write one: an index, details in `docs/adr/` |
 | `docs/GITHUB_PAGES.md` | How the project page is made and published |
 | `scripts/sync.sh` | Installs all of the above into `~/.config/herdr-app` |
-| `scripts/agent-integrations.sh` | Switches the agents' integrations for the context meter and the plan limits on and off (see [Agent integrations](#agent-integrations)) |
+| `scripts/agent-integrations.sh` | Switches the agents' integrations for the context meter and the plan limits on and off without the window; runs the script in `mods/roundup-pane/integrations/` (see [Agent integrations](#agent-integrations)) |
 | `site/` | The project's web page (GitHub Pages): `index.html`, `style.css` and its pictures in `site/img/` |
 | `scripts/preview.py` | Draws the layout's preview picture for Settings, with `poster` README's `preview.png`, and with a scene name the site's pictures |
 | `scripts/site.sh` | Redraws `site/img/` (needs `python3`, `rsvg-convert`, `cwebp` and Herdr App installed) |
@@ -49,12 +49,17 @@ herdr-app do layout.switch '{"name":"Herdr-Roundup"}'
 
 ## Agent integrations
 
-The pane header shows how full each agent's context window is and, for Claude Code and Codex on a subscription, where the 5-hour and the weekly limit stand. Installing the layout switches on none of the integrations behind the exact numbers: each one changes your agent's own setup, so each one is yours to switch on, per agent, from a clone of this repo:
+The pane header shows how full each agent's context window is and, for Claude Code and Codex on a subscription, where the 5-hour and the weekly limit stand. Installing the layout switches on none of the integrations behind the exact numbers: each one changes your agent's own setup, so each one is yours to switch on, per agent.
+
+Click the logo or the name at the top left: under **Agent integrations** the menu lists your installed agents, checked when their integration is on. Switching one on asks first and names the file that changes; switching off doesn't ask. After the first start with this layout a notification says which installed agents have theirs off, once per agent. A pane's hover card tells when its own agent lacks the integration, or when the session started before it was on.
+
+Without the window, the same script runs from a clone of this repo (or as `~/.config/herdr-app/mods/roundup-pane/integrations/agent-integrations.sh`):
 
 ```sh
 scripts/agent-integrations.sh status
 scripts/agent-integrations.sh install claude     # or codex, pi, opencode
 scripts/agent-integrations.sh uninstall claude
+scripts/agent-integrations.sh where              # the file install changes, per agent
 ```
 
 | Agent | What `install` changes | Without it |
@@ -64,7 +69,7 @@ scripts/agent-integrations.sh uninstall claude
 | Pi Agent | A link in `~/.pi/agent/extensions/` | The rounded percent of its footer |
 | OpenCode | A link in `~/.config/opencode/plugins/` | No context meter |
 
-`install` needs `jq`, keeps a backup of the file it changes and can be run again; `uninstall` restores exactly what `install` changed. Sessions already running may need a restart. If an agent installed the layout for you, the clone may be gone: tell it to switch on Herdr Roundup's integration for the agents you name, as this README says.
+Claude Code and Codex need `jq`; their switch keeps a backup of the file it changes and can be run again; switching off restores exactly what switching on changed. Sessions already running may need a restart. Not on Windows yet: the script is POSIX `sh` (#53).
 
 ## Updates
 

@@ -19,7 +19,7 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { panes, terminals, props, run, theme, settings, home, hc, shared, setShared, focused, layout } from "herdr";
+import { panes, terminals, props, run, theme, settings, home, hc, shared, setShared, focused, layout, window } from "herdr";
 import { closePane, givenName, fallbackName } from "./close.js";
 import { menuView, shortcut } from "./menu.js";
 import { folder, paneId, paneFrame, oldName, OLD_LABEL, OLD_NAMES, MOVED } from "./header-text.js";
@@ -27,6 +27,7 @@ import { folder, paneId, paneFrame, oldName, OLD_LABEL, OLD_NAMES, MOVED } from 
 import { ContextReader, sweep } from "./context/reader.js";
 import { makeIo } from "./context-io.js";
 import { meter, headerTiers, sameTiers } from "./context-view.js";
+import { integrationWord } from "./context/card.js";
 // The plan limits of the agent's account, beside the context in the same pill (limits/; RECIPE "Limits").
 import { sharedStore } from "./limits/store.js";
 import { shownState } from "./limits/text.js";
@@ -49,6 +50,10 @@ function moved(source, on) {
 // roundup-menu's menus and the close confirmation (close.js) write theirs.
 const OVERLAY = "roundup-pane.overlay";
 const covered = () => Boolean(shared("roundup-menu.open") || shared("roundup-confirm.open") || shared(OVERLAY));
+// The state of an agent's integration as the logo menu read it (roundup-workspace-chrome, issue #48),
+// for the card's notes: "on", "older" (on, in an earlier install's form: the menu's `form`), "off",
+// "broken", "unknown", "windows" (none there), or null (not read).
+const integrationOf = (agent) => integrationWord(shared("roundup-workspace-chrome.integrations")?.[agent], window()?.platform);
 
 function icon(p, size, color) {
   if (!p?.icon) return null;
@@ -219,7 +224,7 @@ export default class Pane extends View {
     this.limitsShown = shownState(limits, now, this.hovered);
     this.shownTier = this.tierNow(limits, now);
     const ctx = this.context && meter(t, { pane, reading: this.context.reading, tier: this.shownTier, agent: this.context.strategy?.id, hint: this.context.hint, covered: covered(),
-      limits, now, program: p.program?.name ?? null,
+      limits, now, program: p.program?.name ?? null, integration: integrationOf(this.context.strategy?.id),
       // An icon of its own: an element belongs to the one parent it's given (gpui-kit.d.ts).
       head: { pic: icon(p.program, 14, t.dim), name, id: id.shown, font } });
     return h_flex()

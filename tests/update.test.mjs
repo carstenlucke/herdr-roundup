@@ -366,6 +366,9 @@ async function brand(version = "0.8.1") {
   const Chrome = (await import("../mods/roundup-workspace-chrome/main.js")).default;
   const m = mount(Chrome, { props: {} });
   await waitFor(() => herdr.watching(join(home, "layouts")), 2000, "the layout file read");
+  // The integrations' first read (integrate.js) runs at start too: done, and its calls forgotten.
+  await waitFor(() => herdr.shared("roundup-workspace-chrome.integrations") !== null, 2000, "the integrations read");
+  herdr.clear();
   return m;
 }
 

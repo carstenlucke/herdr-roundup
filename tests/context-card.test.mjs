@@ -93,9 +93,9 @@ test("the card names the idle compaction as an estimate, the last compaction, a 
   m = cardModel({ ...R, window: 1_000_000, windowRounded: true }, { agent: "claude" });
   assert.deepEqual([m.big.of, m.big.percent], ["of ~1M", "~10%"]);
   assert.ok(m.notes.includes("Window from this session's /context, which rounds it"));
-  m = cardModel({ ...R, window: null }, { agent: "claude" });
+  m = cardModel({ ...R, window: null, source: "transcript" }, { agent: "claude" });
   assert.deepEqual(m.big, { used: "97.6k", of: "in use · window unknown", percent: "", sev: "ok" });
-  assert.ok(m.notes.some((r) => r.includes("scripts/agent-integrations.sh install claude")));
+  assert.ok(m.notes.includes("For its window and plan limits, switch on Claude Code's integration in the Herdr Roundup menu (top left), or type /context"));
   m = cardModel({ ...R, source: "rollout", model: "gpt-6.1-sol" }, { agent: "codex" });
   assert.ok(m.notes.some((r) => r.includes("12k baseline")));
   m = cardModel({ ...R, used: 210_000 }, {});
@@ -219,4 +219,68 @@ test("the card stays empty while this mod's menu is open, or a close confirmatio
   herdr.set({ shared: { "roundup-confirm.open": null, "roundup-menu.open": "o4" } });
   assert.equal(empty(), true, "and roundup-menu's menus, as before");
   view.close();
+});
+
+// Issue #48: the card hints at its own agent's integration only, by the state the logo menu read
+// (shared roundup-workspace-chrome.integrations), and points to the menu, not to a script.
+test("PAN-125: the card's note on Claude Code's integration: off, on but the session older, broken, unknown, Windows", () => {
+  const S = { ...R, source: "transcript" };
+  const note = (reading, integration, limits = false) => cardModel(reading, { agent: "claude", integration, limits }).notes
+    .filter((n) => /integration/.test(n));
+  // No window: for its window and the plan limits.
+  const none = { ...S, window: null };
+  assert.deepEqual(note(none, "off"), ["For its window and plan limits, switch on Claude Code's integration in the Herdr Roundup menu (top left), or type /context"]);
+  assert.deepEqual(note(none, null), note(none, "off"), "not read yet counts as off");
+  assert.deepEqual(note(none, "on"), ["Its integration is on: a session started before it shows its window and plan limits after a restart, or type /context"]);
+  assert.deepEqual(note(none, "broken"), ["Claude Code's integration is broken: see the Herdr Roundup menu (top left)"]);
+  assert.deepEqual(note(none, "unknown"), ["Whether Claude Code's integration is on can't be told: see the Herdr Roundup menu (top left)"]);
+  assert.deepEqual(note(none, "windows"), ["Claude Code's integration isn't on Windows yet: type /context"]);
+  // A window from /context but no plan limits: new in #48.
+  const rounded = { ...S, window: 1_000_000, windowRounded: true };
+  assert.deepEqual(note(rounded, "off"), ["For exact numbers and the plan limits, switch on Claude Code's integration in the Herdr Roundup menu (top left)"]);
+  assert.deepEqual(note(rounded, "on"), ["Its integration is on: a session started before it shows exact numbers and the plan limits after a restart"]);
+  assert.deepEqual(note(rounded, "windows"), [], "nothing to switch on there");
+  assert.deepEqual(note(rounded, "off", true), [], "with plan limits shown (another pane's), no note");
+  // From its status line: the integration is working, nothing to say.
+  assert.deepEqual(note({ ...R, source: "status-line" }, "off"), []);
+  assert.deepEqual(note({ ...R, source: "status-line", window: null }, "on"), []);
+});
+
+test("PAN-131: an integration in an older form: the card says to switch it off and on again, not to restart", async () => {
+  const { integrationWord } = await import("../mods/roundup-pane/context/card.js");
+  assert.equal(integrationWord({ state: "on", form: "older" }), "older");
+  assert.equal(integrationWord({ state: "on", form: "manual" }), "on");
+  assert.equal(integrationWord({ state: "broken", form: null }), "broken");
+  assert.equal(integrationWord(undefined), null, "not read yet");
+  assert.equal(integrationWord({ state: "on", form: "older" }, "windows"), "windows");
+  const none = { ...R, source: "transcript", window: null };
+  assert.deepEqual(cardModel(none, { agent: "claude", integration: "older" }).notes.filter((n) => /integration/.test(n)),
+    ["Claude Code's integration is in an older form: switch it off and on again in the Herdr Roundup menu (top left)"]);
+  const footer = { used: null, window: 66_000, windowRounded: true, percent: 8.6, source: "screen", at: R.at };
+  assert.equal(cardModel(footer, { agent: "pi", integration: "older" }).notes.at(-1),
+    "Pi's integration is in an older form: switch it off and on again in the Herdr Roundup menu (top left)");
+});
+
+test("PAN-125: pi's footer: the note follows its integration; other agents' cards say nothing about theirs", () => {
+  const footer = { used: null, window: 66_000, windowRounded: true, percent: 8.6, source: "screen", at: R.at };
+  const notes = (integration) => cardModel(footer, { agent: "pi", integration }).notes;
+  assert.deepEqual(notes("off"), ["Rounded, as pi's footer shows it", "For pi's own number, switch on Pi's integration in the Herdr Roundup menu (top left)"]);
+  assert.deepEqual(notes("on"), ["Rounded, as pi's footer shows it", "Its integration is on: a session started before it shows pi's own number after a restart"]);
+  assert.deepEqual(notes("broken"), ["Rounded, as pi's footer shows it", "Pi's integration is broken: see the Herdr Roundup menu (top left)"]);
+  assert.deepEqual(notes("windows"), ["Rounded, as pi's footer shows it"]);
+  for (const agent of ["codex", "opencode"]) {
+    const m = cardModel({ ...R, source: agent === "codex" ? "rollout" : "plugin" }, { agent, integration: "off" });
+    assert.ok(!m.notes.some((n) => /integration/.test(n)), agent);
+  }
+});
+
+test("PAN-125: the meter hands the integration's state and whether limits show to the card", () => {
+  const none = { ...R, source: "transcript", window: null };
+  const content = (extra) => words(meter(t, { pane: "p1", reading: none, tier: "full", agent: "claude", ...extra }).style("content")[0]);
+  assert.match(content({ integration: "on" }), /Its integration is on: a session started before it/);
+  assert.match(content({ integration: "off" }), /switch on Claude Code's integration in the Herdr Roundup menu/);
+  const rounded = { ...R, source: "transcript", window: 1_000_000, windowRounded: true };
+  const limits = { windows: [{ minutes: 300, used: 20, resetsAt: R.at + 3_600_000 }], at: R.at };
+  const withLimits = words(meter(t, { pane: "p1", reading: rounded, tier: "full", agent: "claude", integration: "off", limits, now: R.at }).style("content")[0]);
+  assert.doesNotMatch(withLimits, /switch on/, "limits shown: no note about them");
 });
