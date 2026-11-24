@@ -15,10 +15,11 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
-# Upload and deploy in two jobs, as in GitHub's own Pages workflow: deploy-pages lists the run's
-# artifacts, and right after upload-pages-artifact in the same job that list can still be empty
-# ("No artifacts named github-pages were found", three runs in a row on 2026-11-24). A second
-# job starts only once the first has finished, with the artifact listed.
+# On 2026-11-24 deploy-pages found no github-pages artifact in three runs. In run 45507754787
+# it looked for the artifact about 0.2 s after the upload finalized in the same job; the cause
+# is unconfirmed. A second job gives the artifact time to become visible: needs: upload waits
+# for the upload job to succeed. The lookup can still fail if the artifact is not yet
+# available (re-run: docs/GITHUB_PAGES.md).
 jobs:
   upload:
     runs-on: ubuntu-latest
