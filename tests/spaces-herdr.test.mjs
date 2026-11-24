@@ -124,8 +124,10 @@ test("SPC-52: a watch Herdr reclaimed (an answer with no paths) runs no git and 
   assert.deepEqual(herdr.calls("exec"), [], "no git status for nothing");
   assert.deepEqual(herdr.calls("watchFolder"), [], "and no new watch at once, which would reclaim another repo's");
   assert.equal(herdr.watching("/r/.git"), 0);
-  // The timer's next look: its status sets the watch again.
-  view.refreshGit([key("/r")], cx);
+  // The timer's next look (ACTIVE: 10 s for the active place): its status sets the watch again.
+  const due = view.due(Date.now() + 11000, herdr.stub.spaces, []);
+  assert.deepEqual([...due], [key("/r")]);
+  view.refreshGit(due, cx);
   await waitFor(() => !view.refreshing && herdr.watching("/r/.git") === 1);
   assert.deepEqual(herdr.calls("watchFolder"), [["/r/.git"]]);
   assert.deepEqual(cx.errors, []);

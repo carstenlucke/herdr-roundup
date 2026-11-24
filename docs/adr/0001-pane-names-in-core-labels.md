@@ -76,9 +76,13 @@ names are read from once.
   header and the close dialog cut what doesn't fit.
 - A name from before moves over without the person doing anything: a
   header that finds the old label or shared entry gives it to its pane and,
-  once the pane shows a name, removes the old one (two looks of its 2 s
-  timer, so a rename that didn't arrive keeps the old name). A pane not
-  shown since the update moves when it is first shown.
+  once the pane shows a name, removes the old one (in the same look of its
+  2 s timer when the rename shows at once, else at the next; a rename that
+  didn't arrive keeps the old name). Before a terminal's label is asked to
+  go, the terminal goes into shared `roundup-pane.moved`, which keeps it
+  until the label is visibly gone: its pane never gets the old name again,
+  so a removal that failed can't bring back a name the person cleared. A
+  pane not shown since the update moves when it is first shown.
 - `hc label t7 roundup-pane.name=Build` still names a pane that has no
   name, as a side effect of the move. It is no interface any more: a pane
   that has a name ignores it.

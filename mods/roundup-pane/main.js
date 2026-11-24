@@ -34,8 +34,8 @@ import { shownState } from "./limits/text.js";
 // Integration files of ended terminals go once an hour, by whichever header gets there first.
 let lastSweep = 0;
 const SEE_MS = 2000;
-// An old name's label removal (adopt): the terminals with one running, and when each may try next.
-const dropping = new Set(), dropAt = new Map();
+// An old name's label removal (adopt): when each terminal may try next.
+const dropAt = new Map();
 const DROP_MS = 60_000;
 // A terminal into shared MOVED, or out of it; read just before writing, so other headers' entries stay.
 function moved(source, on) {
@@ -159,8 +159,11 @@ export default class Pane extends View {
   // given to the pane once per copy, and removed as soon as the pane shows a name (at once when
   // the rename shows right away, else at the next look). From the timer, a hidden tab's header too.
   adopt(p) {
-    const labels = p.terminal ? terminals().find((t) => t.address === p.terminal)?.labels : null;
-    const old = oldName(p, labels, shared(OLD_NAMES), shared(MOVED));
+    const term = p.terminal ? terminals().find((t) => t.address === p.terminal) : null;
+    // A terminal that isn't listed (its machine is away) has no labels to go by: an absent label
+    // there says nothing, and taking it for gone would take the terminal out of MOVED.
+    if (p.terminal && !term) return;
+    const old = oldName(p, term?.labels, shared(OLD_NAMES), shared(MOVED));
     if (!old) return;
     if (old.step === "forget") { moved(old.source, false); return; }
     if (old.step === "give") {
@@ -175,14 +178,13 @@ export default class Pane extends View {
       return;
     }
     // The terminal goes into MOVED before its label is asked to go: from then on its pane is never
-    // given the old name again. One removal at a time per terminal, at most one a minute (a machine
-    // that is away); only hc's code 0 counts, and MOVED keeps it until the label is visibly gone.
+    // given the old name again. At most one removal a minute per terminal (a machine that is away,
+    // or a label not yet seen gone), counted from its start, so no lock is left by a header that
+    // closed meanwhile; only hc's code 0 counts, and MOVED keeps it until the label is visibly gone.
     moved(old.source, true);
-    if (dropping.has(old.source) || Date.now() < (dropAt.get(old.source) ?? 0)) return;
-    dropping.add(old.source);
+    if (Date.now() < (dropAt.get(old.source) ?? 0)) return;
     dropAt.set(old.source, Date.now() + DROP_MS);
     hc(["label", p.terminal, `${OLD_LABEL}=`]).then((r) => r?.code === 0, () => false).then((ok) => {
-      dropping.delete(old.source);
       if (!ok) dropAt.set(old.source, Date.now() + DROP_MS);
     });
   }

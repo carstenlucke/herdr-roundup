@@ -323,6 +323,11 @@ test("PAN-124: a name the person cleared after the move doesn't come back when t
   await clock.advance(10000);
   assert.equal(runs().length, 1, "not given again");
   assert.equal(herdr.calls("hc").length, 1, "the next removal waits a minute");
+  // Its machine is away for a while: the terminal isn't listed, which says nothing about its label.
+  herdr.set({ terminals: [] });
+  await clock.advance(4000);
+  assert.deepEqual(herdr.shared("roundup-pane.moved"), { t9: true }, "kept while the terminal isn't listed");
+  herdr.set({ terminals: [terminal("t9", { labels: { "roundup-pane.name": "Build" } })] });
   assert.deepEqual(first.cx.errors, []);
   first.view.close();
   const next = mount(Pane, { props: { pane: "p9", terminal: "t9" } }); // as after a restart

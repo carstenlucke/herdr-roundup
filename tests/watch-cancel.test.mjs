@@ -87,3 +87,67 @@ test("CHG-10: a preview whose watch Herdr reclaimed reads its file once and look
   view.close();
   assert.deepEqual(cx.errors, []);
 });
+
+test("FIL-113: an index built while the watch is reclaimed comes out stale, and the search reads it again", async () => {
+  clock.useFakeNow();
+  const a = tempDir("roundup-watch-ix-");
+  write(a, { "a.txt": "a\n" });
+  herdr.set({
+    spaces: [space("s1", [tab("tb1", { active: true })], { active: true, folder: a })],
+    panes: [pane("p1", "tb1", { terminal: "t1", cwd: a })],
+    focused: { space: "s1", tab: "tb1", pane: "p1", terminal: "t1", cwd: a },
+  });
+  const { view, cx } = mount(Files, { props: {} });
+  view.sync(cx);
+  await waitFor(() => herdr.watching(a) === 1 && !view.loading);
+  // The disk's index (find) is held up until the watch has answered.
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  herdr.onExec((c) => (c.command === "sh" && String(c.args[1]).includes("find .") ? gate.then(() => undefined) : undefined), { times: 1 });
+  const built = view.ensureIndex(view.ctx);
+  await waitFor(() => view.indexing && herdr.calls("exec").some(([cmd, args]) => cmd === "sh" && String(args[1]).includes("find .")));
+  herdr.change(a, []);
+  await waitFor(() => view.watched === null);
+  release();
+  const index = await built;
+  assert.equal(index.stale, true, "what changed meanwhile may be missing from it");
+  assert.equal(index.at, 0, "so it is read again before the next search");
+  view.close?.();
+  assert.deepEqual(cx.errors, []);
+});
+
+test("CHG-10: the one read comes after the stamp has answered, so a save between them is still seen; its own cancel on a switch to another machine polls nothing", async () => {
+  const a = tempDir("roundup-watch-po-");
+  write(a, { "one.txt": "1\n", "two.txt": "2\n" });
+  const file = join(a, "one.txt");
+  herdr.set({ props: { file } });
+  const view = new Preview();
+  const { cx } = mount(class { init(_p, cx) { view.init(_p, cx); } }, { props: { file } });
+  await waitFor(() => herdr.watching(a) === 1 && view.loads === 1);
+  // The stamp answers 20 ms late; each read notes whether a stamp had answered by then.
+  let stamps = 0, answered = 0;
+  const readWhen = [];
+  herdr.onExec((c) => {
+    if (c.command !== "sh" || c.args[2] !== "stamp") return undefined;
+    stamps++;
+    return new Promise((r) => setTimeout(r, 20)).then(() => { answered++; return undefined; });
+  });
+  herdr.onReadTextFile(() => { readWhen.push(answered); return undefined; });
+  herdr.change(a, []);
+  await waitFor(() => view.loads === 2 && view.poll);
+  assert.ok(readWhen.length >= 1 && readWhen[0] >= 1, "the file is read again only once the stamp has answered");
+  // Its own cancel: showing a file on another machine ends the loop; nothing is polled.
+  view.show(join(a, "two.txt"), cx);
+  await waitFor(() => herdr.watching(a) === 1 && view.poll === null);
+  const before = stamps;
+  view.on = "box";
+  view.show(join(a, "one.txt"), cx);
+  await waitFor(() => herdr.watching(a) === 0);
+  await new Promise((r) => setTimeout(r, 100)); // a stamp would have been asked and answered by now
+  await clock.advance(6000);
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(stamps, before, "no stamp for the local file shown before");
+  assert.equal(view.poll, null, "and no look every 3 s");
+  view.close();
+  assert.deepEqual(cx.errors, []);
+});

@@ -75,6 +75,40 @@ test("FIL-114: a read the timer or the watch asks for while a slow one runs wait
   assert.deepEqual(cx.errors, []);
 });
 
+test("FIL-114: a change the watch reports during a read is read once that read's hold is over, before the next timed read", async () => {
+  clock.useFakeNow();
+  const dir = tempDir("roundup-pace-held-");
+  write(dir, { "a.txt": "a\n" });
+  herdr.set({
+    spaces: [space("s1", [tab("tb1", { active: true })], { active: true, folder: dir })],
+    panes: [pane("p1", "tb1", { terminal: "t1", cwd: dir })],
+    focused: { space: "s1", tab: "tb1", pane: "p1", terminal: "t1", cwd: dir },
+  });
+  let gate = null;
+  herdr.onExec((c) => (gate && c.args.includes("rev-parse") ? gate.then(() => undefined) : undefined));
+  const reads = () => herdr.calls("exec").filter(([, args]) => args.includes("rev-parse")).length;
+  const { view, cx } = mount(Files, { props: {} });
+  view.sync(cx);
+  await waitFor(() => herdr.watching(dir) === 1 && !view.loading);
+  let release;
+  gate = new Promise((r) => { release = r; });
+  await clock.advance(10000);
+  await waitFor(() => reads() === 2 && view.loading, 2000, "the timed read starts and is held up");
+  write(dir, { "b.txt": "b\n" });
+  herdr.change(dir, [`${dir}/b.txt`]);
+  await clock.advance(1000);
+  gate = null;
+  release();
+  await waitFor(() => !view.loading);
+  // 1 s: a hold of 5 s; the next timed read only in 10 s.
+  await clock.advance(4000);
+  assert.equal(reads(), 2, "not during the hold");
+  await clock.advance(1000);
+  await waitFor(() => reads() === 3 && !view.loading, 2000, "the waiting change, once the hold is over");
+  assert.ok((view.entries.get("") ?? []).some((e) => e.name === "b.txt"));
+  assert.deepEqual(cx.errors, []);
+});
+
 test("FIL-115: behind another app nothing is read; back in front a change seen meanwhile is, and an unwatched folder always", () => {
   const p = newPace(0, true);
   assert.equal(due(p, false, 60000, true), false, "not even when the 10 s have passed");
